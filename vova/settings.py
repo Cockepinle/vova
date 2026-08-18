@@ -124,7 +124,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 if os.environ.get("CLOUDINARY_URL"):
     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
-SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
