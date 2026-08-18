@@ -21,6 +21,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-pakline-secret-key")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()]
+if os.environ.get("VERCEL"):
+    ALLOWED_HOSTS.extend([".vercel.app", "localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -32,12 +34,16 @@ INSTALLED_APPS = [
     "store",
 ]
 
+if os.environ.get("VERCEL") or not DEBUG:
+    INSTALLED_APPS.insert(-1, "whitenoise.runserver_nostatic")
+
 if os.environ.get("CLOUDINARY_URL"):
     INSTALLED_APPS.insert(-1, "cloudinary")
     INSTALLED_APPS.insert(-1, "cloudinary_storage")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -110,6 +116,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_USE_FINDERS = True
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -137,6 +145,8 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+if os.environ.get("VERCEL"):
+    CSRF_TRUSTED_ORIGINS.extend(["https://*.vercel.app", "http://localhost:8000", "http://127.0.0.1:8000"])
 
 if os.environ.get("VERCEL") or not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
