@@ -274,6 +274,31 @@ async function addProductToCart(productId, quantity, button) {
 window.addProductToCart = addProductToCart;
 
 async function updateProductInCart(productId, quantity) {
+  if (quantity <= 0) {
+    const response = await fetch("/cart/update/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({
+        product_id: productId,
+        quantity: 0,
+      }),
+    });
+
+    if (response.ok) {
+      renderCart(await response.json());
+    }
+
+    return;
+  }
+
+  const minimum = Math.max(1, Number(
+    document.querySelector(`[data-product-id="${productId}"] .quantity-input`)?.getAttribute("min") || 1,
+  ));
+  const normalizedQuantity = Math.max(minimum, Number(quantity) || minimum);
+
   const response = await fetch("/cart/update/", {
     method: "POST",
     headers: {
@@ -282,7 +307,7 @@ async function updateProductInCart(productId, quantity) {
     },
     body: JSON.stringify({
       product_id: productId,
-      quantity,
+      quantity: normalizedQuantity,
     }),
   });
 

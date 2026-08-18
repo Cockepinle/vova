@@ -1,6 +1,7 @@
 import json
 import random
 import smtplib
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
@@ -81,10 +82,16 @@ def get_store_products():
 
 
 def format_price(value):
+    value = Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
     if value == value.to_integral_value():
         return int(value)
 
     return float(value)
+
+
+def money(value):
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def image_url(image):
@@ -201,6 +208,9 @@ def serialize_order(order, include_items=False):
 
 def serialize_cart_item(product, quantity):
     product_data = serialize_product(product)
+    price = money(product.price)
+    quantity = int(quantity)
+    line_total = money(price * quantity)
 
     return {
         "id": product_data["id"],
@@ -212,7 +222,7 @@ def serialize_cart_item(product, quantity):
         "image": product_data["image"],
         "product": product_data,
         "quantity": quantity,
-        "line_total": product_data["price"] * quantity,
+        "line_total": format_price(line_total),
     }
 
 
@@ -283,12 +293,13 @@ def get_cart_items(request):
 def get_cart_context(request):
     cart_items = get_cart_items(request)
     cart_quantities = {item["id"]: item["quantity"] for item in cart_items}
+    cart_total = sum(money(item["line_total"]) for item in cart_items)
 
     return {
         "cart_items": cart_items,
         "cart_quantities": cart_quantities,
         "cart_count": sum(item["quantity"] for item in cart_items),
-        "cart_total": sum(item["line_total"] for item in cart_items),
+        "cart_total": format_price(cart_total),
         "checkout_initial": get_checkout_initial(request),
     }
 
@@ -775,7 +786,7 @@ def checkout_order(request):
         email=email,
         company=company,
         comment=comment,
-        total=sum(item["line_total"] for item in cart_items),
+        total=money(sum(money(item["line_total"]) for item in cart_items)),
     )
 
     for item in cart_items:
@@ -791,8 +802,8 @@ def checkout_order(request):
             product_sku=item["sku"],
             unit=item["unit"],
             quantity=item["quantity"],
-            price=item["price"],
-            line_total=item["line_total"],
+            price=money(item["price"]),
+            line_total=money(item["line_total"]),
         )
 
     order_lines = "\n".join(
