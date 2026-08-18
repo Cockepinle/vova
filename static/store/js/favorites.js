@@ -50,7 +50,7 @@ function renderFavoriteDrawer(items) {
             <div class="favorite-actions">
               <div class="quantity-control favorite-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="1" value="1" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="${escapeHtml(product.min_quantity || 1)}" step="${escapeHtml(product.min_quantity || 1)}" value="${escapeHtml(product.min_quantity || 1)}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="favorite-add-cart" type="button">В корзину</button>
@@ -183,15 +183,18 @@ document.addEventListener("click", (event) => {
   if (quantityButton) {
     const control = quantityButton.closest(".favorite-quantity");
     const input = control.querySelector(".quantity-input");
-    const delta = quantityButton.classList.contains("quantity-plus") ? 1 : -1;
-    input.value = String(Math.max(1, Number(input.value || 1) + delta));
+    const minimum = Math.max(1, Number(input.getAttribute("min") || 1));
+    const step = Math.max(1, Number(input.getAttribute("step") || minimum));
+    const delta = quantityButton.classList.contains("quantity-plus") ? step : -step;
+    input.value = String(Math.max(minimum, Number(input.value || minimum) + delta));
     return;
   }
 
   if (favoriteAddCart) {
     const item = favoriteAddCart.closest("[data-product-id]");
     const input = item.querySelector(".favorite-quantity .quantity-input");
-    const quantity = Math.max(1, Number(input ? input.value : 1) || 1);
+    const minimum = Math.max(1, Number(input ? input.getAttribute("min") : 1));
+    const quantity = Math.max(minimum, Number(input ? input.value : minimum) || minimum);
 
     if (typeof window.addProductToCart === "function") {
       window.addProductToCart(item.dataset.productId, quantity, favoriteAddCart);

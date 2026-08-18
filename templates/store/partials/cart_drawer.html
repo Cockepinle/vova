@@ -36,6 +36,7 @@
               </div>
               <strong data-price="{{ item.price }}">{{ item.line_total }} ₽</strong>
             </div>
+            <small class="cart-min-quantity">Мин. заказ: {{ item.product.min_quantity }} {{ item.unit }}</small>
           </div>
           <button class="cart-remove" type="button" aria-label="Удалить">×</button>
         </article>

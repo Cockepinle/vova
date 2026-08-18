@@ -106,7 +106,7 @@
                     <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
                     <div class="quantity-control" aria-label="Количество">
                       <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                      <input class="quantity-input" type="number" min="1" value="{{ cart_quantity|default:1 }}" aria-label="Количество товара">
+                      <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.min_quantity }}" value="{{ cart_quantity|default:product.min_quantity }}" aria-label="Количество товара">
                       <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
                     </div>
                   </div>
@@ -158,7 +158,7 @@
             <div class="modal-controls">
               <div class="quantity-control" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="1" value="1" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.min_quantity }}" value="{{ product.min_quantity }}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="add-to-cart modal-add" type="button">В корзину</button>

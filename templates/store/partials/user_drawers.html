@@ -16,7 +16,7 @@
             <div class="favorite-actions">
               <div class="quantity-control favorite-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="1" value="1" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.min_quantity }}" value="{{ product.min_quantity }}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="favorite-add-cart" type="button">В корзину</button>

@@ -51,14 +51,7 @@ def get_product(product_id):
         )
         return product
     except (Product.DoesNotExist, ValueError, TypeError):
-        try:
-            return (
-                Product.objects.select_related("category")
-                .prefetch_related("images", "attributes__attribute")
-                .get(pk=product_id)
-            )
-        except (Product.DoesNotExist, ValueError, TypeError):
-            return None
+        return None
 
 
 def get_store_categories_queryset():
@@ -71,17 +64,12 @@ def get_store_categories_queryset():
 
 
 def get_store_products_queryset():
-    products = (
+    return (
         Product.objects.filter(status=Product.STATUS_PUBLISHED, category__is_active=True)
         .select_related("category")
         .prefetch_related("images", "attributes__attribute")
         .order_by("name")
     )
-
-    if products.exists():
-        return products
-
-    return Product.objects.select_related("category").prefetch_related("images", "attributes__attribute").order_by("name")
 
 
 def get_store_categories():
@@ -166,6 +154,7 @@ def serialize_product(product):
         "description": product.description,
         "price": format_price(product.price),
         "unit": product.unit,
+        "min_quantity": product.min_quantity,
         "image": main_image,
         "thumbs": thumbs,
         "specs": product_specs(product),
@@ -219,11 +208,23 @@ def serialize_cart_item(product, quantity):
         "sku": product_data["sku"],
         "price": product_data["price"],
         "unit": product_data["unit"],
+        "min_quantity": product_data["min_quantity"],
         "image": product_data["image"],
         "product": product_data,
         "quantity": quantity,
         "line_total": product_data["price"] * quantity,
     }
+
+
+def normalize_quantity(product, quantity):
+    minimum = max(1, int(getattr(product, "min_quantity", 1) or 1))
+
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        quantity = minimum
+
+    return max(minimum, quantity)
 
 
 def get_session_cart(request):
@@ -248,7 +249,7 @@ def merge_session_cart_to_user(request, user):
             continue
 
         item, _ = CartItem.objects.get_or_create(user=user, product=product, defaults={"quantity": 0})
-        item.quantity += max(1, int(quantity))
+        item.quantity += normalize_quantity(product, quantity)
         item.save(update_fields=["quantity", "updated_at"])
 
     request.session["cart"] = {}
@@ -685,13 +686,15 @@ def add_to_cart(request):
     if not product:
         return JsonResponse({"error": "Товар не найден"}, status=404)
 
+    quantity = normalize_quantity(product, quantity)
+
     if request.user.is_authenticated:
         item, _ = CartItem.objects.get_or_create(user=request.user, product=product, defaults={"quantity": 0})
-        item.quantity = item.quantity + max(1, quantity)
+        item.quantity = item.quantity + quantity
         item.save(update_fields=["quantity", "updated_at"])
     else:
         cart = get_session_cart(request)
-        cart[product_id] = int(cart.get(product_id, 0)) + max(1, quantity)
+        cart[product_id] = int(cart.get(product_id, 0)) + quantity
         save_session_cart(request, cart)
 
     return JsonResponse(cart_payload(request))
@@ -707,14 +710,18 @@ def update_cart(request):
 
     product_id = str(payload.get("product_id") or "")
     quantity = int(payload.get("quantity") or 0)
-    if quantity > 0 and not get_product(product_id):
+    product = get_product(product_id)
+
+    if quantity > 0 and not product:
         return JsonResponse({"error": "Товар не найден"}, status=404)
+
+    if product and quantity > 0:
+        quantity = normalize_quantity(product, quantity)
 
     if request.user.is_authenticated:
         if quantity <= 0:
             CartItem.objects.filter(user=request.user, product_id=product_id).delete()
         else:
-            product = get_product(product_id)
             CartItem.objects.update_or_create(user=request.user, product=product, defaults={"quantity": quantity})
     else:
         cart = get_session_cart(request)
@@ -789,7 +796,7 @@ def checkout_order(request):
         )
 
     order_lines = "\n".join(
-        f"- {item['name']} × {item['quantity']} {item['unit']} — {item['line_total']} ₽"
+        f"- {item['name']} × {item['quantity']} {item['unit']} (мин. {item['product']['min_quantity']} {item['unit']}) — {item['line_total']} ₽"
         for item in cart_items
     )
     notify_manager(

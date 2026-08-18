@@ -27,6 +27,13 @@ function updateCartBadges(count) {
   });
 }
 
+function getMinimumQuantityFromElement(element) {
+  const input = element ? element.querySelector(".quantity-input") : null;
+  const minimum = Number(input ? input.getAttribute("min") : 1);
+
+  return Math.max(1, Number.isFinite(minimum) ? minimum : 1);
+}
+
 function openCartDrawer() {
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
@@ -99,11 +106,12 @@ function setCardCartState(productId, quantity) {
     const input = card.querySelector(".quantity-input");
     const button = card.querySelector(".add-to-cart");
     const isInCart = quantity > 0;
+    const minimum = getMinimumQuantityFromElement(card);
 
     card.classList.toggle("is-in-cart", isInCart);
 
     if (input) {
-      input.value = String(Math.max(1, quantity || Number(input.value) || 1));
+      input.value = String(Math.max(minimum, quantity || Number(input.value) || minimum));
     }
 
     if (button) {
@@ -117,6 +125,7 @@ function setCardCartState(productId, quantity) {
   if (modal && modal.dataset.productId === productId) {
     const modalButton = modal.querySelector(".modal-add");
     const modalInput = modal.querySelector(".modal-controls .quantity-input");
+    const minimum = getMinimumQuantityFromElement(modal);
 
     if (modalButton) {
       modalButton.textContent = quantity > 0 ? "В корзине" : "В корзину";
@@ -124,7 +133,7 @@ function setCardCartState(productId, quantity) {
     }
 
     if (modalInput) {
-      modalInput.value = String(Math.max(1, quantity || Number(modalInput.value) || 1));
+      modalInput.value = String(Math.max(minimum, quantity || Number(modalInput.value) || minimum));
     }
   }
 }
