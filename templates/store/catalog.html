@@ -70,6 +70,14 @@
           <button type="submit">Найти</button>
         </form>
 
+        <div class="catalog-mobile-filters">
+          <a class="{% if not active_category and not only_hits %}active{% endif %}" href="{% url 'catalog' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}">Все товары</a>
+          <a class="{% if only_hits %}active{% endif %}" href="{% url 'catalog' %}?hits=1{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Хиты</a>
+          {% for category in categories %}
+            <a class="{% if active_category == category.slug and not only_hits %}active{% endif %}" href="{% url 'catalog' %}?category={{ category.slug|urlencode }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ category.name }}</a>
+          {% endfor %}
+        </div>
+
         <div class="catalog-topline">
           <div>
             <h1>{{ page_title }}</h1>

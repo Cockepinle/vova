@@ -77,6 +77,10 @@ body {
   padding: 32px 25px 48px 31px;
 }
 
+.catalog-mobile-filters {
+  display: none;
+}
+
 .catalog-topline {
   display: flex;
   align-items: flex-start;
@@ -386,6 +390,29 @@ body.modal-open {
     margin: 0 0 18px;
   }
 
+  .catalog-mobile-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 18px;
+  }
+
+  .catalog-mobile-filters a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+
+  .catalog-mobile-filters a.active {
+    border-color: var(--blue);
+    background: #edf1ff;
+    color: var(--blue);
+  }
+
   .catalog-search-mobile .search-box {
     width: 100%;
     height: 44px;
@@ -412,44 +439,6 @@ body.modal-open {
     padding: 22px 0 18px;
   }
 
-  .catalog-sidebar h2 {
-    margin-bottom: 12px;
-    padding: 0 16px;
-  }
-
-  .catalog-search {
-    margin: 0 16px 16px;
-  }
-
-  .catalog-search .search-box {
-    width: 100%;
-    height: 44px;
-  }
-
-  .catalog-search button {
-    height: 44px;
-    border-radius: 0;
-  }
-
-  .catalog-sidebar a {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 0 16px 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--line);
-  }
-
-  .catalog-sidebar a span {
-    margin-left: 12px;
-    font-size: 24px;
-  }
-
-  .catalog-sidebar a.active,
-  .catalog-sidebar a:hover {
-    border-color: var(--blue);
-  }
-
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -470,10 +459,6 @@ body.modal-open {
     padding: 26px 16px 38px;
   }
 
-  .catalog-sidebar {
-    padding-bottom: 14px;
-  }
-
   .catalog-search {
     gap: 10px;
   }
@@ -485,6 +470,17 @@ body.modal-open {
 
   .catalog-search .search-box input {
     font-size: 15px;
+  }
+
+  .catalog-mobile-filters {
+    gap: 7px;
+    margin-bottom: 16px;
+  }
+
+  .catalog-mobile-filters a {
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   .catalog-search .search-box {
