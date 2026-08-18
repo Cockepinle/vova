@@ -60,6 +60,16 @@
       </aside>
 
       <section class="catalog-content">
+        <form class="catalog-search catalog-search-mobile" method="get" action="{% url 'catalog' %}">
+          {% if active_category %}<input type="hidden" name="category" value="{{ active_category }}">{% endif %}
+          {% if only_hits %}<input type="hidden" name="hits" value="1">{% endif %}
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
+            <input name="q" type="search" value="{{ search_query }}" placeholder="Поиск товаров...">
+          </label>
+          <button type="submit">Найти</button>
+        </form>
+
         <div class="catalog-topline">
           <div>
             <h1>{{ page_title }}</h1>
