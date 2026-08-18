@@ -1,0 +1,34 @@
+<aside class="cookie-modal" aria-hidden="true">
+  <div class="cookie-backdrop"></div>
+  <section class="cookie-panel" role="dialog" aria-modal="true" aria-labelledby="cookie-title">
+    <header class="cookie-header">
+      <div>
+        <p class="eyebrow">Настройки</p>
+        <h2 id="cookie-title">Управление cookie</h2>
+      </div>
+      <button class="cookie-close" type="button" aria-label="Закрыть">×</button>
+    </header>
+    <p class="cookie-text">
+      Вы можете выбрать, какие cookie разрешить. Необходимые cookie нужны для работы сайта, корзины,
+      избранного и авторизации, поэтому их нельзя отключить.
+    </p>
+    <form class="cookie-form">
+      <label class="cookie-option">
+        <input type="checkbox" checked disabled>
+        <span><strong>Необходимые</strong> работа сайта, безопасность, корзина и вход в аккаунт.</span>
+      </label>
+      <label class="cookie-option">
+        <input name="analytics" type="checkbox">
+        <span><strong>Аналитические</strong> помогают понимать, какие страницы удобны пользователям.</span>
+      </label>
+      <label class="cookie-option">
+        <input name="marketing" type="checkbox">
+        <span><strong>Маркетинговые</strong> помогают показывать более полезные предложения.</span>
+      </label>
+      <div class="cookie-actions">
+        <button class="cookie-save-all" type="button">Разрешить все</button>
+        <button class="cookie-submit" type="submit">Сохранить выбор</button>
+      </div>
+    </form>
+  </section>
+</aside>

@@ -1,0 +1,43 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}{% if field %}Редактировать поле{% else %}Добавить поле{% endif %}{% endblock %}
+
+{% block content %}
+  <form class="mgmt-card mgmt-form" method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-grid">
+      {% for item in form %}
+        <label class="{% if item.name == 'choices_text' %}full choice-options-field{% endif %}">
+          <span>{{ item.label }}</span>
+          {{ item }}
+          {% if item.name == 'choices_text' %}
+            <small>Заполняется только для типа «Список». Например: Белый, Чёрный, Прозрачный — каждый вариант с новой строки.</small>
+          {% endif %}
+          {{ item.errors }}
+        </label>
+      {% endfor %}
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить поле</button>
+      <a class="ghost-button" href="{% url 'management_fields' %}">Отмена</a>
+    </div>
+  </form>
+
+  <script>
+    const typeField = document.querySelector("#id_value_type");
+    const choicesField = document.querySelector(".choice-options-field");
+
+    function toggleChoicesField() {
+      if (!typeField || !choicesField) {
+        return;
+      }
+      choicesField.style.display = typeField.value === "choice" ? "grid" : "none";
+    }
+
+    if (typeField) {
+      typeField.addEventListener("change", toggleChoicesField);
+    }
+    toggleChoicesField();
+  </script>
+{% endblock %}

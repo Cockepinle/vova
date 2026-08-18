@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход · PakLine CMS</title>
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=1">
+  </head>
+  <body class="mgmt-login-page">
+    <main class="login-card">
+      <a class="mgmt-brand" href="{% url 'home' %}">
+        <span>PL</span>
+        <strong>Панель управления</strong>
+      </a>
+      <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <label>
+          <span>Логин</span>
+          {{ form.username }}
+        </label>
+        <label>
+          <span>Пароль</span>
+          {{ form.password }}
+        </label>
+        <button class="primary-button" type="submit">Войти</button>
+      </form>
+      <a class="back-link" href="{% url 'home' %}">← Вернуться на сайт</a>
+    </main>
+  </body>
+</html>

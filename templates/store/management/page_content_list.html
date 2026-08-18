@@ -1,0 +1,36 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}Тексты страниц{% endblock %}
+
+{% block content %}
+  <section class="mgmt-card">
+    <div class="card-header">
+      <h2>Страницы сайта</h2>
+      <a class="primary-button" href="{% url 'management_page_new' %}">+ Добавить текст</a>
+    </div>
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead><tr><th>Страница</th><th>Заголовок</th><th>Метка</th><th>Видимость</th><th></th></tr></thead>
+        <tbody>
+          {% for page in pages %}
+            <tr>
+              <td>{{ page.get_page_display }}</td>
+              <td>{{ page.title|default:"—" }}</td>
+              <td>{{ page.hero_label|default:"—" }}</td>
+              <td>{% if page.is_visible %}<span class="status status-published">Опубликовано</span>{% else %}<span class="status status-hidden">Скрыто</span>{% endif %}</td>
+              <td class="row-actions">
+                <a href="{% url 'management_page_edit' page.id %}">Изменить</a>
+                <form method="post" action="{% url 'management_page_delete' page.id %}">
+                  {% csrf_token %}
+                  <button type="submit" onclick="return confirm('Удалить текст страницы?')">Удалить</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Тексты страниц ещё не созданы.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}Поля товаров{% endblock %}
+
+{% block content %}
+  <section class="mgmt-card">
+    <div class="card-header">
+      <h2>Динамические поля</h2>
+      <a class="primary-button" href="{% url 'management_field_new' %}">+ Добавить поле</a>
+    </div>
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead><tr><th>Порядок</th><th>Название</th><th>Тип</th><th>Обязательное</th><th>В таблице</th><th>Фильтр</th><th></th></tr></thead>
+        <tbody>
+          {% for field in fields %}
+            <tr>
+              <td>{{ field.sort_order }}</td>
+              <td><strong>{{ field.name }}</strong></td>
+              <td>{{ field.get_value_type_display }}</td>
+              <td>{% if field.is_required %}Да{% else %}Нет{% endif %}</td>
+              <td>{% if field.show_in_table %}Да{% else %}Нет{% endif %}</td>
+              <td>{% if field.is_filterable %}Да{% else %}Нет{% endif %}</td>
+              <td class="row-actions">
+                <a href="{% url 'management_field_edit' field.id %}">Изменить</a>
+                <form method="post" action="{% url 'management_field_delete' field.id %}">
+                  {% csrf_token %}
+                  <button type="submit" onclick="return confirm('Удалить поле и все его значения?')">Удалить</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">Поля ещё не созданы.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

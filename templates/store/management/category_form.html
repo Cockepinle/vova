@@ -1,0 +1,38 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}{% if category %}Редактировать категорию{% else %}Новая категория{% endif %}{% endblock %}
+
+{% block content %}
+  <form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name == "image" %}
+            <div class="full image-field">
+              <span>Изображение</span>
+              {% if category and category.display_image_url %}
+                <img class="current-image-preview" src="{{ category.display_image_url }}" alt="{{ category.name }}">
+              {% endif %}
+              <label class="file-upload fancy-file">
+                {{ field }}
+                <strong>Выбрать файл</strong>
+                <small class="file-name">Файл не выбран</small>
+              </label>
+              {{ field.errors }}
+            </div>
+          {% else %}
+            <label class="{% if field.name == 'description' %}full{% endif %}">
+              <span>{{ field.label }}</span>
+              {{ field }}
+              {{ field.errors }}
+            </label>
+          {% endif %}
+      {% endfor %}
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить категорию</button>
+      <a class="ghost-button" href="{% url 'management_categories' %}">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

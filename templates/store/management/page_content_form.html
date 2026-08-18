@@ -1,0 +1,23 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}{% if page_content %}Редактировать текст{% else %}Новый текст страницы{% endif %}{% endblock %}
+
+{% block content %}
+  <form class="mgmt-card mgmt-form" method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-grid">
+      {% for field in form %}
+        <label class="{% if field.name == 'subtitle' %}full{% endif %}">
+          <span>{{ field.label }}</span>
+          {{ field }}
+          {{ field.errors }}
+        </label>
+      {% endfor %}
+    </div>
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить текст</button>
+      <a class="ghost-button" href="{% url 'management_pages' %}">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

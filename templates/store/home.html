@@ -1,0 +1,184 @@
+{% load static %}
+{% load store_extras %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PakLine</title>
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=25">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>
+          <span class="brand-name">{{ site_settings.site_name|default:"PakLine" }}</span>
+        </a>
+
+        <nav class="main-nav" aria-label="Главная навигация">
+          <a class="active" href="/">Главная</a>
+          <a href="{% url 'catalog' %}">Каталог</a>
+          <a href="{% url 'team' %}">Команда</a>
+          <a href="{% url 'contacts' %}">Контакты</a>
+        </nav>
+
+        <div class="header-actions">
+          <button class="js-account-open" type="button" aria-label="Профиль">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+          </button>
+          <button class="favorite-header-button js-favorites-open" type="button" aria-label="Избранное">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+            <span class="favorite-count">{{ favorite_count }}</span>
+          </button>
+          <button class="cart-button js-cart-open" type="button" aria-label="Корзина">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
+            <span id="cart-count">{{ cart_count }}</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <p class="eyebrow">{{ site_settings.home_hero_label|default:"Оптовые поставки · Москва и Россия" }}</p>
+        <h1>{{ site_settings.home_hero_title|default:"Упаковка для вашего бизнеса" }}</h1>
+        <p class="hero-copy">
+          {{ site_settings.home_hero_subtitle|default:"Гофрокартон, стрейч-плёнка, скотч, пузырчатая плёнка и 300+ SKU на складе в Москве. Отгрузка в день заказа." }}
+        </p>
+        <div class="hero-actions">
+          <a class="primary-cta" href="{% url 'catalog' %}">
+            {{ page_content.home.hero_button_text|default:"Смотреть каталог" }}
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </a>
+          <a class="secondary-cta" href="{% url 'contacts' %}">Запросить КП</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-band" aria-label="Показатели компании">
+      {% for stat in stats %}
+        <div class="stat-item">
+          <strong>{{ stat.value }}</strong>
+          <span>{{ stat.label }}</span>
+        </div>
+      {% endfor %}
+    </section>
+
+    <main>
+      <section class="categories-section" id="catalog">
+        <div class="section-header">
+          <h2>Категории</h2>
+          <a href="{% url 'catalog' %}">Весь каталог <span>›</span></a>
+        </div>
+        <div class="category-grid">
+          {% for category in categories %}
+            <a class="category-card" href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">
+              <img src="{{ category.image }}" alt="">
+              <span>{{ category.name }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="hits-section">
+        <div class="section-header">
+          <h2>Хиты продаж</h2>
+          <a href="{% url 'catalog' %}?hits=1">Смотреть все <span>›</span></a>
+        </div>
+        <div class="product-grid">
+          {% for product in hit_products %}
+            {% with cart_quantity=cart_quantities|get_item:product.id %}
+            <article class="product-card {% if cart_quantity %}is-in-cart{% endif %}" data-product-id="{{ product.id }}" data-product='{{ product|to_json }}' role="button" tabindex="0" aria-label="Открыть карточку {{ product.name }}">
+              <div class="open-product">
+                <div class="product-image">
+                  <span class="hit-badge">ХИТ</span>
+                  <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+                  </button>
+                  <img src="{{ product.image }}" alt="{{ product.name }}">
+                </div>
+                <div class="product-info">
+                  <span class="product-sku">{{ product.sku }}</span>
+                  <h3>{{ product.name }}</h3>
+                  <div class="product-buy-row">
+                    <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
+                    <div class="quantity-control" aria-label="Количество">
+                      <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                      <input class="quantity-input" type="number" min="1" value="{{ cart_quantity|default:1 }}" aria-label="Количество товара">
+                      <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+                    </div>
+                  </div>
+                  <button class="add-to-cart" type="button">{% if cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
+                </div>
+              </div>
+            </article>
+            {% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="advantages-section" id="team">
+        <h2>Почему выбирают PakLine</h2>
+        <div class="advantages-grid">
+          {% for advantage in advantages %}
+            <article class="advantage-card">
+              <span>{{ advantage.number }}</span>
+              <h3>{{ advantage.title }}</h3>
+              <p>{{ advantage.text }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+
+    {% include "store/partials/footer.html" %}
+
+    {% include "store/partials/cart_drawer.html" %}
+    {% include "store/partials/user_drawers.html" %}
+    {% include "store/partials/cookie_modal.html" %}
+    <div class="product-modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <section class="modal-gallery">
+          <span class="hit-badge modal-badge">ХИТ</span>
+          <img class="modal-main-image" src="" alt="">
+          <div class="modal-thumbs"></div>
+        </section>
+        <section class="modal-info">
+          <button class="modal-close" type="button" aria-label="Закрыть">×</button>
+          <p class="modal-meta"></p>
+          <h2 id="modal-title"></h2>
+          <p class="modal-description"></p>
+          <h3>Характеристики</h3>
+          <dl class="modal-specs"></dl>
+          <div class="modal-price-row">
+            <p class="price modal-price"></p>
+            <div class="modal-controls">
+              <div class="quantity-control" aria-label="Количество">
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <input class="quantity-input" type="number" min="1" value="1" aria-label="Количество товара">
+                <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+              </div>
+              <button class="add-to-cart modal-add" type="button">В корзину</button>
+              <button class="modal-favorite" type="button" aria-label="Добавить в избранное">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+              </button>
+            </div>
+          </div>
+          <p class="modal-note">Доставка в день заказа при оформлении до 14:00 · Самовывоз со склада в Москве</p>
+        </section>
+      </article>
+    </div>
+    <div class="image-lightbox" aria-hidden="true">
+      <button class="image-lightbox-close" type="button" aria-label="Закрыть фото">×</button>
+      <img class="image-lightbox-img" src="" alt="">
+    </div>
+    <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
+    <script src="{% static 'store/js/cart.js' %}?v=22"></script>
+    <script src="{% static 'store/js/account.js' %}?v=5"></script>
+    <script src="{% static 'store/js/home.js' %}?v=15"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=17"></script>
+  </body>
+</html>

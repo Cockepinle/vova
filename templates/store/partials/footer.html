@@ -1,0 +1,57 @@
+{% load store_extras %}
+<footer class="site-footer" id="contacts">
+  {% if show_footer_cta %}
+    <section class="footer-cta">
+      <div>
+        <h2>Нужно коммерческое предложение?</h2>
+        <p>Пришлём прайс и расчёт в течение 2 часов.</p>
+      </div>
+      <a href="{% url 'contacts' %}">
+        Написать нам
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </a>
+    </section>
+  {% endif %}
+
+  <section class="footer-main">
+    <div class="footer-about">
+      <a class="brand footer-brand" href="/">
+        <span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>
+        <span class="brand-name">{{ site_settings.site_name|default:"PakLine" }}</span>
+      </a>
+      <p>{{ site_settings.footer_description|default:"Оптовые поставки упаковочных материалов. Москва и Россия." }}</p>
+      <p>С 2013 года.</p>
+    </div>
+    <div>
+      <h3>Навигация</h3>
+      <a href="/">Главная</a>
+      <a href="{% url 'catalog' %}">Каталог</a>
+      <a href="{% url 'team' %}">Команда</a>
+      <a href="{% url 'contacts' %}">Контакты</a>
+    </div>
+    <div>
+      <h3>Категории</h3>
+      <a href="{% url 'catalog' %}">Все категории</a>
+      {% for category in footer_categories %}
+        <a href="{% url 'catalog' %}?category={{ category.slug }}">{{ category.name }}</a>
+      {% endfor %}
+    </div>
+    <div>
+      <h3>Контакты</h3>
+      <p><a href="tel:{{ site_settings.contact_phone|default:'+7 (800) 555-38-22'|phone_href }}">{{ site_settings.contact_phone|default:"+7 (800) 555-38-22" }}</a></p>
+      <p><a href="mailto:{{ site_settings.contact_email|default:'info@pakline.ru' }}">{{ site_settings.contact_email|default:"info@pakline.ru" }}</a></p>
+      <p>{{ site_settings.contact_address|default:"г. Москва, ул. Складская, д. 14" }}</p>
+      <p>{{ site_settings.contact_work_hours|default:"ПН–ПТ 9:00–18:00" }}</p>
+    </div>
+  </section>
+
+  <section class="footer-bottom">
+    <p>{{ site_settings.copyright_text|default:"© 2025 ООО «ПакЛайн». Все права защищены." }}</p>
+    <nav aria-label="Документы">
+      <a href="{% url 'document_page' 'privacy' %}">Политика конфиденциальности</a>
+      <a href="{% url 'document_page' 'offer' %}">Оферта</a>
+      <button class="footer-link-button js-cookie-settings" type="button">Управление cookie</button>
+      <a href="{% url 'management_login' %}">Управление</a>
+    </nav>
+  </section>
+</footer>

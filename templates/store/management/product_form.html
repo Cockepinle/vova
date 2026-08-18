@@ -1,0 +1,97 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}{% if product %}Редактировать товар{% else %}Новый товар{% endif %}{% endblock %}
+
+{% block content %}
+  <form class="mgmt-form-grid" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <section class="mgmt-card">
+      <h2>Основное</h2>
+      {{ form.non_field_errors }}
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name == "image" %}
+            <div class="full image-field">
+              <span>Главное изображение</span>
+              {% if product and product.display_image_url %}
+                <img class="current-image-preview" src="{{ product.display_image_url }}" alt="{{ product.name }}">
+              {% endif %}
+              <label class="file-upload fancy-file">
+                {{ field }}
+                <strong>Выбрать файл</strong>
+                <small class="file-name">Файл не выбран</small>
+              </label>
+              {{ field.errors }}
+            </div>
+          {% else %}
+            <label class="{% if field.name == 'description' %}full{% endif %}">
+              <span>{{ field.label }}</span>
+              {{ field }}
+              {{ field.errors }}
+            </label>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="mgmt-card">
+      <div class="card-header">
+        <h2>Пользовательские поля</h2>
+        <a class="ghost-button" href="{% url 'management_field_new' %}">+ Добавить поле</a>
+      </div>
+      <div class="form-grid">
+        {% for field in dynamic_form %}
+          <label>
+            <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+            {{ field }}
+            {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+            {{ field.errors }}
+          </label>
+        {% empty %}
+          <p class="muted">Пока нет пользовательских полей.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="mgmt-card">
+      <div class="card-header">
+        <h2>Фотографии товара</h2>
+      </div>
+      {% if product and product.images.exists %}
+        <div class="image-actions">
+          <label><input class="js-select-gallery" type="checkbox"> Выбрать все</label>
+          <button class="ghost-button danger-button" type="submit">Удалить выбранные</button>
+        </div>
+        <div class="image-grid">
+          {% for image in product.images.all %}
+            <div class="image-tile">
+              {% if image.display_url %}<img src="{{ image.display_url }}" alt="{{ image.alt }}">{% endif %}
+              <label class="delete-image-check" aria-label="Выбрать фото для удаления">
+                <input type="checkbox" name="delete_images" value="{{ image.id }}">
+                <span></span>
+              </label>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Дополнительных фотографий пока нет.</p>
+      {% endif %}
+      <label class="file-upload fancy-file">
+        <span>Загрузить фото с ноутбука</span>
+        <input type="file" name="gallery_images" accept="image/*" multiple>
+        <strong>Выбрать файлы</strong>
+        <small class="file-name">Файлы не выбраны</small>
+      </label>
+      <label class="image-url-upload">
+        <span>Или добавить фото по ссылке</span>
+        <textarea name="gallery_image_urls" rows="3" placeholder="https://site.ru/photo-1.jpg&#10;https://site.ru/photo-2.jpg"></textarea>
+        <small>Каждая ссылка — с новой строки.</small>
+      </label>
+    </section>
+
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить</button>
+      <a class="ghost-button" href="{% url 'management_products' %}">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

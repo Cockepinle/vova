@@ -1,0 +1,91 @@
+{% load static %}
+{% load store_extras %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Контакты · PakLine</title>
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=25">
+    <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=6">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/"><span class="brand-mark">PL</span><span class="brand-name">PakLine</span></a>
+        <nav class="main-nav" aria-label="Главная навигация">
+          <a href="/">Главная</a>
+          <a href="{% url 'catalog' %}">Каталог</a>
+          <a href="{% url 'team' %}">Команда</a>
+          <a class="active" href="{% url 'contacts' %}">Контакты</a>
+        </nav>
+        <div class="header-actions">
+          <button class="js-account-open" type="button" aria-label="Профиль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></button>
+          <button class="favorite-header-button js-favorites-open" type="button" aria-label="Избранное"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg><span class="favorite-count">{{ favorite_count }}</span></button>
+          <button class="cart-button js-cart-open" type="button" aria-label="Корзина"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span id="cart-count">{{ cart_count }}</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="contacts-page">
+      <p class="eyebrow">{{ site_settings.contacts_hero_label|default:"Связаться с нами" }}</p>
+      <h1>{{ site_settings.contacts_hero_title|default:"Контакты" }}</h1>
+      <div class="contact-layout">
+        <section class="contact-form">
+          <h2>{{ site_settings.contacts_form_title|default:"Получить коммерческое предложение" }}</h2>
+          <form class="request-form">
+            <div class="form-grid">
+              <div class="field">
+                <label for="name">Имя / ФИО *</label>
+                <input id="name" name="name" placeholder="Алексей Иванов" required>
+              </div>
+              <div class="field">
+                <label for="company">Компания</label>
+                <input id="company" name="company" placeholder="ООО «Ваша компания»">
+              </div>
+              <div class="field full">
+                <label for="email">Email *</label>
+                <input id="email" name="email" type="email" placeholder="info@company.ru" required>
+              </div>
+              <div class="field full">
+                <label for="phone">Телефон</label>
+                <input id="phone" name="phone" placeholder="+7 (___) ___-__-__">
+              </div>
+              <div class="field full">
+                <label for="request">Текст запроса *</label>
+                <textarea id="request" name="text" required placeholder="Опишите что нужно упаковать, примерный объём и периодичность..."></textarea>
+              </div>
+            </div>
+            <button class="submit-request" type="submit">Получить коммерческое предложение</button>
+            <p class="request-message" hidden></p>
+            <p class="privacy">Нажимая кнопку, вы соглашаетесь с <a href="{% url 'document_page' 'privacy' %}">политикой конфиденциальности</a></p>
+          </form>
+        </section>
+
+        <section class="contacts-info">
+          <h2>Реквизиты и адреса</h2>
+          <div class="info-row"><h3>Офис и склад</h3><div><p>{{ site_settings.contact_address|default:"г. Москва, ул. Складская, д. 14" }}</p><p>Время работы: {{ site_settings.contact_work_hours|default:"ПН–ПТ 9:00–18:00" }}</p><p>СБ 10:00–15:00 (только самовывоз)</p></div></div>
+          <div class="info-row"><h3>Телефон</h3><div><p><a href="tel:{{ site_settings.contact_phone|default:'+7 (800) 555-38-22'|phone_href }}">{{ site_settings.contact_phone|default:"+7 (800) 555-38-22" }}</a></p></div></div>
+          <div class="info-row"><h3>Email</h3><div><p><a href="mailto:{{ site_settings.contact_email|default:'info@pakline.ru' }}">{{ site_settings.contact_email|default:"info@pakline.ru" }}</a></p><p><a href="mailto:{{ site_settings.contact_email_b2b|default:'b2b@pakline.ru' }}">{{ site_settings.contact_email_b2b|default:"b2b@pakline.ru" }}</a> (корпорации)</p></div></div>
+          <div class="info-row"><h3>Реквизиты</h3><div><p>{{ site_settings.company_name|default:"ООО «ПакЛайн»" }}</p><p>ИНН {{ site_settings.company_inn|default:"7701234567" }}</p><p>КПП {{ site_settings.company_kpp|default:"770101001" }}</p></div></div>
+
+          <div class="b2b-box">
+            <h3>{{ site_settings.contacts_b2b_title|default:"Для корпоративных клиентов" }}</h3>
+            <h4>{{ site_settings.contacts_b2b_subtitle|default:"Персональный менеджер и индивидуальные условия" }}</h4>
+            <p>{{ site_settings.contacts_b2b_text|default:"Постоплата 30/60 дней, скидки от объёма, брендированная упаковка, SLA на поставки." }}</p>
+            <a href="mailto:{{ site_settings.contact_email_b2b|default:'b2b@pakline.ru' }}">Написать в B2B</a>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    {% include "store/partials/footer.html" %}
+    {% include "store/partials/cart_drawer.html" %}
+    {% include "store/partials/user_drawers.html" %}
+    {% include "store/partials/cookie_modal.html" %}
+    <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
+    <script src="{% static 'store/js/cart.js' %}?v=22"></script>
+    <script src="{% static 'store/js/account.js' %}?v=5"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=17"></script>
+  </body>
+</html>

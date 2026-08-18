@@ -1,0 +1,170 @@
+{% load static %}
+{% load store_extras %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Каталог · PakLine</title>
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=25">
+    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=16">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <span class="brand-mark">PL</span>
+          <span class="brand-name">PakLine</span>
+        </a>
+
+        <nav class="main-nav" aria-label="Главная навигация">
+          <a href="/">Главная</a>
+          <a class="active" href="{% url 'catalog' %}">Каталог</a>
+          <a href="{% url 'team' %}">Команда</a>
+          <a href="{% url 'contacts' %}">Контакты</a>
+        </nav>
+
+        <div class="header-actions">
+          <button class="js-account-open" type="button" aria-label="Профиль">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+          </button>
+          <button class="favorite-header-button js-favorites-open" type="button" aria-label="Избранное">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+            <span class="favorite-count">{{ favorite_count }}</span>
+          </button>
+          <button class="cart-button js-cart-open" type="button" aria-label="Корзина">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
+            <span id="cart-count">{{ cart_count }}</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="catalog-layout">
+      <aside class="catalog-sidebar" aria-label="Категории каталога">
+        <h2>Категории</h2>
+        <form class="catalog-search" method="get" action="{% url 'catalog' %}">
+          {% if active_category %}<input type="hidden" name="category" value="{{ active_category }}">{% endif %}
+          {% if only_hits %}<input type="hidden" name="hits" value="1">{% endif %}
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
+            <input name="q" type="search" value="{{ search_query }}" placeholder="Поиск товаров...">
+          </label>
+          <button type="submit">Найти</button>
+        </form>
+        <a class="{% if not active_category and not only_hits %}active{% endif %}" href="{% url 'catalog' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}">Все товары <span>›</span></a>
+        <a class="{% if only_hits %}active{% endif %}" href="{% url 'catalog' %}?hits=1{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Хиты продаж <span>›</span></a>
+        {% for category in categories %}
+          <a class="{% if active_category == category.slug and not only_hits %}active{% endif %}" href="{% url 'catalog' %}?category={{ category.slug|urlencode }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ category.name }}{% if active_category == category.slug and not only_hits %}<span>›</span>{% endif %}</a>
+        {% endfor %}
+      </aside>
+
+      <section class="catalog-content">
+        <div class="catalog-topline">
+          <div>
+            <h1>{{ page_title }}</h1>
+            {% if not active_category and not only_hits and catalog_subtitle %}<p>{{ catalog_subtitle }}</p>{% endif %}
+            <p>{% if search_query %}По запросу «{{ search_query }}» · {% endif %}{{ products|length }} товаров</p>
+          </div>
+          <select aria-label="Сортировка товаров">
+            <option>По умолчанию</option>
+            <option>Сначала дешевле</option>
+            <option>Сначала дороже</option>
+            <option>Сначала новинки</option>
+          </select>
+        </div>
+
+        <div class="catalog-grid">
+          {% for product in products %}
+            {% with cart_quantity=cart_quantities|get_item:product.id %}
+            <article class="catalog-card {% if cart_quantity %}is-in-cart{% endif %}" data-product-id="{{ product.id }}" data-product='{{ product|to_json }}'>
+              <div class="open-product" role="button" tabindex="0" aria-label="Открыть карточку {{ product.name }}">
+                <div class="catalog-card-image">
+                  {% if product.badge %}
+                    <span class="hit-badge">{{ product.badge }}</span>
+                  {% endif %}
+                  <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+                  </button>
+                  <img src="{{ product.image }}" alt="{{ product.name }}">
+                </div>
+                <div class="catalog-card-info">
+                  <span class="product-sku">{{ product.sku }}</span>
+                  <h3>{{ product.name }}</h3>
+                </div>
+              </div>
+              <div class="catalog-card-buy">
+                <div class="product-buy-row">
+                  <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
+                  <div class="quantity-control" aria-label="Количество">
+                    <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                    <input class="quantity-input" type="number" min="1" value="{{ cart_quantity|default:1 }}" aria-label="Количество товара">
+                    <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+                  </div>
+                </div>
+                <button class="add-to-cart" type="button">{% if cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
+              </div>
+            </article>
+            {% endwith %}
+          {% empty %}
+            <div class="catalog-empty">
+              <h2>Товары скоро появятся</h2>
+              <p>{% if search_query %}По запросу «{{ search_query }}» ничего не найдено.{% else %}В этом разделе пока нет карточек.{% endif %}</p>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+
+    <div class="product-modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <section class="modal-gallery">
+          <span class="hit-badge modal-badge">ХИТ</span>
+          <img class="modal-main-image" src="" alt="">
+          <div class="modal-thumbs"></div>
+        </section>
+        <section class="modal-info">
+          <button class="modal-close" type="button" aria-label="Закрыть">×</button>
+          <p class="modal-meta"></p>
+          <h2 id="modal-title"></h2>
+          <p class="modal-description"></p>
+          <h3>Характеристики</h3>
+          <dl class="modal-specs"></dl>
+          <div class="modal-price-row">
+            <p class="price modal-price"></p>
+            <div class="modal-controls">
+              <div class="quantity-control" aria-label="Количество">
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <input class="quantity-input" type="number" min="1" value="1" aria-label="Количество товара">
+                <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+              </div>
+              <button class="add-to-cart modal-add" type="button">В корзину</button>
+              <button class="modal-favorite" type="button" aria-label="Добавить в избранное">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+              </button>
+            </div>
+          </div>
+          <p class="modal-note">Доставка в день заказа при оформлении до 14:00 · Самовывоз со склада в Москве</p>
+        </section>
+      </article>
+    </div>
+    <div class="image-lightbox" aria-hidden="true">
+      <button class="image-lightbox-close" type="button" aria-label="Закрыть фото">×</button>
+      <img class="image-lightbox-img" src="" alt="">
+    </div>
+
+    {% include "store/partials/footer.html" %}
+    {% include "store/partials/cart_drawer.html" %}
+    {% include "store/partials/user_drawers.html" %}
+    {% include "store/partials/cookie_modal.html" %}
+    <script>
+      window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
+      window.initialProductToOpen = "{{ open_product_id|escapejs }}";
+    </script>
+    <script src="{% static 'store/js/cart.js' %}?v=22"></script>
+    <script src="{% static 'store/js/account.js' %}?v=5"></script>
+    <script src="{% static 'store/js/catalog.js' %}?v=17"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=17"></script>
+  </body>
+</html>

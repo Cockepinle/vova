@@ -1,0 +1,57 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}Обзор{% endblock %}
+
+{% block content %}
+  <section class="stats-grid">
+    <article><span>Товары</span><strong>{{ stats.products }}</strong></article>
+    <article><span>Опубликовано</span><strong>{{ stats.published }}</strong></article>
+    <article><span>Черновики</span><strong>{{ stats.drafts }}</strong></article>
+    <article><span>Заказы</span><strong>{{ stats.orders }}</strong></article>
+    <article><span>Сотрудники</span><strong>{{ stats.employees }}</strong></article>
+    <article><span>Заявки</span><strong>{{ stats.requests }}</strong></article>
+    <article><span>Пользовательские поля</span><strong>{{ stats.fields }}</strong></article>
+  </section>
+
+  <section class="mgmt-card">
+    <div class="card-header">
+      <h2>Недавно обновлённые товары</h2>
+      <a class="primary-button" href="{% url 'management_product_new' %}">+ Добавить товар</a>
+    </div>
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead><tr><th>Название</th><th>Артикул</th><th>Статус</th><th>Цена</th><th></th></tr></thead>
+        <tbody>
+          {% for product in recent_products %}
+            <tr>
+              <td>{{ product.name }}</td>
+              <td>{{ product.sku }}</td>
+              <td><span class="status status-{{ product.status }}">{{ product.get_status_display }}</span></td>
+              <td>{{ product.price }} ₽</td>
+              <td><a href="{% url 'management_product_edit' product.id %}">Изменить</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Пока нет товаров в БД.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mgmt-card history-card">
+    <div class="card-header">
+      <h2>История изменений</h2>
+    </div>
+    <div class="history-list">
+      {% for item in history %}
+        <article>
+          <strong>{{ item.object_repr }}</strong>
+          <span>{{ item.user }} · {{ item.action_time|date:"d.m.Y H:i" }}</span>
+          <p>{{ item.change_message }}</p>
+        </article>
+      {% empty %}
+        <p class="muted">История пока пустая.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

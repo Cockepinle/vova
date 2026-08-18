@@ -1,0 +1,57 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}Заказы{% endblock %}
+
+{% block content %}
+  <section class="mgmt-card">
+    <div class="card-header">
+      <form class="toolbar" method="get">
+        <input name="q" value="{{ query }}" placeholder="Поиск по номеру, клиенту, телефону...">
+        <select name="status">
+          <option value="">Все статусы</option>
+          {% for value,label in status_choices %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="ghost-button" type="submit">Найти</button>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead>
+          <tr>
+            <th>Номер</th>
+            <th>Дата</th>
+            <th>Клиент</th>
+            <th>Телефон</th>
+            <th>Сумма</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in page %}
+            <tr>
+              <td><strong>{{ order.number }}</strong></td>
+              <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
+              <td>{{ order.full_name }}<br><span class="muted">{{ order.email }}</span></td>
+              <td>{{ order.phone }}</td>
+              <td><strong>{{ order.total }} ₽</strong></td>
+              <td><span class="status status-{{ order.status }}">{{ order.get_status_display }}</span></td>
+              <td class="row-actions"><a href="{% url 'management_order_detail' order.id %}">Открыть</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">Заказы пока не найдены.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">Назад</a>{% endif %}
+      <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">Вперёд</a>{% endif %}
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "store/management/base.html" %}
+
+{% block heading %}Заказ {{ order.number }}{% endblock %}
+
+{% block content %}
+  <div class="mgmt-form-grid">
+    <section class="mgmt-card order-summary">
+      <div>
+        <h2>Данные заказа</h2>
+        <p><strong>Номер:</strong> {{ order.number }}</p>
+        <p><strong>Дата:</strong> {{ order.created_at|date:"d.m.Y H:i" }}</p>
+        <p><strong>Итого:</strong> {{ order.total }} ₽</p>
+      </div>
+      <form method="post">
+        {% csrf_token %}
+        <label>
+          <span>Статус</span>
+          <select name="status">
+            {% for value,label in status_choices %}
+              <option value="{{ value }}" {% if order.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="primary-button" type="submit">Сохранить статус</button>
+      </form>
+    </section>
+
+    <section class="mgmt-card">
+      <h2>Данные клиента</h2>
+      <div class="order-info-grid">
+        <p><span>ФИО</span><strong>{{ order.full_name }}</strong></p>
+        <p><span>Телефон</span><strong>{{ order.phone }}</strong></p>
+        <p><span>Email</span><strong>{{ order.email }}</strong></p>
+        <p><span>Компания</span><strong>{{ order.company|default:"—" }}</strong></p>
+        <p><span>Аккаунт</span><strong>{{ order.user.email|default:order.user.username }}</strong></p>
+      </div>
+    </section>
+
+    <section class="mgmt-card">
+      <h2>Состав заказа</h2>
+      <div class="table-wrap">
+        <table class="mgmt-table">
+          <thead><tr><th>Товар</th><th>Артикул</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+          <tbody>
+            {% for item in order.items.all %}
+              <tr>
+                <td>{{ item.product_name }}</td>
+                <td>{{ item.product_sku|default:"—" }}</td>
+                <td>{{ item.quantity }} {{ item.unit }}</td>
+                <td>{{ item.price }} ₽</td>
+                <td><strong>{{ item.line_total }} ₽</strong></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mgmt-card">
+      <h2>Комментарий клиента</h2>
+      <p class="order-comment">{{ order.comment|default:"Комментарий не указан." }}</p>
+    </section>
+
+    <div class="form-actions">
+      <a class="ghost-button" href="{% url 'management_orders' %}">Назад к заказам</a>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% load store_extras %}
+<aside class="cart-drawer" aria-hidden="true">
+  <div class="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+    <header class="cart-panel-header">
+      <h2 id="cart-title">Корзина <span>({{ cart_count }})</span></h2>
+      <button class="cart-close" type="button" aria-label="Закрыть">×</button>
+    </header>
+    <div class="cart-bulk-actions" {% if not cart_items %}hidden{% endif %}>
+      <label>
+        <input class="cart-select-all" type="checkbox">
+        <span>Выбрать все</span>
+      </label>
+      <button class="cart-remove-selected" type="button" disabled>Удалить выбранные</button>
+      <button class="cart-clear" type="button">Очистить корзину</button>
+    </div>
+    <div class="cart-items">
+      {% for item in cart_items %}
+        <article class="cart-item" data-product-id="{{ item.id }}" data-product='{{ item.product|to_json }}'>
+          <label class="cart-select">
+            <input class="cart-select-item" type="checkbox" aria-label="Выбрать товар">
+          </label>
+          <img src="{{ item.image }}" alt="">
+          <div class="cart-item-info">
+            <div class="cart-item-title">
+              <h3>{{ item.name }}</h3>
+              <p>{{ item.sku }}</p>
+            </div>
+            <button class="favorite-button cart-favorite {% if item.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+            </button>
+            <div class="cart-item-row">
+              <div class="quantity-control cart-quantity" aria-label="Количество">
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <span>{{ item.quantity }}</span>
+                <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+              </div>
+              <strong data-price="{{ item.price }}">{{ item.line_total }} ₽</strong>
+            </div>
+          </div>
+          <button class="cart-remove" type="button" aria-label="Удалить">×</button>
+        </article>
+      {% empty %}
+        <p class="cart-empty">Корзина пуста</p>
+      {% endfor %}
+    </div>
+    <footer class="cart-panel-footer">
+      <div class="cart-total">
+        <span>Итого</span>
+        <strong>{{ cart_total }} ₽</strong>
+      </div>
+      <button class="cart-checkout" type="button">Оформить заказ</button>
+      <button class="cart-invoice" type="button">Запросить счёт</button>
+    </footer>
+  </div>
+</aside>
+
+<aside class="checkout-drawer" aria-hidden="true">
+  <div class="drawer-backdrop"></div>
+  <form class="checkout-panel" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+    <header class="drawer-header">
+      <h2 id="checkout-title">Оформление заказа</h2>
+      <button class="checkout-close" type="button" aria-label="Закрыть">×</button>
+    </header>
+    <div class="checkout-fields">
+      <label>
+        <span>ФИО *</span>
+        <input name="full_name" value="{{ checkout_initial.full_name }}" required placeholder="Иван Иванов">
+      </label>
+      <label>
+        <span>Телефон *</span>
+        <input name="phone" value="{{ checkout_initial.phone }}" required inputmode="tel" placeholder="+7 (___) ___-__-__">
+      </label>
+      <label>
+        <span>Email *</span>
+        <input name="email" value="{{ checkout_initial.email }}" required type="email" placeholder="info@company.ru">
+      </label>
+      <label>
+        <span>Компания</span>
+        <input name="company" value="{{ checkout_initial.company }}" placeholder="ООО «Компания»">
+      </label>
+      <label class="full">
+        <span>Комментарий</span>
+        <textarea name="comment" rows="4" placeholder="Комментарий к заказу, доставка, удобное время связи"></textarea>
+      </label>
+    </div>
+    <p class="checkout-warning">
+      Перед оформлением заказа отключите VPN/прокси, иначе уведомление о заказе может не прийти на почту.
+    </p>
+    <p class="checkout-message" hidden></p>
+    <button class="checkout-submit" type="submit">Отправить заказ</button>
+  </form>
+</aside>

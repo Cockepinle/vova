@@ -1,0 +1,54 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=6">
+  </head>
+  <body>
+    <div class="mgmt-shell">
+      <aside class="mgmt-sidebar">
+        <a class="mgmt-brand" href="{% url 'management_dashboard' %}">
+          <span>PL</span>
+          <strong>PakLine CMS</strong>
+        </a>
+        <nav>
+          <a class="{% if section == 'dashboard' %}active{% endif %}" href="{% url 'management_dashboard' %}">Обзор</a>
+          <a class="{% if section == 'products' %}active{% endif %}" href="{% url 'management_products' %}">Товары</a>
+          <a class="{% if section == 'orders' %}active{% endif %}" href="{% url 'management_orders' %}">Заказы</a>
+          <a class="{% if section == 'categories' %}active{% endif %}" href="{% url 'management_categories' %}">Категории</a>
+          <a class="{% if section == 'employees' %}active{% endif %}" href="{% url 'management_employees' %}">Сотрудники</a>
+          <a class="{% if section == 'requests' %}active{% endif %}" href="{% url 'management_requests' %}">Запросы на КП</a>
+          <a class="{% if section == 'fields' %}active{% endif %}" href="{% url 'management_fields' %}">Поля товаров</a>
+          <a class="{% if section == 'settings' %}active{% endif %}" href="{% url 'management_settings' %}">Настройки сайта</a>
+        </nav>
+      </aside>
+
+      <main class="mgmt-main">
+        <header class="mgmt-topbar">
+          <div>
+            <p>Панель управления</p>
+            <h1>{% block heading %}Обзор{% endblock %}</h1>
+          </div>
+          <form method="post" action="{% url 'management_logout' %}">
+            {% csrf_token %}
+            <button class="ghost-button" type="submit">Выйти</button>
+          </form>
+        </header>
+
+        {% if messages %}
+          <div class="mgmt-messages">
+            {% for message in messages %}
+              <div class="mgmt-message {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    <script src="{% static 'store/js/management.js' %}?v=2"></script>
+  </body>
+</html>
