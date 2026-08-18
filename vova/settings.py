@@ -71,6 +71,14 @@ database_url = os.environ.get("DATABASE_URL", "")
 if database_url:
     parsed_database_url = urlparse(database_url)
     database_engine = "django.db.backends.postgresql"
+    database_options = {}
+
+    if parsed_database_url.query:
+        for item in parsed_database_url.query.split("&"):
+            if "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            database_options[key] = value
 
     DATABASES = {
         "default": {
@@ -80,6 +88,7 @@ if database_url:
             "PASSWORD": parsed_database_url.password or "",
             "HOST": parsed_database_url.hostname or "",
             "PORT": parsed_database_url.port or "",
+            "OPTIONS": database_options,
         }
     }
 else:
