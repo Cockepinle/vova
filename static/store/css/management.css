@@ -648,15 +648,33 @@ textarea:focus {
   .mgmt-sidebar {
     position: static;
     height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 16px 14px 12px;
   }
 
   .mgmt-sidebar nav {
     display: flex;
     overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .mgmt-sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mgmt-sidebar nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 10px 14px;
   }
 
   .mgmt-main {
-    padding: 18px;
+    padding: 16px 14px 20px;
   }
 
   .stats-grid,
@@ -671,5 +689,125 @@ textarea:focus {
   .pagination {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .mgmt-topbar h1 {
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .stats-grid {
+    gap: 10px;
+  }
+
+  .stats-grid article {
+    padding: 16px;
+  }
+
+  .stats-grid strong {
+    font-size: 28px;
+  }
+
+  .mgmt-card {
+    padding: 14px;
+  }
+
+  .toolbar {
+    width: 100%;
+  }
+
+  .toolbar input,
+  .toolbar select,
+  .toolbar .ghost-button {
+    max-width: none;
+    width: 100%;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+
+  .mgmt-table {
+    min-width: 720px;
+  }
+
+  .form-grid {
+    gap: 12px;
+  }
+
+  .form-grid label,
+  .mgmt-form-grid label {
+    gap: 6px;
+  }
+
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea,
+  .mgmt-form-grid input,
+  .mgmt-form-grid select,
+  .mgmt-form-grid textarea {
+    min-height: 46px;
+  }
+
+  .form-actions,
+  .bulk-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primary-button,
+  .ghost-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .login-card {
+    width: min(100vw - 24px, 384px);
+    padding: 24px 18px;
+  }
+
+  .mgmt-login-page {
+    padding: 12px;
+  }
+
+  .mgmt-sidebar nav a {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .mgmt-main {
+    padding: 12px;
+  }
+
+  .mgmt-card {
+    padding: 12px;
+  }
+
+  .mgmt-topbar {
+    margin-bottom: 18px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-grid strong {
+    font-size: 24px;
+  }
+
+  .history-list article {
+    padding: 14px 0;
+  }
+
+  .mgmt-table th,
+  .mgmt-table td {
+    padding: 10px 12px;
+  }
+
+  .mgmt-form-grid .full {
+    grid-column: 1 / -1;
   }
 }

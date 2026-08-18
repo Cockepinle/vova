@@ -1842,6 +1842,11 @@ input:focus-visible {
     width: 100%;
     overflow-x: auto;
     padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .main-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .main-nav a {
@@ -1857,21 +1862,28 @@ input:focus-visible {
     gap: 14px;
   }
 
+  .header-actions button {
+    width: 28px;
+    height: 32px;
+  }
+
   .hero {
-    min-height: 500px;
+    min-height: 520px;
   }
 
   .hero-content {
     width: 100%;
-    padding: 72px 20px 64px;
+    padding: 80px 18px 66px;
   }
 
   .eyebrow {
-    letter-spacing: 3px;
+    margin-bottom: 14px;
+    letter-spacing: 2px;
   }
 
   .hero h1 {
-    font-size: 44px;
+    font-size: clamp(34px, 10vw, 46px);
+    line-height: 1.02;
   }
 
   .hero-actions a {
@@ -1880,12 +1892,14 @@ input:focus-visible {
 
   .stats-band {
     grid-template-columns: repeat(2, 1fr);
-    padding: 16px;
+    gap: 0;
+    padding: 12px 12px 0;
   }
 
   .stat-item {
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 16px 12px;
   }
 
   .stat-item:nth-last-child(-n + 2) {
@@ -1898,11 +1912,11 @@ input:focus-visible {
   }
 
   .section-header {
-    margin-bottom: 22px;
+    margin-bottom: 18px;
   }
 
   .section-header h2 {
-    font-size: 30px;
+    font-size: clamp(24px, 7vw, 30px);
   }
 
   .category-grid,
@@ -1915,7 +1929,7 @@ input:focus-visible {
   }
 
   .product-image {
-    height: 310px;
+    height: 292px;
   }
 
   .product-modal {
@@ -1939,12 +1953,12 @@ input:focus-visible {
   }
 
   .advantages-section {
-    padding: 42px 16px 36px;
+    padding: 38px 16px 34px;
   }
 
   .advantages-section h2 {
     margin-bottom: 24px;
-    font-size: 29px;
+    font-size: clamp(24px, 7vw, 29px);
   }
 
   .advantages-grid {
@@ -1972,7 +1986,7 @@ input:focus-visible {
   }
 
   .footer-cta h2 {
-    font-size: 30px;
+    font-size: clamp(24px, 7vw, 30px);
   }
 
   .footer-cta a {
@@ -2054,5 +2068,14 @@ input:focus-visible {
   .checkout-submit {
     margin-right: 16px;
     margin-left: 16px;
+  }
+
+  .hero-content {
+    padding-top: 74px;
+  }
+
+  .hero-copy {
+    margin: 18px 0 28px;
+    font-size: 15px;
   }
 }

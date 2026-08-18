@@ -400,24 +400,22 @@ body.modal-open {
   }
 
   .catalog-sidebar a {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin: 0 16px 8px;
     padding: 12px 14px;
     border: 1px solid var(--line);
   }
 
   .catalog-sidebar a span {
-    float: right;
-    margin-top: -2px;
+    margin-left: 12px;
+    font-size: 24px;
   }
 
   .catalog-sidebar a.active,
   .catalog-sidebar a:hover {
     border-color: var(--blue);
-  }
-
-  .catalog-sidebar a {
-    justify-content: space-between;
   }
 
   .catalog-grid {
@@ -448,12 +446,23 @@ body.modal-open {
     gap: 10px;
   }
 
+  .catalog-search .search-box svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .catalog-search .search-box input {
+    font-size: 15px;
+  }
+
   .catalog-search .search-box {
     height: 46px;
   }
 
   .catalog-search button {
     height: 46px;
+    font-size: 13px;
+    letter-spacing: 0.6px;
   }
 
   .catalog-topline {
@@ -473,7 +482,7 @@ body.modal-open {
   }
 
   .catalog-card-image {
-    height: 300px;
+    height: 280px;
   }
 
   .product-modal {
