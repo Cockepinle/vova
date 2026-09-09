@@ -50,7 +50,7 @@ function renderFavoriteDrawer(items) {
             <div class="favorite-actions">
               <div class="quantity-control favorite-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="${escapeHtml(product.min_quantity || 1)}" step="${escapeHtml(product.min_quantity || 1)}" value="${escapeHtml(product.min_quantity || 1)}" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="${escapeHtml(product.min_quantity || 1)}" step="1" value="${escapeHtml(product.min_quantity || 1)}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="favorite-add-cart" type="button">В корзину</button>
@@ -184,8 +184,7 @@ document.addEventListener("click", (event) => {
     const control = quantityButton.closest(".favorite-quantity");
     const input = control.querySelector(".quantity-input");
     const minimum = Math.max(1, Number(input.getAttribute("min") || 1));
-    const step = Math.max(1, Number(input.getAttribute("step") || minimum));
-    const delta = quantityButton.classList.contains("quantity-plus") ? step : -step;
+    const delta = quantityButton.classList.contains("quantity-plus") ? 1 : -1;
     input.value = String(Math.max(minimum, Number(input.value || minimum) + delta));
     return;
   }

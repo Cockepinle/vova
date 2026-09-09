@@ -13,9 +13,8 @@ const imageLightboxImg = document.querySelector(".image-lightbox-img");
 function changeQuantity(control, delta) {
   const value = control.querySelector(".quantity-input");
   const minimum = Math.max(1, Number(value.getAttribute("min") || 1));
-  const step = Math.max(1, Number(value.getAttribute("step") || minimum));
   const current = Number(value.value) || minimum;
-  value.value = String(Math.max(minimum, current + (delta * step)));
+  value.value = String(Math.max(minimum, current + delta));
   syncCardQuantity(control);
 }
 
@@ -78,7 +77,7 @@ function openProductModal(product) {
   const cartQuantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
   const modalInput = modal.querySelector(".modal-controls .quantity-input");
   modalInput.min = String(Math.max(1, Number(product.min_quantity) || 1));
-  modalInput.step = modalInput.min;
+  modalInput.step = "1";
   const minimum = Math.max(1, Number(modalInput ? modalInput.getAttribute("min") : product.min_quantity || 1));
 
   modalInput.value = String(Math.max(minimum, cartQuantity || Number(cardInput ? cardInput.value : minimum) || minimum));

@@ -50,7 +50,7 @@ function productCardHtml(product) {
           <p class="price">${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span></p>
           <div class="quantity-control" aria-label="Количество">
             <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-            <input class="quantity-input" type="number" min="${Number(product.min_quantity) || 1}" step="${Number(product.min_quantity) || 1}" value="${isInCart ? quantity : Number(product.min_quantity) || 1}" aria-label="Количество товара">
+            <input class="quantity-input" type="number" min="${Number(product.min_quantity) || 1}" step="1" value="${isInCart ? quantity : Number(product.min_quantity) || 1}" aria-label="Количество товара">
             <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
           </div>
         </div>
@@ -197,7 +197,7 @@ async function loadCatalogFromApi(url, pushState = true) {
 
 function changeQuantity(control, delta) {
   const value = control.querySelector(".quantity-input");
-  value.value = String(Math.max(Number(value.min) || 1, (Number(value.value) || Number(value.min) || 1) + delta * (Number(value.step) || 1)));
+  value.value = String(Math.max(Number(value.min) || 1, (Number(value.value) || Number(value.min) || 1) + delta));
   syncCardQuantity(control);
 }
 
@@ -395,7 +395,7 @@ function openProductModal(product) {
   const cartQuantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
   const modalInput = modal.querySelector(".modal-controls .quantity-input");
   modalInput.min = String(Math.max(1, Number(product.min_quantity) || 1));
-  modalInput.step = modalInput.min;
+  modalInput.step = "1";
 
   modalInput.value = String(Math.max(Number(modalInput.min), cartQuantity || Number(cardInput ? cardInput.value : modalInput.min) || 1));
   modal.querySelector(".modal-favorite").classList.toggle("is-active", favoriteButton ? favoriteButton.classList.contains("is-active") : false);

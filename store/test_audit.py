@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.core.files.base import ContentFile
 from .cms_forms import SiteSettingsForm
 from .models import Category, Employee, Order, Product, SiteMedia, SiteSettings
+from .views import normalize_quantity
 
 
 class FormStructure(HTMLParser):
@@ -82,6 +83,13 @@ class SiteAuditTests(TestCase):
     def test_api_preserves_minimum_quantity(self):
         product = self.client.get('/api/products/').json()['products'][0]
         self.assertEqual(product['min_quantity'], 10)
+
+    def test_quantity_minimum_is_lower_bound_with_unit_step(self):
+        product = Product.objects.create(category=self.category, name='Минимум 51', price=50, min_quantity=51)
+        self.assertEqual(normalize_quantity(product, 1), 51)
+        self.assertEqual(normalize_quantity(product, 50), 51)
+        self.assertEqual(normalize_quantity(product, 51), 51)
+        self.assertEqual(normalize_quantity(product, 52), 52)
 
     def test_product_create_and_edit(self):
         self.client.force_login(self.staff)
