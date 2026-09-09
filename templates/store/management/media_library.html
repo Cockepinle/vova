@@ -1,0 +1,15 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Общие медиафайлы{% endblock %}
+{% block content %}
+<section class="mgmt-card">
+<h2>Загрузить файл</h2><p class="section-help">Изображения, документы и видео до 20 МБ. Назовите файл по назначению: например, «Логотип на светлом фоне». Для изображений добавьте описание содержимого.</p>
+<form class="mgmt-form" method="post" enctype="multipart/form-data" action="{% url 'management_media_upload' %}">{% csrf_token %}{{ media_form.non_field_errors }}<div class="form-grid">{% for field in media_form %}<label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div><button class="primary-button" type="submit">Загрузить</button></form>
+</section>
+<section class="mgmt-card media-library"><h2>Библиотека файлов</h2>
+<div class="media-list">{% for row in media %}<article>
+<div>{% if row.item.is_image %}<img class="current-image-preview" src="{{ row.item.file.url }}" alt="{{ row.item.alt|default:row.item.title }}">{% endif %}<h3>{{ row.item.title }}</h3><a href="{{ row.item.file.url }}" target="_blank" rel="noopener">Открыть файл</a><button type="button" class="ghost-button" data-copy-url="{{ row.item.file.url }}">Копировать ссылку</button>
+{% if row.usage %}<p class="media-used">Используется: {{ row.usage|join:", " }}</p>{% else %}<p class="muted">Пока не используется в настройках изображений. Проверьте также ссылки в текстах перед удалением.</p>{% endif %}</div>
+<div class="media-actions"><form class="mgmt-form" method="post" enctype="multipart/form-data" action="{% url 'management_media_replace' row.item.id %}">{% csrf_token %}<label><span>Название</span><input name="title" value="{{ row.item.title }}" required maxlength="160"></label><label><span>Описание изображения</span><input name="alt" value="{{ row.item.alt }}" maxlength="180"></label><label><span>Новый файл (необязательно)</span><input type="file" name="file"></label><button class="ghost-button" type="submit">Сохранить файл</button></form>
+<form method="post" action="{% url 'management_media_delete' row.item.id %}">{% csrf_token %}<button class="ghost-button danger-button" type="submit" {% if row.usage %}disabled{% endif %} onclick="return confirm('Удалить неиспользуемый файл?')">Удалить</button></form></div>
+</article>{% empty %}<p>Файлы ещё не загружены.</p>{% endfor %}</div></section>
+{% endblock %}

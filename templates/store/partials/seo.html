@@ -1,0 +1,12 @@
+<title>{{ seo.title }}</title>
+<meta name="description" content="{{ seo.description }}">
+<link rel="canonical" href="{{ seo.canonical }}">
+<meta name="robots" content="{% if seo.noindex %}noindex,follow{% else %}index,follow{% endif %}">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="{{ site_settings.site_name }}">
+<meta property="og:title" content="{{ seo.og_title }}">
+<meta property="og:description" content="{{ seo.og_description }}">
+<meta property="og:url" content="{{ seo.canonical }}">
+{% if seo.og_image %}<meta property="og:image" content="{{ seo.og_image }}">{% endif %}
+{% if site_settings.favicon_media %}<link rel="icon" href="{{ site_settings.favicon_media.file.url }}">{% endif %}

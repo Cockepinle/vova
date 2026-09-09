@@ -5,21 +5,20 @@
 {% block content %}
   <section class="mgmt-card">
     <div class="card-header">
-      <h2>Страницы сайта</h2>
-      <a class="primary-button" href="{% url 'management_page_new' %}">+ Добавить текст</a>
+      <h2>Страницы сайта</h2><a class="primary-button" href="{% url 'management_page_new' %}">Настроить страницу</a>
     </div>
     <div class="table-wrap">
       <table class="mgmt-table">
-        <thead><tr><th>Страница</th><th>Заголовок</th><th>Метка</th><th>Видимость</th><th></th></tr></thead>
+        <thead><tr><th>Страница</th><th>H1</th><th>Title</th><th>Собственный контент</th><th></th></tr></thead>
         <tbody>
           {% for page in pages %}
             <tr>
               <td>{{ page.get_page_display }}</td>
-              <td>{{ page.title|default:"—" }}</td>
-              <td>{{ page.hero_label|default:"—" }}</td>
-              <td>{% if page.is_visible %}<span class="status status-published">Опубликовано</span>{% else %}<span class="status status-hidden">Скрыто</span>{% endif %}</td>
+              <td>{{ page.h1|default:"—" }}</td>
+              <td>{{ page.seo_title|default:"—" }}</td>
+              <td>{% if page.is_visible %}<span class="status status-published">Используется</span>{% else %}<span class="status status-hidden">Резервные значения</span>{% endif %}</td>
               <td class="row-actions">
-                <a href="{% url 'management_page_edit' page.id %}">Изменить</a>
+                <a class="primary-button" href="{% url 'management_page_edit' page.id %}">Редактировать</a>
                 <form method="post" action="{% url 'management_page_delete' page.id %}">
                   {% csrf_token %}
                   <button type="submit" onclick="return confirm('Удалить текст страницы?')">Удалить</button>

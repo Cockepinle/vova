@@ -60,3 +60,31 @@ document.addEventListener("input", (event) => {
     });
   }
 });
+
+// Preserve column context when tables stack into mobile records.
+document.querySelectorAll('.mgmt-table').forEach(table => {
+  const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+  table.querySelectorAll('tbody tr').forEach(row => {
+    [...row.cells].forEach((cell, index) => {
+      if (cell.colSpan === 1 && labels[index]) cell.dataset.label = labels[index];
+    });
+  });
+  table.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    if (!input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.closest('thead') ? 'Выбрать все записи' : 'Выбрать запись');
+  });
+});
+document.querySelectorAll('.toolbar input, .toolbar select, .bulk-bar select').forEach(input => {
+  if (!input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.placeholder || input.options?.[0]?.text || 'Фильтр');
+});
+
+document.querySelector('[data-add-link]')?.addEventListener('click', () => {
+  const total = document.querySelector('#id_links-TOTAL_FORMS');
+  const template = document.querySelector('#link-empty-form');
+  document.querySelector('[data-link-forms]').insertAdjacentHTML('beforeend', template.innerHTML.replaceAll('__prefix__', total.value));
+  total.value = String(Number(total.value) + 1);
+});
+document.querySelectorAll('[data-copy-url]').forEach(button => button.addEventListener('click', async () => {
+  const url = new URL(button.dataset.copyUrl, location.origin).href;
+  try { await navigator.clipboard.writeText(url); button.textContent = 'Ссылка скопирована'; }
+  catch { window.prompt('Скопируйте ссылку', url); }
+}));

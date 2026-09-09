@@ -5,6 +5,7 @@ from django.contrib.auth.views import LoginView
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -19,12 +20,32 @@ from .cms_forms import (
     PageContentForm,
     ProductForm,
     SiteSettingsForm,
+    SiteMediaForm,
+    SiteLinkFormSet,
 )
-from .models import AttributeDefinition, Category, CustomerRequest, Employee, Order, PageContent, Product, ProductAttribute, ProductImage, SiteSettings
+from .models import AttributeDefinition, Category, CustomerRequest, Employee, Order, PageContent, Product, ProductAttribute, ProductImage, SiteMedia, SiteSettings
 
 
 def can_manage(user):
     return user.is_authenticated and user.is_staff
+
+
+def delete_unreferenced_file(name, storage, current_settings_id=None):
+    if not name:
+        return
+    if SiteMedia.objects.filter(file=name).exists():
+        return
+    file_references = [
+        (SiteSettings, "logo_image"),
+        (PageContent, "hero_image"),
+    ]
+    for model, field_name in file_references:
+        queryset = model.objects.filter(**{field_name: name})
+        if model is SiteSettings and current_settings_id:
+            queryset = queryset.exclude(pk=current_settings_id)
+        if queryset.exists():
+            return
+    storage.delete(name)
 
 
 class ManagementLoginView(LoginView):
@@ -632,15 +653,23 @@ def site_settings(request):
     settings = SiteSettings.get_solo()
 
     if request.method == "POST":
-        form = SiteSettingsForm(request.POST, instance=settings)
-        if form.is_valid():
-            settings = form.save()
+        form = SiteSettingsForm(request.POST, request.FILES, instance=settings)
+        link_formset = SiteLinkFormSet(request.POST, instance=settings, prefix="links")
+        old_logo_name = settings.logo_image.name
+        old_logo_storage = settings.logo_image.storage
+        if form.is_valid() and link_formset.is_valid():
+            with transaction.atomic():
+                settings = form.save()
+                link_formset.save()
+                if old_logo_name and old_logo_name != settings.logo_image.name:
+                    delete_unreferenced_file(old_logo_name, old_logo_storage, settings.pk)
             log_change(request, settings, CHANGE, "Настройки сайта обновлены")
             messages.success(request, "Настройки сайта сохранены.")
             return redirect("management_settings")
         messages.error(request, "Проверьте ошибки в форме.")
     else:
         form = SiteSettingsForm(instance=settings)
+        link_formset = SiteLinkFormSet(instance=settings, prefix="links")
 
     return render(
         request,
@@ -648,8 +677,79 @@ def site_settings(request):
         {
             "section": "settings",
             "form": form,
+            "link_formset": link_formset,
+            "media_form": SiteMediaForm(),
         },
     )
+
+
+def media_usage(media):
+    usage = []
+    for relation in media._meta.related_objects:
+        for obj in getattr(media, relation.get_accessor_name()).all():
+            usage.append(f"{obj}: {relation.field.verbose_name}")
+    for model, fields in [(SiteSettings, ["logo_image"]), (PageContent, ["hero_image"])]:
+        for field in fields:
+            for obj in model.objects.filter(**{field: media.file.name}):
+                usage.append(f"{obj}: {model._meta.get_field(field).verbose_name}")
+    return usage
+
+
+@management_required
+def media_library(request, form=None):
+    rows = [{"item": media, "usage": media_usage(media)} for media in SiteMedia.objects.all()]
+    return render(request, "store/management/media_library.html", {"section": "media", "media": rows, "media_form": form or SiteMediaForm()})
+
+
+@management_required
+@require_POST
+def site_media_upload(request):
+    form = SiteMediaForm(request.POST, request.FILES)
+    if not form.is_valid():
+        return media_library(request, form=form)
+    media = form.save()
+    log_change(request, media, ADDITION, "Медиафайл загружен")
+    messages.success(request, "Файл загружен. Теперь его можно выбрать в настройках сайта или страницы.")
+    return redirect("management_media")
+
+
+@management_required
+@require_POST
+def site_media_replace(request, media_id):
+    media = get_object_or_404(SiteMedia, pk=media_id)
+    old_name = media.file.name
+    storage = media.file.storage
+    form = SiteMediaForm(request.POST, request.FILES, instance=media)
+    if form.is_valid():
+        with transaction.atomic():
+            media = form.save()
+            # Older direct image references continue to resolve after replacement.
+            SiteSettings.objects.filter(logo_image=old_name).update(logo_image=media.file.name)
+            PageContent.objects.filter(hero_image=old_name).update(hero_image=media.file.name)
+            if old_name != media.file.name:
+                transaction.on_commit(lambda: storage.delete(old_name))
+            log_change(request, media, CHANGE, "Медиафайл и его описание обновлены")
+        messages.success(request, "Файл обновлён во всех местах использования.")
+    else:
+        messages.error(request, " ".join(str(error) for errors in form.errors.values() for error in errors))
+    return redirect("management_media")
+
+
+@management_required
+@require_POST
+def site_media_delete(request, media_id):
+    media = get_object_or_404(SiteMedia, pk=media_id)
+    usage = media_usage(media)
+    if usage:
+        messages.error(request, "Сначала уберите файл из мест использования: " + "; ".join(usage))
+        return redirect("management_media")
+    file_field = media.file
+    with transaction.atomic():
+        log_change(request, media, DELETION, "Неиспользуемый медиафайл удалён")
+        media.delete()
+        transaction.on_commit(lambda: file_field.delete(save=False))
+    messages.success(request, "Неиспользуемый файл удалён.")
+    return redirect("management_media")
 
 
 @management_required
@@ -660,7 +760,7 @@ def page_content_list(request):
         request,
         "store/management/page_content_list.html",
         {
-            "section": "settings",
+            "section": "pages",
             "pages": pages,
         },
     )
@@ -671,7 +771,7 @@ def page_content_form(request, page_id=None):
     page = get_object_or_404(PageContent, pk=page_id) if page_id else None
 
     if request.method == "POST":
-        form = PageContentForm(request.POST, instance=page)
+        form = PageContentForm(request.POST, request.FILES, instance=page)
         if form.is_valid():
             is_new = page is None
             page = form.save()
@@ -686,7 +786,7 @@ def page_content_form(request, page_id=None):
         request,
         "store/management/page_content_form.html",
         {
-            "section": "settings",
+            "section": "pages",
             "page_content": page,
             "form": form,
         },

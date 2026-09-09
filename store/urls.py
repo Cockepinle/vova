@@ -5,6 +5,9 @@ from . import cms_views, views
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("robots.txt", views.robots_txt, name="robots_txt"),
+    path("sitemap.xml", views.sitemap_xml, name="sitemap_xml"),
+    path("products/<str:slug>/", views.catalog, name="product_detail"),
     path("catalog/", views.catalog, name="catalog"),
     path("account/login/", views.account_login, name="account_login"),
     path("account/register/", views.account_register, name="account_register"),
@@ -51,7 +54,11 @@ urlpatterns = [
     path("management/fields/new/", cms_views.field_form, name="management_field_new"),
     path("management/fields/<int:field_id>/edit/", cms_views.field_form, name="management_field_edit"),
     path("management/fields/<int:field_id>/delete/", cms_views.field_delete, name="management_field_delete"),
+    path("management/media/", cms_views.media_library, name="management_media"),
     path("management/settings/", cms_views.site_settings, name="management_settings"),
+    path("management/settings/media/upload/", cms_views.site_media_upload, name="management_media_upload"),
+    path("management/settings/media/<int:media_id>/replace/", cms_views.site_media_replace, name="management_media_replace"),
+    path("management/settings/media/<int:media_id>/delete/", cms_views.site_media_delete, name="management_media_delete"),
     path("management/requests/", cms_views.request_list, name="management_requests"),
     path("management/requests/bulk/", cms_views.request_bulk_action, name="management_request_bulk"),
     path("management/pages/", cms_views.page_content_list, name="management_pages"),

@@ -1,7 +1,46 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import AttributeDefinition, Category, Employee, PageContent, Product, ProductAttribute, SiteSettings
+from .models import AttributeDefinition, Category, Employee, PageContent, Product, ProductAttribute, SiteMedia, SiteSettings, SiteLink
+
+
+
+SEO_FIELDS = ["seo_title", "meta_description", "h1", "canonical", "og_title", "og_description", "og_media"]
+
+
+def validate_content_link(value):
+    from urllib.parse import urlsplit
+    if not value:
+        return
+    parsed = urlsplit(value)
+    if "\\" in value or any(ord(char) < 32 for char in value) or value.startswith("//"):
+        raise forms.ValidationError("Укажите адрес страницы от / или полную ссылку https://.")
+    if not (value.startswith("/") or value.startswith("#") or (parsed.scheme in {"http", "https"} and parsed.netloc) or (parsed.scheme in {"mailto", "tel"} and parsed.path)):
+        raise forms.ValidationError("Допустимы ссылки /catalog/, https://example.ru, mailto: и tel:.")
+
+
+class ContentValidationMixin:
+    def clean(self):
+        data = super().clean()
+        for name, value in list(data.items()):
+            if (name.endswith("_url") or name == "url") and isinstance(value, str) and value:
+                try:
+                    validate_content_link(value)
+                except forms.ValidationError as error:
+                    self.add_error(name, error)
+            if name.endswith("_media") and value:
+                from pathlib import PurePosixPath
+                if PurePosixPath(value.file.name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"}:
+                    self.add_error(name, "Выберите изображение, а не документ или видео.")
+        from urllib.parse import urlsplit
+        for name in ["public_url", "canonical"]:
+            value = data.get(name)
+            if value and urlsplit(value).scheme not in {"http", "https"}:
+                self.add_error(name, "Укажите полный адрес http:// или https://.")
+        value = data.get("public_url")
+        if value and (urlsplit(value).path not in {"", "/"} or urlsplit(value).query or urlsplit(value).fragment):
+            self.add_error("public_url", "Укажите только домен без пути, параметров и якоря.")
+        return data
 
 
 class ManagementLoginForm(AuthenticationForm):
@@ -9,7 +48,7 @@ class ManagementLoginForm(AuthenticationForm):
     password = forms.CharField(label="Пароль", widget=forms.PasswordInput(attrs={"placeholder": "Введите пароль"}))
 
 
-class ProductForm(forms.ModelForm):
+class ProductForm(ContentValidationMixin, forms.ModelForm):
     sku = forms.CharField(label="Артикул", required=False)
 
     class Meta:
@@ -18,6 +57,8 @@ class ProductForm(forms.ModelForm):
             "category",
             "name",
             "sku",
+            "slug",
+            *SEO_FIELDS,
             "description",
             "price",
             "old_price",
@@ -53,10 +94,10 @@ class ProductForm(forms.ModelForm):
         }
 
 
-class CategoryForm(forms.ModelForm):
+class CategoryForm(ContentValidationMixin, forms.ModelForm):
     class Meta:
         model = Category
-        fields = ["name", "image", "image_url", "description", "is_active"]
+        fields = ["name", "slug", "image", "image_url", "description", "is_active", *SEO_FIELDS]
         labels = {
             "name": "Название",
             "image": "Изображение",
@@ -89,32 +130,36 @@ class EmployeeForm(forms.ModelForm):
         }
 
 
-class SiteSettingsForm(forms.ModelForm):
+class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
+    remove_logo = forms.BooleanField(label="Удалить логотип", required=False, widget=forms.HiddenInput())
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("remove_logo"):
+            cleaned_data["logo_image"] = False
+            cleaned_data["logo_media"] = None
+        elif self.files.get("logo_image"):
+            cleaned_data["logo_media"] = None
+        elif self.data.get("logo_media"):
+            cleaned_data["logo_image"] = False
+        return cleaned_data
+
+    @property
+    def groups(self):
+        sections = [
+            ("Компания и бренд", ["site_name", "company_name", "company_inn", "company_kpp", "logo_text", "logo_image", "logo_alt", "logo_media", "favicon_media"]),
+            ("Общие контакты", ["contact_phone", "contact_email", "contact_email_b2b", "contact_address", "contact_work_hours"]),
+            ("Шапка и основная кнопка", ["header_phone", "header_email", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "cta_label", "cta_url"]),
+            ("Подвал и юридическая информация", [name for name in self.fields if name.startswith("footer_")] + ["copyright_text"]),
+            ("Поиск и отправка ссылок", ["public_url", "seo_description", "og_media", "allow_indexing"]),
+        ]
+        return [(title, [self[name] for name in names]) for title, names in sections]
+
     class Meta:
         model = SiteSettings
         fields = [
-            "home_hero_label",
-            "home_hero_title",
-            "home_hero_subtitle",
-            "catalog_title",
-            "catalog_subtitle",
-            "team_hero_label",
-            "team_hero_title",
-            "team_hero_subtitle",
-            "contacts_hero_label",
-            "contacts_hero_title",
-            "contacts_form_title",
-            "contacts_b2b_title",
-            "contacts_b2b_subtitle",
-            "contacts_b2b_text",
-            "stat_1_value",
-            "stat_1_label",
-            "stat_2_value",
-            "stat_2_label",
-            "stat_3_value",
-            "stat_3_label",
-            "stat_4_value",
-            "stat_4_label",
+            "site_name", "logo_text", "logo_media", "favicon_media", "public_url", "seo_description", "og_media", "allow_indexing",
+            "cta_label", "cta_url", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "footer_extra_text", "footer_legal_text",
             "contact_phone",
             "contact_email",
             "contact_email_b2b",
@@ -123,6 +168,10 @@ class SiteSettingsForm(forms.ModelForm):
             "company_name",
             "company_inn",
             "company_kpp",
+            "logo_image", "logo_alt",
+            "header_phone", "header_email",
+            "footer_privacy_label", "footer_privacy_url", "footer_offer_label", "footer_offer_url",
+            "footer_company", "footer_description", "footer_phone", "footer_email", "footer_address", "footer_work_time", "copyright_text",
         ]
         labels = {
             "home_hero_label": "Надпись-метка",
@@ -158,18 +207,62 @@ class SiteSettingsForm(forms.ModelForm):
         }
 
 
-class PageContentForm(forms.ModelForm):
+class PageContentForm(ContentValidationMixin, forms.ModelForm):
+    @property
+    def groups(self):
+        sections = [
+            ("Страница", ["page", "h1", "is_visible"]),
+            ("Главный блок", ["hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media"]),
+            ("Дополнительные тексты", ["content_title", "content_subtitle", "content_text", "b2b_title"]),
+            ("Поисковые системы", ["seo_title", "meta_description", "canonical", "noindex"]),
+            ("Отправка ссылки в социальных сетях", ["og_title", "og_description", "og_media"]),
+        ]
+        return [(title, [self[name] for name in names]) for title, names in sections]
+
     class Meta:
         model = PageContent
-        fields = ["page", "title", "subtitle", "hero_label", "hero_button_text", "is_visible"]
+        fields = ["page", *SEO_FIELDS, "noindex", "hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media", "content_title", "b2b_title", "content_subtitle", "content_text", "is_visible"]
         labels = {
             "page": "Страница",
-            "title": "Заголовок",
-            "subtitle": "Подзаголовок / текст",
-            "hero_label": "Метка",
+            "subtitle": "Текст главного блока",
+            "hero_label": "Короткая надпись над заголовком",
             "hero_button_text": "Текст кнопки",
-            "is_visible": "Показывать",
+            "seo_title": "SEO-заголовок (title)",
+            "meta_description": "Описание для поисковых систем (meta description)",
+            "h1": "Основной видимый заголовок (H1)",
+            "hero_image": "Изображение главного блока",
+            "hero_image_alt": "Alt изображения главного блока",
+            "content_title": "Заголовок дополнительного блока",
+            "b2b_title": "Заголовок B2B-блока",
+            "content_subtitle": "Подзаголовок дополнительного блока",
+            "content_text": "Текст дополнительного блока",
+            "is_visible": "Использовать эти тексты и изображения на сайте",
         }
+
+
+class SiteMediaForm(forms.ModelForm):
+    def clean_file(self):
+        from pathlib import PurePosixPath
+        from PIL import Image
+        value = self.cleaned_data["file"]
+        if value.size > 20 * 1024 * 1024:
+            raise forms.ValidationError("Размер файла не должен превышать 20 МБ.")
+        extension = PurePosixPath(value.name).suffix.lower()
+        if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico", ".pdf", ".mp4", ".webm"}:
+            raise forms.ValidationError("Загрузите JPG, PNG, WebP, GIF, ICO, PDF, MP4 или WebM.")
+        if extension in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"}:
+            try:
+                Image.open(value).verify()
+            except Exception:
+                raise forms.ValidationError("Файл не является корректным изображением.")
+            finally:
+                value.seek(0)
+        return value
+
+    class Meta:
+        model = SiteMedia
+        fields = ["title", "file", "alt"]
+        widgets = {"file": forms.FileInput(attrs={"accept": "image/*,video/*,application/pdf"})}
 
 
 class AttributeDefinitionForm(forms.ModelForm):
@@ -322,3 +415,12 @@ class DynamicProductFieldsForm(forms.Form):
             product_attribute.value_url = value
         else:
             product_attribute.value_text = value
+
+
+class SiteLinkForm(ContentValidationMixin, forms.ModelForm):
+    class Meta:
+        model = SiteLink
+        fields = ["location", "label", "url", "sort_order", "is_visible"]
+
+
+SiteLinkFormSet = forms.inlineformset_factory(SiteSettings, SiteLink, form=SiteLinkForm, extra=1, can_delete=True)

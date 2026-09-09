@@ -9,13 +9,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.core.mail import send_mail
 from django.db.models import Q
-from django.http import JsonResponse
-from django.shortcuts import render
+from django.http import JsonResponse, HttpResponse
+from django.urls import reverse
+from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .data import ADVANTAGES
-from .models import CartItem, Category, CustomerProfile, CustomerRequest, EmailVerificationCode, Employee, FavoriteItem, Order, OrderItem, Product, SiteSettings
+from .models import CartItem, Category, CustomerProfile, CustomerRequest, EmailVerificationCode, Employee, FavoriteItem, Order, OrderItem, PageContent, Product, SiteSettings
 
 
 DEFAULT_SITE_SETTINGS = {
@@ -153,6 +154,8 @@ def serialize_product(product):
 
     return {
         "id": str(product.id),
+        "url": reverse("product_detail", args=[product.slug]),
+        "created_at": product.created_at.isoformat(),
         "sku": product.sku or "",
         "category": product.category.name,
         "category_slug": product.category.slug,
@@ -431,7 +434,7 @@ def home(request):
     )
 
 
-def catalog(request):
+def catalog(request, slug=None):
     active_category = request.GET.get("category")
     only_hits = request.GET.get("hits") == "1"
     search_query = request.GET.get("q", "").strip()
@@ -453,6 +456,11 @@ def catalog(request):
             | Q(category__name__icontains=search_query)
         )
 
+    detail_product = None
+    if slug:
+        detail_product = get_object_or_404(products, slug=slug)
+        products = products.filter(pk=detail_product.pk)
+
     product_items = [serialize_product(product) for product in products]
 
     if only_hits:
@@ -462,13 +470,17 @@ def catalog(request):
     else:
         page_title = safe_site_setting(settings, "catalog_title")
 
+    content_page = PageContent.objects.filter(page="catalog", is_visible=True).first()
+    page = (getattr(content_page, "h1", "") or page_title)
+
     context = {
         "categories": categories,
         "products": product_items,
+        "detail_product": detail_product,
         "active_category": active_category,
         "only_hits": only_hits,
         "search_query": search_query,
-        "page_title": page_title,
+        "page_title": page,
         "catalog_subtitle": safe_site_setting(settings, "catalog_subtitle"),
         "open_product_id": request.GET.get("product", ""),
     }
@@ -507,7 +519,10 @@ def api_products(request):
             | Q(category__name__icontains=query)
         )
 
-    return JsonResponse({"products": [serialize_product(product) for product in products]})
+    from .seo import metadata
+    config = SiteSettings.get_solo()
+    pages = {page.page: page for page in PageContent.objects.filter(is_visible=True)}
+    return JsonResponse({"products": [serialize_product(product) for product in products], "seo": metadata(request, config, pages)})
 
 
 @require_GET
@@ -1092,3 +1107,47 @@ def create_customer_request(request):
     )
 
     return JsonResponse({"ok": True, "message": "Запрос на КП сохранён. Мы свяжемся с вами."})
+
+
+@require_GET
+def robots_txt(request):
+    from .seo import absolute_url
+    config = SiteSettings.get_solo()
+    if not config.allow_indexing:
+        content = "User-agent: *\nDisallow: /\n"
+    else:
+        content = "User-agent: *\nAllow: /\nDisallow: /management/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /api/\nDisallow: /cart/\nDisallow: /favorites/\nDisallow: /requests/\n"
+    return HttpResponse(content + "Sitemap: " + absolute_url(request, config, "/sitemap.xml") + "\n", content_type="text/plain; charset=utf-8")
+
+
+@require_GET
+def sitemap_xml(request):
+    from urllib.parse import urlencode
+    from xml.etree.ElementTree import Element, SubElement, tostring
+    from django.urls import reverse
+    from .seo import absolute_url, PAGE_PATHS
+    config = SiteSettings.get_solo()
+    root = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    if config.allow_indexing:
+        pages = {page.page: page for page in PageContent.objects.filter(is_visible=True)}
+        paths = []
+        for key, path in PAGE_PATHS.items():
+            page = pages.get(key)
+            if not (page and page.noindex):
+                paths.append((page.canonical if page and page.canonical else path, page.updated_at if page else None))
+        for category in Category.objects.filter(is_active=True):
+            paths.append((category.canonical or '/catalog/?' + urlencode({'category':category.slug}), None))
+        for product in get_store_products_queryset():
+            paths.append((product.canonical or reverse('product_detail', args=[product.slug]), product.updated_at))
+        origin = absolute_url(request, config, '/').rstrip('/')
+        seen = set()
+        for path, updated in paths:
+            url = absolute_url(request, config, path)
+            if url in seen or not url.startswith(origin + '/'):
+                continue
+            seen.add(url)
+            node = SubElement(root, 'url')
+            SubElement(node, 'loc').text = url
+            if updated:
+                SubElement(node, 'lastmod').text = updated.date().isoformat()
+    return HttpResponse(tostring(root, encoding='utf-8', xml_declaration=True), content_type='application/xml')

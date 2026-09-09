@@ -1,0 +1,9 @@
+<nav class="mobile-actions" aria-label="Основные действия">
+  {% if request.resolver_match.url_name == 'catalog' or request.resolver_match.url_name == 'product_detail' %}
+    <a class="mobile-action-secondary" href="{{ site_settings.cta_url }}">{{ site_settings.cta_label }}</a>
+    <button class="mobile-action-primary js-cart-open" type="button">Корзина <span data-cart-count>{{ cart_count }}</span></button>
+  {% else %}
+    <a class="mobile-action-secondary" href="{% url 'catalog' %}">Каталог</a>
+    <a class="mobile-action-primary" href="{{ site_settings.cta_url }}">{{ site_settings.cta_label }}</a>
+  {% endif %}
+</nav>

@@ -1,0 +1,11 @@
+{{ form.non_field_errors }}
+{% for title, fields in form.groups %}
+  <section class="settings-section">
+    <h2>{{ title }}</h2>
+    <div class="form-grid">
+      {% for field in fields %}
+        <label><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}

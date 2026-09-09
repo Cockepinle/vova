@@ -4,35 +4,24 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Контакты · PakLine</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {% include "store/partials/seo.html" %}
     <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=25">
     <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=1">
   </head>
   <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="/"><span class="brand-mark">PL</span><span class="brand-name">PakLine</span></a>
-        <nav class="main-nav" aria-label="Главная навигация">
-          <a href="/">Главная</a>
-          <a href="{% url 'catalog' %}">Каталог</a>
-          <a href="{% url 'team' %}">Команда</a>
-          <a class="active" href="{% url 'contacts' %}">Контакты</a>
-        </nav>
-        <div class="header-actions">
-          <button class="js-account-open" type="button" aria-label="Профиль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></button>
-          <button class="favorite-header-button js-favorites-open" type="button" aria-label="Избранное"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg><span class="favorite-count">{{ favorite_count }}</span></button>
-          <button class="cart-button js-cart-open" type="button" aria-label="Корзина"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span id="cart-count">{{ cart_count }}</span></button>
-        </div>
-      </div>
-    </header>
+    {% include "store/partials/header.html" %}
 
     <main class="contacts-page">
-      <p class="eyebrow">{{ site_settings.contacts_hero_label|default:"Связаться с нами" }}</p>
-      <h1>{{ site_settings.contacts_hero_title|default:"Контакты" }}</h1>
+      {% include "store/partials/hero_media.html" %}
+      <p class="eyebrow">{{ page_content.contacts.hero_label|default:"Связаться с нами" }}</p>
+      <h1>{{ page_content.contacts.h1|default:"Контакты" }}</h1>
+      {% if current_page.subtitle %}<p class="document-lead">{{ current_page.subtitle }}</p>{% endif %}
+      {% include "store/partials/page_cta.html" %}
       <div class="contact-layout">
-        <section class="contact-form">
-          <h2>{{ site_settings.contacts_form_title|default:"Получить коммерческое предложение" }}</h2>
+        <section id="request-form" class="contact-form">
+          <h2>{{ page_content.contacts.content_title|default:"Получить коммерческое предложение" }}</h2>
           <form class="request-form">
             <div class="form-grid">
               <div class="field">
@@ -70,9 +59,9 @@
           <div class="info-row"><h3>Реквизиты</h3><div><p>{{ site_settings.company_name|default:"ООО «ПакЛайн»" }}</p><p>ИНН {{ site_settings.company_inn|default:"7701234567" }}</p><p>КПП {{ site_settings.company_kpp|default:"770101001" }}</p></div></div>
 
           <div class="b2b-box">
-            <h3>{{ site_settings.contacts_b2b_title|default:"Для корпоративных клиентов" }}</h3>
-            <h4>{{ site_settings.contacts_b2b_subtitle|default:"Персональный менеджер и индивидуальные условия" }}</h4>
-            <p>{{ site_settings.contacts_b2b_text|default:"Постоплата 30/60 дней, скидки от объёма, брендированная упаковка, SLA на поставки." }}</p>
+            <h3>{{ page_content.contacts.b2b_title|default:"Для корпоративных клиентов" }}</h3>
+            <h4>{{ page_content.contacts.content_subtitle|default:"Персональный менеджер и индивидуальные условия" }}</h4>
+            <p>{{ page_content.contacts.content_text|default:"Постоплата 30/60 дней, скидки от объёма, брендированная упаковка, SLA на поставки." }}</p>
             <a href="mailto:{{ site_settings.contact_email_b2b|default:'b2b@pakline.ru' }}">Написать в B2B</a>
           </div>
         </section>
@@ -84,8 +73,10 @@
     {% include "store/partials/user_drawers.html" %}
     {% include "store/partials/cookie_modal.html" %}
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=22"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=30"></script>
     <script src="{% static 'store/js/account.js' %}?v=5"></script>
     <script src="{% static 'store/js/favorites.js' %}?v=17"></script>
+    {% include "store/partials/mobile_actions.html" %}
+    <script src="{% static 'store/js/responsive.js' %}?v=1"></script>
   </body>
 </html>

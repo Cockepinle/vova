@@ -1,36 +1,25 @@
 {% load static %}
+{% load store_extras %}
 <!doctype html>
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Команда · PakLine</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {% include "store/partials/seo.html" %}
     <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=25">
     <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=1">
   </head>
   <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="/"><span class="brand-mark">PL</span><span class="brand-name">PakLine</span></a>
-        <nav class="main-nav" aria-label="Главная навигация">
-          <a href="/">Главная</a>
-          <a href="{% url 'catalog' %}">Каталог</a>
-          <a class="active" href="{% url 'team' %}">Команда</a>
-          <a href="{% url 'contacts' %}">Контакты</a>
-        </nav>
-        <div class="header-actions">
-          <button class="js-account-open" type="button" aria-label="Профиль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></button>
-          <button class="favorite-header-button js-favorites-open" type="button" aria-label="Избранное"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg><span class="favorite-count">{{ favorite_count }}</span></button>
-          <button class="cart-button js-cart-open" type="button" aria-label="Корзина"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span id="cart-count">{{ cart_count }}</span></button>
-        </div>
-      </div>
-    </header>
+    {% include "store/partials/header.html" %}
 
     <main class="team-page">
       <section class="page-hero">
-        <p class="eyebrow">{{ site_settings.team_hero_label|default:"Наша команда" }}</p>
-        <h1>{{ site_settings.team_hero_title|default:"Люди, которые делают это" }}</h1>
-        <p>{{ site_settings.team_hero_subtitle|default:"Логисты, технологи, менеджеры — все с профильным опытом. Мы не агрегатор, мы оператор." }}</p>
+        {% include "store/partials/hero_media.html" %}
+        <p class="eyebrow">{{ page_content.team.hero_label|default:"Наша команда" }}</p>
+        <h1>{{ page_content.team.h1|default:"Люди, которые делают это" }}</h1>
+        <p>{{ page_content.team.subtitle|default:"Логисты, технологи, менеджеры — все с профильным опытом. Мы не агрегатор, мы оператор." }}</p>
+        {% include "store/partials/page_cta.html" %}
       </section>
 
       <section class="team-grid">
@@ -68,8 +57,10 @@
     {% include "store/partials/user_drawers.html" %}
     {% include "store/partials/cookie_modal.html" %}
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=22"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=30"></script>
     <script src="{% static 'store/js/account.js' %}?v=5"></script>
     <script src="{% static 'store/js/favorites.js' %}?v=17"></script>
+    {% include "store/partials/mobile_actions.html" %}
+    <script src="{% static 'store/js/responsive.js' %}?v=1"></script>
   </body>
 </html>

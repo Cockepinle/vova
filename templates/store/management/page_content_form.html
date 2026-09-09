@@ -1,23 +1,11 @@
 {% extends "store/management/base.html" %}
-
-{% block heading %}{% if page_content %}Редактировать текст{% else %}Новый текст страницы{% endif %}{% endblock %}
-
+{% block heading %}{% if page_content %}Редактировать: {{ page_content.get_page_display }}{% else %}Настроить страницу{% endif %}{% endblock %}
 {% block content %}
-  <form class="mgmt-card mgmt-form" method="post">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    <div class="form-grid">
-      {% for field in form %}
-        <label class="{% if field.name == 'subtitle' %}full{% endif %}">
-          <span>{{ field.label }}</span>
-          {{ field }}
-          {{ field.errors }}
-        </label>
-      {% endfor %}
-    </div>
-    <div class="form-actions">
-      <button class="primary-button" type="submit">Сохранить текст</button>
-      <a class="ghost-button" href="{% url 'management_pages' %}">Отмена</a>
-    </div>
-  </form>
+<form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <p class="section-help">Пустые поля используют готовые значения страницы. Адреса основных разделов фиксированы; адрес категории и товара меняется в их карточке. Для телефона можно выбрать отдельное фото. Изображение из медиатеки имеет приоритет над прямой загрузкой. <a href="{% url 'management_media' %}">Открыть медиатеку</a>.</p>
+  {% if form.instance.hero_url %}<div class="media-previews"><img src="{{ form.instance.hero_url }}" alt="Главное изображение">{% if form.instance.mobile_hero_media %}<img src="{{ form.instance.mobile_hero_media.file.url }}" alt="Мобильное изображение">{% endif %}</div>{% endif %}
+  {% include "store/management/content_fields.html" %}
+  <div class="form-actions"><button class="primary-button" type="submit">Сохранить изменения</button><a class="ghost-button" href="{% url 'management_pages' %}">Отмена</a></div>
+</form>
 {% endblock %}

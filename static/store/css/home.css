@@ -44,6 +44,8 @@ button {
   cursor: pointer;
 }
 
+button, .primary-cta, .secondary-cta, .add-to-cart, .catalog-search button, .footer-cta a, .cookie-save-all, .cookie-submit { border-radius: 8px; box-shadow: 0 3px 10px rgba(10, 20, 60, 0.12); }
+
 svg {
   width: 22px;
   height: 22px;
@@ -90,6 +92,8 @@ svg {
   font-size: 11px;
   font-weight: 900;
 }
+
+.brand-image { width: 32px; height: 32px; object-fit: contain; }
 
 .brand-name {
   font-size: 16px;
@@ -159,6 +163,9 @@ svg {
   align-items: center;
   gap: 20px;
 }
+
+.header-contact { display: flex; flex-direction: column; gap: 3px; color: #5d6573; font-size: 11px; white-space: nowrap; }
+.header-contact a:hover { color: var(--blue); }
 
 .header-actions button {
   position: relative;
@@ -1756,6 +1763,7 @@ input:focus-visible {
 }
 
 @media (max-width: 1024px) {
+  .header-contact { display: none; }
   .header-inner {
     grid-template-columns: auto 1fr auto;
     gap: 20px;
@@ -1822,6 +1830,8 @@ input:focus-visible {
 }
 
 @media (max-width: 720px) {
+  body { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .site-footer { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
   .site-header {
     height: auto;
   }
@@ -1840,9 +1850,18 @@ input:focus-visible {
   .main-nav {
     order: 3;
     width: 100%;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 80;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 -4px 18px rgba(10, 20, 60, 0.1);
   }
 
   .main-nav::-webkit-scrollbar {
@@ -1850,12 +1869,20 @@ input:focus-visible {
   }
 
   .main-nav a {
-    padding: 8px 0 10px;
-    white-space: nowrap;
+    display: grid;
+    min-height: 48px;
+    place-items: center;
+    padding: 6px 4px;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
   }
 
   .main-nav a.active::after {
-    bottom: 4px;
+    right: 20%;
+    bottom: 2px;
+    left: 20%;
+    height: 3px;
   }
 
   .header-actions {

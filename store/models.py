@@ -4,6 +4,14 @@ from django.utils.text import slugify
 
 
 class Category(models.Model):
+    seo_title = models.CharField("Заголовок в поиске", max_length=220, blank=True)
+    meta_description = models.TextField("Описание в поиске", blank=True)
+    h1 = models.CharField("Заголовок страницы", max_length=220, blank=True)
+    canonical = models.URLField("Основной адрес страницы (canonical)", blank=True, help_text="Обычно оставьте пустым: адрес определяется автоматически.")
+    og_title = models.CharField("Заголовок при отправке ссылки", max_length=220, blank=True)
+    og_description = models.TextField("Описание при отправке ссылки", blank=True)
+    og_media = models.ForeignKey("SiteMedia", verbose_name="Изображение при отправке ссылки", on_delete=models.PROTECT, null=True, blank=True, related_name="%(class)s_og_uses")
+
     name = models.CharField("Название", max_length=160, unique=True)
     slug = models.SlugField("URL-адрес", max_length=180, unique=True, blank=True, allow_unicode=True)
     image = models.ImageField("Изображение", upload_to="categories/", blank=True)
@@ -34,6 +42,14 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    seo_title = models.CharField("Заголовок в поиске", max_length=220, blank=True)
+    meta_description = models.TextField("Описание в поиске", blank=True)
+    h1 = models.CharField("Заголовок страницы", max_length=220, blank=True)
+    canonical = models.URLField("Основной адрес страницы (canonical)", blank=True, help_text="Обычно оставьте пустым: адрес определяется автоматически.")
+    og_title = models.CharField("Заголовок при отправке ссылки", max_length=220, blank=True)
+    og_description = models.TextField("Описание при отправке ссылки", blank=True)
+    og_media = models.ForeignKey("SiteMedia", verbose_name="Изображение при отправке ссылки", on_delete=models.PROTECT, null=True, blank=True, related_name="%(class)s_og_uses")
+
     STATUS_PUBLISHED = "published"
     STATUS_DRAFT = "draft"
     STATUS_HIDDEN = "hidden"
@@ -426,6 +442,34 @@ class Employee(models.Model):
 
 
 class SiteSettings(models.Model):
+    public_url = models.URLField("Основной адрес сайта", blank=True, help_text="Например, https://example.ru. Используется для canonical и карты сайта.")
+    logo_media = models.ForeignKey("SiteMedia", verbose_name="Логотип из медиатеки", on_delete=models.PROTECT, null=True, blank=True, related_name="logo_uses")
+    favicon_media = models.ForeignKey("SiteMedia", verbose_name="Иконка вкладки из медиатеки", on_delete=models.PROTECT, null=True, blank=True, related_name="favicon_uses")
+    og_media = models.ForeignKey("SiteMedia", verbose_name="Изображение для отправки ссылок по умолчанию", on_delete=models.PROTECT, null=True, blank=True, related_name="site_og_uses")
+    seo_description = models.TextField("Описание компании для поисковых систем", blank=True)
+    cta_label = models.CharField("Основная кнопка: текст", max_length=28, default="Консультация")
+    cta_url = models.CharField("Основная кнопка: ссылка", max_length=220, default="/contacts/#request-form")
+    show_header_contacts = models.BooleanField("Показывать контакты в шапке", default=True)
+    show_header_account = models.BooleanField("Показывать профиль в шапке", default=True)
+    show_header_favorites = models.BooleanField("Показывать избранное в шапке", default=True)
+    show_header_cta = models.BooleanField("Показывать основную кнопку в шапке", default=False)
+    footer_extra_text = models.TextField("Дополнительный текст подвала", blank=True)
+    footer_legal_text = models.TextField("Юридическая информация в подвале", blank=True)
+    allow_indexing = models.BooleanField("Разрешить индексацию сайта", default=True)
+
+    @property
+    def logo_url(self):
+        file_field = self.logo_media.file if self.logo_media_id else self.logo_image
+        if not file_field or not file_field.name:
+            return ""
+        try:
+            if not file_field.storage.exists(file_field.name):
+                return ""
+            return file_field.url
+        except (OSError, ValueError):
+            return ""
+
+
     site_name = models.CharField("Название сайта", max_length=120, default="PakLine")
     logo_text = models.CharField("Текст логотипа", max_length=20, default="PL")
     home_hero_label = models.CharField("Надпись-метка", max_length=160, default="Оптовые поставки · Москва и Россия")
@@ -476,6 +520,20 @@ class SiteSettings(models.Model):
     footer_address = models.CharField("Адрес в подвале", max_length=220, blank=True)
     footer_work_time = models.CharField("Время работы", max_length=120, blank=True)
     copyright_text = models.CharField("Текст авторских прав", max_length=220, blank=True)
+    logo_image = models.ImageField("Изображение логотипа", upload_to="site/", blank=True)
+    logo_alt = models.CharField("Alt логотипа", max_length=180, blank=True)
+    nav_home_label = models.CharField("Пункт меню: главная", max_length=80, default="Главная")
+    nav_catalog_label = models.CharField("Пункт меню: каталог", max_length=80, default="Каталог")
+    nav_team_label = models.CharField("Пункт меню: команда", max_length=80, default="Команда")
+    nav_contacts_label = models.CharField("Пункт меню: контакты", max_length=80, default="Контакты")
+    nav_home_url = models.CharField("Ссылка меню: главная", max_length=220, default="/")
+    nav_catalog_url = models.CharField("Ссылка меню: каталог", max_length=220, default="/catalog/")
+    nav_team_url = models.CharField("Ссылка меню: команда", max_length=220, default="/team/")
+    nav_contacts_url = models.CharField("Ссылка меню: контакты", max_length=220, default="/contacts/")
+    footer_privacy_label = models.CharField("Подвал: название ссылки политики", max_length=120, default="Политика конфиденциальности")
+    footer_privacy_url = models.CharField("Подвал: ссылка политики", max_length=220, default="/documents/privacy/")
+    footer_offer_label = models.CharField("Подвал: название ссылки оферты", max_length=120, default="Оферта")
+    footer_offer_url = models.CharField("Подвал: ссылка оферты", max_length=220, default="/documents/offer/")
     updated_at = models.DateTimeField("Обновлено", auto_now=True)
 
     class Meta:
@@ -492,6 +550,24 @@ class SiteSettings(models.Model):
 
 
 class PageContent(models.Model):
+    canonical = models.URLField("Основной адрес страницы (canonical)", blank=True, help_text="Оставьте пустым для автоматического адреса.")
+    og_title = models.CharField("Заголовок при отправке ссылки", max_length=220, blank=True)
+    og_description = models.TextField("Описание при отправке ссылки", blank=True)
+    og_media = models.ForeignKey("SiteMedia", verbose_name="Изображение при отправке ссылки", on_delete=models.PROTECT, null=True, blank=True, related_name="page_og_uses")
+    hero_media = models.ForeignKey("SiteMedia", verbose_name="Главное изображение из медиатеки", on_delete=models.PROTECT, null=True, blank=True, related_name="hero_uses")
+    mobile_hero_media = models.ForeignKey("SiteMedia", verbose_name="Мобильное изображение из медиатеки", on_delete=models.PROTECT, null=True, blank=True, related_name="mobile_hero_uses")
+    hero_button_url = models.CharField("Ссылка главной кнопки", max_length=220, blank=True)
+    noindex = models.BooleanField("Не показывать страницу в поиске", default=False)
+
+    @property
+    def hero_url(self):
+        return self.hero_media.file.url if self.hero_media_id else (self.hero_image.url if self.hero_image else "")
+
+    @property
+    def hero_alt(self):
+        return self.hero_image_alt or (self.hero_media.alt if self.hero_media_id else "")
+
+
     PAGE_HOME = "home"
     PAGE_CATALOG = "catalog"
     PAGE_TEAM = "team"
@@ -502,6 +578,8 @@ class PageContent(models.Model):
         (PAGE_CATALOG, "Каталог"),
         (PAGE_TEAM, "Команда"),
         (PAGE_CONTACTS, "Контакты"),
+        ("privacy", "Политика конфиденциальности"),
+        ("offer", "Оферта"),
     ]
 
     page = models.CharField("Страница", max_length=40, choices=PAGE_CHOICES, unique=True)
@@ -509,6 +587,15 @@ class PageContent(models.Model):
     subtitle = models.TextField("Подзаголовок / текст", blank=True)
     hero_label = models.CharField("Метка", max_length=160, blank=True)
     hero_button_text = models.CharField("Текст кнопки", max_length=120, blank=True)
+    hero_image = models.ImageField("Изображение главного блока", upload_to="pages/", blank=True)
+    hero_image_alt = models.CharField("Alt изображения главного блока", max_length=180, blank=True)
+    content_title = models.CharField("Заголовок дополнительного блока", max_length=220, blank=True)
+    content_subtitle = models.CharField("Подзаголовок дополнительного блока", max_length=220, blank=True)
+    content_text = models.TextField("Текст дополнительного блока", blank=True)
+    b2b_title = models.CharField("Заголовок B2B-блока", max_length=220, blank=True)
+    seo_title = models.CharField("SEO-заголовок (title)", max_length=220, blank=True)
+    meta_description = models.TextField("Meta description", blank=True)
+    h1 = models.CharField("Основной заголовок (H1)", max_length=220, blank=True)
     is_visible = models.BooleanField("Показывать", default=True)
     updated_at = models.DateTimeField("Обновлено", auto_now=True)
 
@@ -519,3 +606,40 @@ class PageContent(models.Model):
 
     def __str__(self):
         return self.get_page_display()
+
+
+class SiteMedia(models.Model):
+    @property
+    def is_image(self):
+        from pathlib import PurePosixPath
+        return PurePosixPath(self.file.name).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"}
+
+    title = models.CharField("Название", max_length=160)
+    file = models.FileField("Файл", upload_to="site_media/")
+    alt = models.CharField("Alt / описание", max_length=180, blank=True)
+    created_at = models.DateTimeField("Загружен", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Медиафайл сайта"
+        verbose_name_plural = "Медиафайлы сайта"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class SiteLink(models.Model):
+    settings = models.ForeignKey(SiteSettings, on_delete=models.CASCADE, related_name="links")
+    location = models.CharField("Где показывать", max_length=20, choices=[("header", "Шапка"), ("footer", "Подвал"), ("social", "Социальные сети")], default="header")
+    label = models.CharField("Название ссылки", max_length=80)
+    url = models.CharField("Адрес ссылки", max_length=500)
+    sort_order = models.PositiveIntegerField("Порядок", default=0)
+    is_visible = models.BooleanField("Показывать", default=True)
+
+    class Meta:
+        ordering = ["location", "sort_order", "pk"]
+        verbose_name = "Ссылка сайта"
+        verbose_name_plural = "Ссылки сайта"
+
+    def __str__(self):
+        return self.label

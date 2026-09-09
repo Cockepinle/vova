@@ -41,15 +41,16 @@ function productCardHtml(product) {
         </div>
         <div class="catalog-card-info">
           <span class="product-sku">${escapeCatalogHtml(product.sku)}</span>
-          <h3>${escapeCatalogHtml(product.name)}</h3>
+          <h2>${escapeCatalogHtml(product.name)}</h2>
         </div>
       </div>
+      <a class="product-permalink" href="${escapeCatalogHtml(product.url)}">Подробнее о товаре</a>
       <div class="catalog-card-buy">
         <div class="product-buy-row">
           <p class="price">${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span></p>
           <div class="quantity-control" aria-label="Количество">
             <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-            <input class="quantity-input" type="number" min="1" value="${isInCart ? quantity : 1}" aria-label="Количество товара">
+            <input class="quantity-input" type="number" min="${Number(product.min_quantity) || 1}" step="${Number(product.min_quantity) || 1}" value="${isInCart ? quantity : Number(product.min_quantity) || 1}" aria-label="Количество товара">
             <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
           </div>
         </div>
@@ -169,6 +170,18 @@ async function loadCatalogFromApi(url, pushState = true) {
       ? payload.products.map(productCardHtml).join("")
       : '<div class="catalog-empty"><h2>Товары скоро появятся</h2><p>По выбранным условиям ничего не найдено.</p></div>';
     updateCatalogHeader(url, payload.products.length);
+    if (payload.seo) {
+      document.title = payload.seo.title;
+      catalogTopline.querySelector('h1').textContent = payload.seo.h1;
+      document.querySelector('link[rel="canonical"]').href = payload.seo.canonical;
+      document.querySelector('meta[name="description"]').content = payload.seo.description;
+      document.querySelector('meta[name="robots"]').content = payload.seo.noindex ? 'noindex,follow' : 'index,follow';
+      for (const name of ['title','description','image']) {
+        const tag = document.querySelector(`meta[property="og:${name}"]`);
+        if (tag) tag.content = payload.seo[`og_${name}`] || '';
+      }
+      document.querySelector('meta[property="og:url"]').content = payload.seo.canonical;
+    }
     updateCatalogActiveLinks(url);
     updateCatalogSearchState(url);
 
@@ -184,7 +197,7 @@ async function loadCatalogFromApi(url, pushState = true) {
 
 function changeQuantity(control, delta) {
   const value = control.querySelector(".quantity-input");
-  value.value = String(Math.max(1, Number(value.value) + delta));
+  value.value = String(Math.max(Number(value.min) || 1, (Number(value.value) || Number(value.min) || 1) + delta * (Number(value.step) || 1)));
   syncCardQuantity(control);
 }
 
@@ -308,7 +321,7 @@ document.addEventListener("change", (event) => {
     return;
   }
 
-  quantityInput.value = String(Math.max(1, Number(quantityInput.value) || 1));
+  quantityInput.value = String(Math.max(Number(quantityInput.min) || 1, Number(quantityInput.value) || 1));
   syncCardQuantity(quantityInput.closest(".quantity-control"));
 });
 
@@ -381,8 +394,10 @@ function openProductModal(product) {
   const cardInput = productCard ? productCard.querySelector(".quantity-input") : null;
   const cartQuantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
   const modalInput = modal.querySelector(".modal-controls .quantity-input");
+  modalInput.min = String(Math.max(1, Number(product.min_quantity) || 1));
+  modalInput.step = modalInput.min;
 
-  modalInput.value = String(Math.max(1, cartQuantity || Number(cardInput ? cardInput.value : 1) || 1));
+  modalInput.value = String(Math.max(Number(modalInput.min), cartQuantity || Number(cardInput ? cardInput.value : modalInput.min) || 1));
   modal.querySelector(".modal-favorite").classList.toggle("is-active", favoriteButton ? favoriteButton.classList.contains("is-active") : false);
   modal.querySelector(".modal-add").textContent = cartQuantity > 0 || (productCard && productCard.classList.contains("is-in-cart")) ? "В корзине" : "В корзину";
   modal.classList.add("is-open");
@@ -405,3 +420,24 @@ if (window.initialProductToOpen) {
     openProductModal(JSON.parse(cardToOpen.dataset.product));
   }
 }
+
+// Apply sorting both to initial cards and cards refreshed by category/search.
+(() => {
+  const select = document.querySelector('.catalog-topline select');
+  if (!select || !catalogGrid) return;
+  let original = [...catalogGrid.children];
+  const sort = () => {
+    const cards = [...original];
+    const number = value => Number(String(value).replace(/\s/g, '').replace(',', '.')) || 0;
+    const product = card => JSON.parse(card.dataset.product || '{}');
+    if (select.selectedIndex === 1) cards.sort((a,b) => number(product(a).price) - number(product(b).price));
+    if (select.selectedIndex === 2) cards.sort((a,b) => number(product(b).price) - number(product(a).price));
+    if (select.selectedIndex === 3) cards.sort((a,b) => Date.parse(product(b).created_at) - Date.parse(product(a).created_at));
+    observer.disconnect();
+    cards.forEach(card => catalogGrid.append(card));
+    observer.observe(catalogGrid, {childList: true});
+  };
+  const observer = new MutationObserver(() => { original = [...catalogGrid.children]; sort(); });
+  observer.observe(catalogGrid, {childList: true});
+  select.addEventListener('change', sort);
+})();

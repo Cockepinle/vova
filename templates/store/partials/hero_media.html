@@ -1,0 +1,1 @@
+{% if current_page.hero_url %}<picture class="page-hero-media">{% if current_page.mobile_hero_media %}<source media="(max-width: 720px)" srcset="{{ current_page.mobile_hero_media.file.url }}">{% endif %}<img src="{{ current_page.hero_url }}" alt="{{ current_page.hero_alt }}" fetchpriority="high"></picture>{% endif %}

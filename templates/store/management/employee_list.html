@@ -52,10 +52,7 @@
                 <td class="row-actions">
                   <a href="{% url 'management_employee_edit' employee.id %}">Изменить</a>
                   <a href="{% url 'management_employee_duplicate' employee.id %}">Дублировать</a>
-                  <form method="post" action="{% url 'management_employee_delete' employee.id %}">
-                    {% csrf_token %}
-                    <button type="submit" onclick="return confirm('Удалить сотрудника?')">Удалить</button>
-                  </form>
+                  <button type="submit" formaction="{% url 'management_employee_delete' employee.id %}" formmethod="post" onclick="return confirm('Удалить сотрудника?')">Удалить</button>
                 </td>
               </tr>
             {% empty %}

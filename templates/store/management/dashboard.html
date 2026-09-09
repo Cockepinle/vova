@@ -25,7 +25,7 @@
           {% for product in recent_products %}
             <tr>
               <td>{{ product.name }}</td>
-              <td>{{ product.sku }}</td>
+              <td>{{ product.sku|default:"—" }}</td>
               <td><span class="status status-{{ product.status }}">{{ product.get_status_display }}</span></td>
               <td>{{ product.price }} ₽</td>
               <td><a href="{% url 'management_product_edit' product.id %}">Изменить</a></td>

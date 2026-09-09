@@ -3,16 +3,17 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
-    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=7">
   </head>
   <body>
     <div class="mgmt-shell">
       <aside class="mgmt-sidebar">
         <a class="mgmt-brand" href="{% url 'management_dashboard' %}">
-          <span>PL</span>
-          <strong>PakLine CMS</strong>
+          {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span>{{ site_settings.logo_text|default:site_settings.site_name|default:'Сайт' }}</span>{% endif %}
+          <strong>{{ site_settings.site_name|default:'Панель управления' }} CMS</strong>
         </a>
         <nav>
           <a class="{% if section == 'dashboard' %}active{% endif %}" href="{% url 'management_dashboard' %}">Обзор</a>
@@ -23,6 +24,8 @@
           <a class="{% if section == 'requests' %}active{% endif %}" href="{% url 'management_requests' %}">Запросы на КП</a>
           <a class="{% if section == 'fields' %}active{% endif %}" href="{% url 'management_fields' %}">Поля товаров</a>
           <a class="{% if section == 'settings' %}active{% endif %}" href="{% url 'management_settings' %}">Настройки сайта</a>
+          <a class="{% if section == 'pages' %}active{% endif %}" href="{% url 'management_pages' %}">SEO и страницы</a>
+          <a class="{% if section == 'media' %}active{% endif %}" href="{% url 'management_media' %}">Общие медиа</a>
         </nav>
       </aside>
 
@@ -49,6 +52,6 @@
         {% block content %}{% endblock %}
       </main>
     </div>
-    <script src="{% static 'store/js/management.js' %}?v=2"></script>
+    <script src="{% static 'store/js/management.js' %}?v=3"></script>
   </body>
 </html>

@@ -22,7 +22,7 @@ function escapeHtml(value) {
 }
 
 function updateCartBadges(count) {
-  document.querySelectorAll("#cart-count").forEach((badge) => {
+  document.querySelectorAll("#cart-count, [data-cart-count]").forEach((badge) => {
     badge.textContent = String(count);
   });
 }

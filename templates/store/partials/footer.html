@@ -16,18 +16,16 @@
   <section class="footer-main">
     <div class="footer-about">
       <a class="brand footer-brand" href="/">
-        <span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>
-        <span class="brand-name">{{ site_settings.site_name|default:"PakLine" }}</span>
+        {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>{% endif %}
+        <span class="brand-name">{{ site_settings.footer_company|default:site_settings.site_name|default:"PakLine" }}</span>
       </a>
       <p>{{ site_settings.footer_description|default:"Оптовые поставки упаковочных материалов. Москва и Россия." }}</p>
-      <p>С 2013 года.</p>
+      {% if site_settings.footer_extra_text %}<p>{{ site_settings.footer_extra_text|linebreaksbr }}</p>{% endif %}
+      {% for link in social_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
     </div>
     <div>
       <h3>Навигация</h3>
-      <a href="/">Главная</a>
-      <a href="{% url 'catalog' %}">Каталог</a>
-      <a href="{% url 'team' %}">Команда</a>
-      <a href="{% url 'contacts' %}">Контакты</a>
+      {% for link in footer_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
     </div>
     <div>
       <h3>Категории</h3>
@@ -38,18 +36,19 @@
     </div>
     <div>
       <h3>Контакты</h3>
-      <p><a href="tel:{{ site_settings.contact_phone|default:'+7 (800) 555-38-22'|phone_href }}">{{ site_settings.contact_phone|default:"+7 (800) 555-38-22" }}</a></p>
-      <p><a href="mailto:{{ site_settings.contact_email|default:'info@pakline.ru' }}">{{ site_settings.contact_email|default:"info@pakline.ru" }}</a></p>
-      <p>{{ site_settings.contact_address|default:"г. Москва, ул. Складская, д. 14" }}</p>
-      <p>{{ site_settings.contact_work_hours|default:"ПН–ПТ 9:00–18:00" }}</p>
+      <p><a href="tel:{{ site_settings.footer_phone|default:site_settings.contact_phone|default:'+7 (800) 555-38-22'|phone_href }}">{{ site_settings.footer_phone|default:site_settings.contact_phone|default:"+7 (800) 555-38-22" }}</a></p>
+      <p><a href="mailto:{{ site_settings.footer_email|default:site_settings.contact_email|default:'info@pakline.ru' }}">{{ site_settings.footer_email|default:site_settings.contact_email|default:"info@pakline.ru" }}</a></p>
+      <p>{{ site_settings.footer_address|default:site_settings.contact_address|default:"г. Москва, ул. Складская, д. 14" }}</p>
+      <p>{{ site_settings.footer_work_time|default:site_settings.contact_work_hours|default:"ПН–ПТ 9:00–18:00" }}</p>
     </div>
   </section>
 
+  {% if site_settings.footer_legal_text %}<p class="footer-legal">{{ site_settings.footer_legal_text|linebreaksbr }}</p>{% endif %}
   <section class="footer-bottom">
     <p>{{ site_settings.copyright_text|default:"© 2025 ООО «ПакЛайн». Все права защищены." }}</p>
     <nav aria-label="Документы">
-      <a href="{% url 'document_page' 'privacy' %}">Политика конфиденциальности</a>
-      <a href="{% url 'document_page' 'offer' %}">Оферта</a>
+      <a href="{{ site_settings.footer_privacy_url|default:'/documents/privacy/' }}">{{ site_settings.footer_privacy_label|default:"Политика конфиденциальности" }}</a>
+      <a href="{{ site_settings.footer_offer_url|default:'/documents/offer/' }}">{{ site_settings.footer_offer_label|default:"Оферта" }}</a>
       <button class="footer-link-button js-cookie-settings" type="button">Управление cookie</button>
       <a href="{% url 'management_login' %}">Управление</a>
     </nav>
