@@ -2,22 +2,14 @@
   const nav = document.querySelector('.main-nav');
   if (nav) {
     nav.id = 'site-navigation';
-    const toggle = document.createElement('button');
-    toggle.className = 'mobile-menu-toggle';
-    toggle.type = 'button';
-    toggle.textContent = '☰';
-    toggle.setAttribute('aria-label', 'Меню');
-    toggle.setAttribute('aria-controls', nav.id);
-    toggle.setAttribute('aria-expanded', 'false');
-    nav.before(toggle);
-    document.body.classList.add('has-mobile-menu');
-    const close = () => { nav.classList.remove('is-expanded'); toggle.setAttribute('aria-expanded', 'false'); };
-    toggle.addEventListener('click', () => {
+    const toggle = document.querySelector('.mobile-menu-toggle');
+    const close = () => { nav.classList.remove('is-expanded'); toggle?.setAttribute('aria-expanded', 'false'); };
+    toggle?.addEventListener('click', () => {
       const expanded = nav.classList.toggle('is-expanded');
       toggle.setAttribute('aria-expanded', String(expanded));
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-    document.addEventListener('click', e => { if (!e.target.closest('.site-header')) close(); });
+    document.addEventListener('click', e => { if (!e.target.closest('.site-header, .mobile-actions')) close(); });
   }
   const bar = document.querySelector('.mobile-actions');
   if (bar && window.ResizeObserver) new ResizeObserver(() => {

@@ -1,3 +1,14 @@
-<nav class="mobile-actions" aria-label="Главная навигация">
-  {% for link in header_links %}<a href="{{ link.url }}" {% if request.path == link.url %}class="active" aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
+<nav class="mobile-actions" aria-label="Мобильная панель">
+  {% if site_settings.show_header_account %}<button class="mobile-action-button js-account-open" type="button" aria-label="Профиль" title="Профиль">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+  </button>{% endif %}
+  {% if site_settings.show_header_favorites %}<button class="mobile-action-button js-favorites-open" type="button" aria-label="Избранное" title="Избранное">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg><span class="favorite-count">{{ favorite_count }}</span>
+  </button>{% endif %}
+  <button class="mobile-action-button js-cart-open" type="button" aria-label="Корзина" title="Корзина">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span data-cart-count>{{ cart_count }}</span>
+  </button>
+  <button class="mobile-action-button mobile-menu-toggle" type="button" aria-label="Меню" title="Меню" aria-controls="site-navigation" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
 </nav>
