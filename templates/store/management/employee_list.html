@@ -50,7 +50,7 @@
                   </select>
                 </td>
                 <td class="row-actions">
-                  <a href="{% url 'management_employee_edit' employee.id %}">Изменить</a>
+                  <a class="primary-button" href="{% url 'management_employee_edit' employee.id %}">Изменить</a>
                   <a href="{% url 'management_employee_duplicate' employee.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_employee_delete' employee.id %}" formmethod="post" onclick="return confirm('Удалить сотрудника?')">Удалить</button>
                 </td>

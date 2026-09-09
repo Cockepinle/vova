@@ -21,7 +21,7 @@
               <td>{% if field.show_in_table %}Да{% else %}Нет{% endif %}</td>
               <td>{% if field.is_filterable %}Да{% else %}Нет{% endif %}</td>
               <td class="row-actions">
-                <a href="{% url 'management_field_edit' field.id %}">Изменить</a>
+                <a class="primary-button" href="{% url 'management_field_edit' field.id %}">Изменить</a>
                 <form method="post" action="{% url 'management_field_delete' field.id %}">
                   {% csrf_token %}
                   <button type="submit" onclick="return confirm('Удалить поле и все его значения?')">Удалить</button>

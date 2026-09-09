@@ -47,7 +47,7 @@
                   </select>
                 </td>
                 <td class="row-actions">
-                  <a href="{% url 'management_category_edit' category.id %}">Изменить</a>
+                  <a class="primary-button" href="{% url 'management_category_edit' category.id %}">Изменить</a>
                   <a href="{% url 'management_category_duplicate' category.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_category_delete' category.id %}" formmethod="post" onclick="return confirm('Удалить категорию?')">Удалить</button>
                 </td>

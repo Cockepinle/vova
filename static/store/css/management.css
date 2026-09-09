@@ -172,6 +172,10 @@ textarea:focus {
 .back-link {
   display: inline-block;
   margin-top: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   color: #555;
 }
 
@@ -393,6 +397,21 @@ textarea:focus {
 .row-actions a {
   color: var(--blue);
   font-weight: 800;
+}
+
+.row-actions a.primary-button {
+  background: var(--blue);
+  color: #fff;
+}
+
+.row-actions a.primary-button:hover {
+  background: var(--blue-dark);
+  color: #fff;
+}
+
+.row-actions a.ghost-button {
+  background: #fff;
+  color: var(--text);
 }
 
 .count-link {

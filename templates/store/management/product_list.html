@@ -85,7 +85,7 @@
                   </td>
                 {% endfor %}
                 <td class="row-actions">
-                  <a href="{% url 'management_product_edit' product.id %}">Изменить</a>
+                  <a class="primary-button" href="{% url 'management_product_edit' product.id %}">Изменить</a>
                   <a href="{% url 'management_product_duplicate' product.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_product_delete' product.id %}" formmethod="post" onclick="return confirm('Удалить товар?')">Удалить</button>
                 </td>
