@@ -3,11 +3,13 @@
   if (nav) {
     nav.id = 'site-navigation';
     const toggle = document.querySelector('.mobile-menu-toggle');
-    const close = () => { nav.classList.remove('is-expanded'); toggle?.setAttribute('aria-expanded', 'false'); };
+    const close = () => { nav.classList.remove('is-expanded'); toggle?.setAttribute('aria-expanded', 'false'); toggle?.classList.remove('is-active'); };
     toggle?.addEventListener('click', () => {
       const expanded = nav.classList.toggle('is-expanded');
       toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.classList.toggle('is-active', expanded);
     });
+    nav.querySelector('.mobile-nav-close')?.addEventListener('click', close);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
     document.addEventListener('click', e => { if (!e.target.closest('.site-header, .mobile-actions')) close(); });
   }

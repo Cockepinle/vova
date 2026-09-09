@@ -9,7 +9,7 @@ h1, h2, h3, p, dd, a, .brand-name { overflow-wrap: anywhere; }
 button, a, input, select, textarea { touch-action: manipulation; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .account-link a:focus-visible, .account-link button:focus-visible, .account-note a:focus-visible, .back-link:focus-visible { outline: 0; box-shadow: none; }
-.mobile-actions, .mobile-menu-toggle { display: none; }
+.mobile-actions, .mobile-menu-toggle, .mobile-nav-close { display: none; }
 .catalog-search .search-box { display: flex; min-width: 0; }
 .catalog-search input { width: 100%; }
 .catalog-topline select { flex-shrink: 0; }
@@ -49,12 +49,14 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .brand-mark, .brand-image { flex-shrink: 0; }
   .brand-name { font-size: 17px; }
   .header-actions, .header-contact, .header-cta { display: none; }
-  .mobile-actions { position: fixed; inset: auto 0 0; z-index: 90; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 0; width: 100%; padding: 6px max(4px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left,0px)); border-top: 1px solid var(--line); background: #fff; box-shadow: 0 -6px 28px #11182726; }
-  .mobile-action-button { position: relative; display: flex; justify-content: center; align-items: center; min-height: 50px; min-width: 0; padding: 8px 6px; border: 0; border-right: 1px solid #e8ebf1; background: transparent; color: var(--ink); }
+  .mobile-actions { position: fixed; inset: auto 0 0; z-index: 90; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 0; width: 100%; padding: 5px max(4px,env(safe-area-inset-right,0px)) calc(5px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left,0px)); border-top: 1px solid var(--line); background: #fff; box-shadow: 0 -6px 28px #11182726; }
+  .mobile-action-button { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 56px; min-width: 0; gap: 3px; padding: 5px 2px; border: 0; border-right: 1px solid #e8ebf1; background: transparent; color: var(--ink); font-size: 10px; font-weight: 700; line-height: 1.1; text-decoration: none; }
   .mobile-action-button:last-child { border-right: 0; }
-  .mobile-action-button svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+  .mobile-action-button svg { width: 21px; height: 21px; flex: 0 0 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
   .mobile-action-button:hover, .mobile-action-button:focus-visible { color: var(--blue); }
-  .mobile-action-button .favorite-count, .mobile-action-button [data-cart-count] { position: absolute; top: 5px; margin-left: 25px; min-width: 17px; height: 17px; padding: 1px 4px; border-radius: 9px; background: var(--blue); color: #fff; font-size: 10px; line-height: 15px; text-align: center; }
+  .mobile-action-button .favorite-count, .mobile-action-button [data-cart-count] { position: absolute; top: 3px; left: 50%; margin-left: 8px; min-width: 16px; height: 16px; padding: 1px 4px; border-radius: 9px; background: var(--blue); color: #fff; font-size: 9px; line-height: 14px; text-align: center; }
+  .mobile-action-button.is-active { color: var(--blue); }
+  .mobile-nav-close { display: flex; grid-column: 1/-1; align-items: center; justify-content: center; justify-self: end; width: 44px; min-height: 40px; border: 0; background: transparent; color: var(--muted); font-size: 26px; line-height: 1; }
   .mobile-menu-toggle { display: flex; }
   .main-nav { position: fixed; inset: auto 0 calc(var(--mobile-actions-height) + 8px); z-index: 89; display: none; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px; width: 100%; padding: 12px max(12px,env(safe-area-inset-right,0px)) 12px max(12px,env(safe-area-inset-left,0px)); border: 1px solid var(--line); border-right: 0; border-left: 0; border-radius: 14px 14px 0 0; background: #fff; box-shadow: 0 -8px 30px #11182726; }
   .main-nav.is-expanded { display: grid; }

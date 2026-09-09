@@ -7,6 +7,7 @@
         </a>
 
         <nav class="main-nav" aria-label="Главная навигация">
+      <button class="mobile-nav-close" type="button" aria-label="Закрыть меню">×</button>
 {% for link in header_links %}<a href="{{ link.url }}" {% if request.path == link.url %}class="active" aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
         {% if site_settings.show_header_contacts %}<span class="mobile-nav-contact"><a href="tel:{{ site_settings.header_phone|default:site_settings.contact_phone|phone_href }}">{{ site_settings.header_phone|default:site_settings.contact_phone }}</a><a href="mailto:{{ site_settings.header_email|default:site_settings.contact_email }}">{{ site_settings.header_email|default:site_settings.contact_email }}</a></span>{% endif %}
 </nav>
