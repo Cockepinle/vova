@@ -11,8 +11,8 @@
   <body class="mgmt-login-page">
     <main class="login-card">
       <a class="mgmt-brand" href="{% url 'home' %}">
-        <span>PL</span>
-        <strong>Панель управления</strong>
+        {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span>{{ site_settings.logo_text|default:site_settings.site_name|default:'Сайт' }}</span>{% endif %}
+        <strong>{{ site_settings.site_name|default:'Панель управления' }} CMS</strong>
       </a>
       <form method="post">
         {% csrf_token %}
