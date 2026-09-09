@@ -8,6 +8,7 @@ main, section, article, form, .brand, .catalog-content, .header-inner > * { min-
 h1, h2, h3, p, dd, a, .brand-name { overflow-wrap: anywhere; }
 button, a, input, select, textarea { touch-action: manipulation; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.account-link a:focus-visible, .account-link button:focus-visible, .account-note a:focus-visible, .back-link:focus-visible { outline: 0; box-shadow: none; }
 .mobile-actions, .mobile-menu-toggle { display: none; }
 .catalog-search .search-box { display: flex; min-width: 0; }
 .catalog-search input { width: 100%; }
@@ -63,8 +64,11 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .mobile-nav-contact a { min-height: 32px; padding: 4px 0; font-weight: 500; }
   .hero-actions { flex-wrap: wrap; }
   .section-header { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
-  .section-header a, .footer-main a, .footer-bottom a, .footer-link-button { display: inline-flex; align-items: center; min-height: 44px; }
-  .footer-bottom nav { flex-wrap: wrap; gap: 8px 16px; }
+  .section-header a { display: inline-flex; align-items: center; min-height: 44px; }
+  .footer-main a, .footer-bottom a, .footer-link-button { display: flex; align-items: center; width: 100%; min-height: 44px; }
+  .footer-bottom nav { display: flex; flex-direction: column; align-items: stretch; width: 100%; gap: 0; }
+  .footer-bottom nav > * { border-top: 1px solid #202020; padding: 10px 0; }
+  .footer-bottom nav > *:first-child { border-top: 0; }
   .quantity-control { width: 140px; min-height: 44px; }
   .quantity-control button { min-width: 44px; min-height: 44px; }
   .quantity-input { width: 44px; }

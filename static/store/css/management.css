@@ -175,8 +175,19 @@ textarea:focus {
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
+  outline: 0;
   padding: 0;
   color: #555;
+}
+
+.back-link:hover,
+.back-link:focus,
+.back-link:focus-visible {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
 }
 
 .mgmt-shell {

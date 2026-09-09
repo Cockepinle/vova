@@ -1680,8 +1680,18 @@ body.lightbox-open {
   border-radius: 0;
   padding: 0;
   background: transparent;
+  box-shadow: none;
   cursor: pointer;
   font: inherit;
+}
+
+.account-link a,
+.account-link button,
+.account-note a {
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
 }
 
 .account-note {
