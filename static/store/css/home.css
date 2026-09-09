@@ -1061,6 +1061,13 @@ svg {
   color: rgba(0, 0, 0, 0.46);
 }
 
+.cart-item > .cart-remove {
+  grid-column: 4;
+  grid-row: 1;
+  justify-self: center;
+  align-self: start;
+}
+
 .cart-favorite svg {
   width: 21px;
   height: 21px;
@@ -1079,6 +1086,11 @@ svg {
 
 .cart-favorite.is-active svg {
   fill: currentColor;
+}
+
+.cart-quantity .quantity-minus:disabled {
+  cursor: not-allowed;
+  opacity: .35;
 }
 
 .cart-panel-footer {

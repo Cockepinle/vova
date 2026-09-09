@@ -30,7 +30,7 @@
             </button>
             <div class="cart-item-row">
               <div class="quantity-control cart-quantity" aria-label="Количество">
-                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if item.quantity <= item.product.min_quantity %}disabled{% endif %}>−</button>
                 <span>{{ item.quantity }}</span>
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>

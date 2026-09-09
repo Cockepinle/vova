@@ -87,9 +87,11 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .cookie-panel { padding: 20px 16px; }
   .cookie-header h2 { font-size: 22px; }
   .cookie-actions > * { flex: 1 1 100%; }
-  .cart-item { grid-template-columns: 24px 48px minmax(0,1fr) 44px; gap: 6px; }
+  .cart-item { grid-template-columns: 24px 48px minmax(0,1fr); gap: 8px; padding-right: 4px; }
   .cart-item img { width: 48px; height: 48px; }
-  .cart-remove { width: 44px; min-height: 44px; }
+  .cart-item > .cart-remove { grid-column: 3; grid-row: 1; justify-self: end; width: 32px; min-height: 36px; margin-right: 0; }
+  .cart-item-info { grid-column: 3; grid-row: 2; grid-template-columns: minmax(0,1fr) 32px; }
+  .cart-favorite { width: 32px; height: 36px; justify-self: end; }
   .cart-item-info { min-width: 0; }
   .cart-quantity { width: 132px; }
   .info-row { grid-template-columns: 1fr; gap: 8px; }

@@ -212,7 +212,7 @@ def serialize_order(order, include_items=False):
 def serialize_cart_item(product, quantity):
     product_data = serialize_product(product)
     price = money(product.price)
-    quantity = int(quantity)
+    quantity = normalize_quantity(product, quantity)
     line_total = money(price * quantity)
 
     return {
@@ -280,15 +280,26 @@ def get_cart_items(request):
         )
 
         for item in cart_items:
+            normalized_quantity = normalize_quantity(item.product, item.quantity)
+            if item.quantity != normalized_quantity:
+                item.quantity = normalized_quantity
+                item.save(update_fields=["quantity", "updated_at"])
             items.append(serialize_cart_item(item.product, item.quantity))
 
         return items
 
-    for product_id, quantity in get_session_cart(request).items():
+    session_cart = get_session_cart(request)
+    normalized_session_cart = dict(session_cart)
+    for product_id, quantity in session_cart.items():
         product = get_product(product_id)
 
         if product:
-            items.append(serialize_cart_item(product, int(quantity)))
+            normalized_quantity = normalize_quantity(product, quantity)
+            normalized_session_cart[product_id] = normalized_quantity
+            items.append(serialize_cart_item(product, normalized_quantity))
+
+    if normalized_session_cart != session_cart:
+        save_session_cart(request, normalized_session_cart)
 
     return items
 

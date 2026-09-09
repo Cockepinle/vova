@@ -195,7 +195,7 @@ function renderCart(cart) {
             </button>
             <div class="cart-item-row">
               <div class="quantity-control cart-quantity" aria-label="Количество">
-                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество" ${Number(item.quantity) <= Math.max(1, Number(item.min_quantity) || 1) ? "disabled" : ""}>−</button>
                 <span>${item.quantity}</span>
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
@@ -294,8 +294,10 @@ async function updateProductInCart(productId, quantity) {
     return;
   }
 
+  const cartItem = drawer.querySelector(`.cart-item[data-product-id="${productId}"]`);
+  const cartProduct = cartItem ? JSON.parse(cartItem.dataset.product) : null;
   const minimum = Math.max(1, Number(
-    document.querySelector(`[data-product-id="${productId}"] .quantity-input`)?.getAttribute("min") || 1,
+    cartProduct?.min_quantity || document.querySelector(`[data-product-id="${productId}"] .quantity-input`)?.getAttribute("min") || 1,
   ));
   const normalizedQuantity = Math.max(minimum, Number(quantity) || minimum);
 
@@ -414,7 +416,9 @@ document.addEventListener("click", (event) => {
 
   if (cartItem && event.target.closest(".cart-drawer .quantity-minus")) {
     const value = cartItem.querySelector(".cart-quantity span");
-    updateProductInCart(cartItem.dataset.productId, Math.max(1, Number(value.textContent) - 1));
+    const product = JSON.parse(cartItem.dataset.product);
+    const minimum = Math.max(1, Number(product.min_quantity) || 1);
+    updateProductInCart(cartItem.dataset.productId, Math.max(minimum, Number(value.textContent) - 1));
   }
 
   if (cartItem && event.target.closest(".cart-drawer .quantity-plus")) {
