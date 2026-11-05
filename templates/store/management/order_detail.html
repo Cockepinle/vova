@@ -10,6 +10,16 @@
         <p><strong>Номер:</strong> {{ order.number }}</p>
         <p><strong>Дата:</strong> {{ order.created_at|date:"d.m.Y H:i" }}</p>
         <p><strong>Итого:</strong> {{ order.total }} ₽</p>
+        <p><strong>Вес:</strong> {{ order.total_weight_kg|default_if_none:"Не указан для всех позиций" }} кг</p>
+        <p><strong>Объём:</strong> {{ order.total_volume_m3|default_if_none:"Не указан для всех позиций" }} м³</p>
+        <p><strong>Способ оплаты:</strong> {{ order.payment_method_name|default:order.payment_method.name|default:"—" }}</p>
+        <p><strong>Способ доставки:</strong> {{ order.delivery_method_name|default:order.delivery_method.name|default:"—" }}</p>
+        <p><strong>Тип доставки:</strong> {{ order.get_delivery_method_kind_display|default:"—" }}</p>
+        <p><strong>Delivery provider:</strong> {{ order.delivery_provider_code|default:"—" }}</p>
+        <p><strong>Адрес отправления:</strong> {{ order.delivery_origin_address|default:"—" }}</p>
+        <p><strong>Адрес получения:</strong> {{ order.delivery_address|default:"—" }}</p>
+        {% if order.delivery_handoff_url %}<p><strong>Сервис перевозчика:</strong> <a href="{{ order.delivery_handoff_url }}" target="_blank" rel="noopener noreferrer">Открыть</a></p>{% endif %}
+        <p><strong>Статус оплаты:</strong> {{ order.get_payment_status_display }}</p>
       </div>
       <form method="post">
         {% csrf_token %}
@@ -24,6 +34,15 @@
         <button class="primary-button" type="submit">Сохранить статус</button>
       </form>
     </section>
+
+    {% if order.delivery_provider_data %}
+      <section class="mgmt-card">
+        <h2>Данные для перевозчика</h2>
+        <pre class="order-comment">{{ order.delivery_provider_data }}</pre>
+      </section>
+    {% endif %}
+
+    <section class="mgmt-card"><div class="card-header"><h2>Платежи</h2>{% if order.payment_method.kind == 'invoice' and order.payments.exists %}<form class="toolbar-actions" method="post">{% csrf_token %}<select name="payment_status">{% for value,label in payment_status_choices %}<option value="{{ value }}" {% if order.payment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="primary-button" type="submit">Сохранить оплату</button></form>{% endif %}</div>{% for payment in order.payments.all %}<div class="order-info-grid"><p><span>Дата</span><strong>{{ payment.created_at|date:"d.m.Y H:i" }}</strong></p><p><span>Сумма</span><strong>{{ payment.amount }} {{ payment.currency }}</strong></p><p><span>Статус</span><strong>{{ payment.get_status_display }}</strong></p><p><span>Провайдер</span><strong>{{ payment.provider_code|default:"—" }}</strong></p></div>{% empty %}<p class="muted">Записей об оплате нет.</p>{% endfor %}</section>
 
     <section class="mgmt-card">
       <h2>Данные клиента</h2>
@@ -61,8 +80,13 @@
       <p class="order-comment">{{ order.comment|default:"Комментарий не указан." }}</p>
     </section>
 
+    <section class="mgmt-card">
+      <h2>История статусов</h2>
+      {% for entry in order.status_history.all %}<p>{{ entry.created_at|date:"d.m.Y H:i" }} — {{ entry.get_status_display }}</p>{% empty %}<p class="muted">Нет записей об изменениях.</p>{% endfor %}
+    </section>
     <div class="form-actions">
       <a class="ghost-button" href="{% url 'management_orders' %}">Назад к заказам</a>
+      <a class="primary-button" href="{% url 'management_order_export' order.id %}">Выгрузить в Excel</a>
     </div>
   </div>
 {% endblock %}

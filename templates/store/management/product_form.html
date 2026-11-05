@@ -5,11 +5,13 @@
 {% block content %}
   <form class="mgmt-form-grid" method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    <section class="mgmt-card">
-      <h2>Основное</h2>
-      {{ form.non_field_errors }}
-      <div class="form-grid">
-        {% for field in form %}
+    {{ form.non_field_errors }}
+    {% for group_title, fields in form.groups %}
+      <section class="mgmt-card form-section">
+        <h2>{{ group_title }}</h2>
+        {% if group_title == "SEO страницы товара" %}<p class="section-help">SEO влияет на заголовок и описание страницы в поиске. Все поля можно оставить пустыми — сайт подставит название и описание.</p>{% endif %}
+        <div class="form-grid">
+        {% for field in fields %}
           {% if field.name == "image" %}
             <div class="full image-field">
               <span>Главное изображение</span>
@@ -23,16 +25,26 @@
               </label>
               {{ field.errors }}
             </div>
-          {% else %}
-            <label class="{% if field.name == 'description' %}full{% endif %}">
+          {% elif field.name == "variant_group" %}
+            <label>
               <span>{{ field.label }}</span>
               {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+              {{ field.errors }}
+              <a class="ghost-button" href="{% url 'management_variant_groups' %}">Открыть управление группами</a>
+            </label>
+          {% else %}
+            <label class="{% if field.name == 'description' or field.name == 'keywords' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">
+              <span>{{ field.label }}</span>
+              {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
             </label>
           {% endif %}
         {% endfor %}
-      </div>
-    </section>
+        </div>
+      </section>
+    {% endfor %}
 
     <section class="mgmt-card">
       <div class="card-header">
@@ -54,6 +66,21 @@
     </section>
 
     <section class="mgmt-card">
+      <div class="card-header"><div><h2>Индивидуальные цены</h2><p class="muted">Отметьте покупателей и укажите их цены.</p></div></div>
+      {% if product %}
+        <div class="customer-price-list">
+          {% for row in customer_price_rows %}
+            <div class="customer-price-row">
+              <label class="customer-price-customer"><input class="js-customer-price-toggle" type="checkbox" name="price_customers" value="{{ row.user.id }}" {% if row.selected %}checked{% endif %}><span><strong>{{ row.user.get_full_name|default:row.user.username }}</strong><small>{{ row.user.email|default:row.user.username }} · уровень: {{ row.level_label }}</small></span></label>
+              <label><span>Индивидуальная цена</span><input type="number" min="0" step="0.01" name="customer_price_{{ row.user.id }}" value="{% if row.price != None %}{{ row.price|stringformat:'s' }}{% endif %}" {% if not row.selected %}disabled{% endif %}></label>
+            </div>
+          {% empty %}<p class="muted">Нет активных покупателей. Сначала добавьте покупателя.</p>{% endfor %}
+        </div>
+        {% if customer_price_rows %}<button class="primary-button price-save-button" type="submit" name="save_customer_prices" value="1" formnovalidate>Сохранить цены</button>{% endif %}
+      {% else %}<p class="muted">Сначала сохраните товар, затем здесь появится список покупателей.</p>{% endif %}
+    </section>
+
+    <section class="mgmt-card">
       <div class="card-header">
         <h2>Фотографии товара</h2>
       </div>
@@ -65,7 +92,12 @@
         <div class="image-grid">
           {% for image in product.images.all %}
             <div class="image-tile">
-              {% if image.display_url %}<img src="{{ image.display_url }}" alt="{{ image.alt }}">{% endif %}
+              {% if image.display_url %}
+                {% if image.media_id and image.media.is_video %}<video controls preload="metadata" src="{{ image.display_url }}"></video>{% elif image.media_id and not image.media.is_image %}<a href="{{ image.display_url }}" target="_blank" rel="noopener">Открыть файл</a>{% else %}<img src="{{ image.display_url }}" alt="{{ image.alt }}">{% endif %}
+              {% endif %}
+              <label><span>Alt-текст</span><input name="image_alt_{{ image.id }}" value="{{ image.alt }}" maxlength="180"></label>
+              <label><span>Порядок</span><input name="image_order_{{ image.id }}" type="number" min="0" value="{{ image.sort_order }}"></label>
+              {% if not image.media_id or image.media.is_image %}<label class="primary-image-check"><input type="radio" name="primary_image" value="{{ image.id }}" {% if image.is_primary %}checked{% endif %}> Главное изображение</label>{% endif %}
               <label class="delete-image-check" aria-label="Выбрать фото для удаления">
                 <input type="checkbox" name="delete_images" value="{{ image.id }}">
                 <span></span>
@@ -77,18 +109,26 @@
         <p class="muted">Дополнительных фотографий пока нет.</p>
       {% endif %}
       <label class="file-upload fancy-file">
-        <span>Загрузить фото с ноутбука</span>
+        <span>Загрузить новые изображения в медиатеку</span>
         <input type="file" name="gallery_images" accept="image/*" multiple>
         <strong>Выбрать файлы</strong>
         <small class="file-name">Файлы не выбраны</small>
       </label>
       <label class="image-url-upload">
-        <span>Или добавить фото по ссылке</span>
+        <span>Выбрать файлы из общей медиатеки</span>
+        <select name="gallery_media" multiple size="8">
+          {% for media in media_library %}<option value="{{ media.id }}">{{ media.title }} · {{ media.get_media_type_display }}</option>{% endfor %}
+        </select>
+        <small>Можно выбрать несколько файлов. Повторно загружать их не нужно.</small>
+      </label>
+      <label class="image-url-upload">
+        <span>Или добавить изображения по внешней ссылке</span>
         <textarea name="gallery_image_urls" rows="3" placeholder="https://site.ru/photo-1.jpg&#10;https://site.ru/photo-2.jpg"></textarea>
         <small>Каждая ссылка — с новой строки.</small>
       </label>
     </section>
 
+    <p class="full"><a class="ghost-button" href="{% url 'management_media' %}" target="_blank" rel="noopener">Загрузить видео или документ в медиатеку</a></p>
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить</button>
       <a class="ghost-button" href="{% url 'management_products' %}">Отмена</a>

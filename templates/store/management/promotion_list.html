@@ -1,0 +1,15 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Акции{% endblock %}
+{% block content %}
+<section class="mgmt-card">
+  <div class="card-header"><p class="muted">На сайте показываются только включённые акции внутри указанного периода.</p><a class="primary-button" href="{% url 'management_promotion_new' %}">+ Добавить акцию</a></div>
+  <div class="table-wrap"><table class="mgmt-table"><thead><tr><th>Название</th><th>Период</th><th>Медиа</th><th>Статус</th><th></th></tr></thead><tbody>
+  {% for promotion in promotions %}<tr>
+    <td data-label="Название"><strong>{{ promotion.title }}</strong></td>
+    <td data-label="Период">{% if promotion.starts_at %}{{ promotion.starts_at|date:"d.m.Y H:i" }}{% else %}без даты{% endif %} — {% if promotion.ends_at %}{{ promotion.ends_at|date:"d.m.Y H:i" }}{% else %}без даты{% endif %}</td>
+    <td data-label="Медиа">{{ promotion.media.count }}</td><td data-label="Статус">{% if promotion.is_active %}<span class="status status-published">Включена</span>{% else %}<span class="status status-hidden">Выключена</span>{% endif %}</td>
+    <td class="row-actions" data-label="Действия"><a class="primary-button" href="{% url 'management_promotion_edit' promotion.id %}">Изменить</a><form method="post" action="{% url 'management_promotion_delete' promotion.id %}">{% csrf_token %}<button type="submit" onclick="return confirm('Удалить акцию?')">Удалить</button></form></td>
+  </tr>{% empty %}<tr><td colspan="5">Акции пока не добавлены.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

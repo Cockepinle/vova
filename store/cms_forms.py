@@ -1,7 +1,10 @@
 from django import forms
+from django.forms import formset_factory
+from django.db.models import Q
 from django.contrib.auth.forms import AuthenticationForm
+from django.core.exceptions import ValidationError
 
-from .models import AttributeDefinition, Category, Employee, PageContent, Product, ProductAttribute, SiteMedia, SiteSettings, SiteLink
+from .models import CustomerPrice, AttributeDefinition, Category, DeliveryMethod, Employee, PageContent, PaymentMethod, Product, ProductAttribute, Promotion, SiteMedia, SiteSettings, SiteLink, VariantGroup
 
 
 
@@ -44,12 +47,80 @@ class ContentValidationMixin:
 
 
 class ManagementLoginForm(AuthenticationForm):
-    username = forms.CharField(label="Логин", widget=forms.TextInput(attrs={"placeholder": "Введите логин"}))
+    username = forms.CharField(label="Логин", max_length=254, widget=forms.TextInput(attrs={"placeholder": "Введите логин"}))
     password = forms.CharField(label="Пароль", widget=forms.PasswordInput(attrs={"placeholder": "Введите пароль"}))
+
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        if not user.is_staff:
+            raise ValidationError("Неверный логин или пароль.", code="invalid_login")
+
+
+class ProductExcelImportForm(forms.Form):
+    file = forms.FileField(label="Файл Excel", widget=forms.FileInput(attrs={"accept": ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}))
+
+    def clean_file(self):
+        value = self.cleaned_data["file"]
+        if not value.name.lower().endswith(".xlsx"):
+            raise forms.ValidationError("Загрузите файл в формате .xlsx.")
+        if value.size > 15 * 1024 * 1024:
+            raise forms.ValidationError("Размер Excel-файла не должен превышать 15 МБ.")
+        return value
+
+
+def category_choices(field, excluded=()):
+    rows = [row for row in Category.tree_rows() if row.pk not in excluded]
+    field.queryset = Category.objects.filter(pk__in=[row.pk for row in rows])
+    field.choices = [("", "---------")] + [(row.pk, row.tree_label) for row in rows]
 
 
 class ProductForm(ContentValidationMixin, forms.ModelForm):
     sku = forms.CharField(label="Артикул", required=False)
+    volume_m3 = forms.DecimalField(label="Объём, м³ (автоматически)", required=False, disabled=True, max_digits=36, decimal_places=15)
+    new_variant_group = forms.CharField(label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
+    retail_price_preview = forms.DecimalField(label="Розничная цена (расчёт)", required=False, disabled=True, decimal_places=2)
+    wholesale_price_preview = forms.DecimalField(label="Оптовая цена (расчёт)", required=False, disabled=True, decimal_places=2)
+    special_price_preview = forms.DecimalField(label="Спеццена (расчёт)", required=False, disabled=True, decimal_places=2)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        category_choices(self.fields["category"])
+        self.fields["volume_m3"].initial = self.instance.volume_m3
+        from .pricing import price_for_level
+        for level in ("retail", "wholesale", "special"):
+            self.fields[f"{level}_price_preview"].initial = price_for_level(self.instance, level)
+        # Older form clients omit newly added tax fields; preserve the stored/default value.
+        if self.is_bound and "vat_rate" not in self.data:
+            self.data = self.data.copy()
+            self.data["vat_rate"] = self.instance.vat_rate
+
+        help_texts = {
+            "slug": "Часть адреса страницы товара. Например: korobka-330x330-belaya.",
+            "h1": "Главный видимый заголовок страницы. Если оставить пустым, используется название товара.",
+            "seo_title": "Заголовок вкладки браузера и результата поиска. Если пусто, используется название товара.",
+            "meta_description": "Краткое описание для поисковых систем. Если пусто, используется описание товара.",
+            "canonical": "Полный основной адрес страницы. Обычно оставьте пустым: адрес сформируется автоматически.",
+            "og_title": "Заголовок при публикации ссылки в соцсетях.",
+            "og_description": "Описание при публикации ссылки в соцсетях.",
+            "og_media": "Изображение из медиатеки для публикации ссылки.",
+        }
+        for name, help_text in help_texts.items():
+            self.fields[name].help_text = help_text
+
+    @property
+    def groups(self):
+        sections = [
+            ("Основная информация", ["category", "name", "sku", "description", "keywords", "status"]),
+            ("Цены", ["cost_price", "price", "retail_coefficient", "retail_price_preview", "wholesale_coefficient", "wholesale_price_preview", "special_coefficient", "special_price_preview", "old_price", "vat_rate"]),
+            ("Остатки и продажа", ["unit", "min_quantity", "stock_quantity", "availability", "is_hit", "is_new", "is_special"]),
+            ("Модификации товара", ["variant_group", "new_variant_group"]),
+            ("Габариты и вес", ["length_mm", "width_mm", "height_mm", "weight_kg", "volume_m3"]),
+            ("SEO страницы товара", ["slug", "h1", "seo_title", "meta_description", "canonical"]),
+            ("Отображение ссылки в соцсетях", ["og_title", "og_description", "og_media"]),
+            ("Главное изображение", ["image", "image_url", "media"]),
+        ]
+        return [(title, [self[name] for name in names]) for title, names in sections]
+
 
     class Meta:
         model = Product
@@ -60,8 +131,12 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "slug",
             *SEO_FIELDS,
             "description",
+            "keywords",
+            "variant_group",
+            "new_variant_group",
             "price",
             "old_price",
+            "cost_price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "vat_rate", "length_mm", "width_mm", "height_mm", "weight_kg", "media",
             "unit",
             "min_quantity",
             "stock_quantity",
@@ -69,6 +144,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "image_url",
             "is_hit",
             "is_new",
+            "is_special",
             "availability",
             "status",
         ]
@@ -77,6 +153,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "name": "Название",
             "sku": "Артикул",
             "description": "Описание",
+            "keywords": "Ключевые слова",
             "price": "Цена",
             "old_price": "Старая цена",
             "unit": "Единица измерения",
@@ -93,11 +170,62 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "image": forms.FileInput(attrs={"accept": "image/*"}),
         }
 
+    def clean(self):
+        data = super().clean()
+        if data.get("new_variant_group") and data.get("variant_group"):
+            self.add_error("new_variant_group", "Выберите существующую группу или создайте новую.")
+        coefficients = [data.get(name) for name in ("retail_coefficient", "wholesale_coefficient", "special_coefficient")]
+        if any(value is not None for value in coefficients) and data.get("cost_price") is None:
+            self.add_error("cost_price", "Укажите себестоимость для расчёта цен по коэффициентам.")
+        return data
+
+    def save(self, commit=True):
+        product = super().save(commit=False)
+        new_group_name = self.cleaned_data.get("new_variant_group", "").strip()
+        if new_group_name:
+            product.variant_group, _ = VariantGroup.objects.get_or_create(name=new_group_name)
+        if commit:
+            product.save()
+            self.save_m2m()
+        return product
+
 
 class CategoryForm(ContentValidationMixin, forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        excluded = self.instance.descendant_ids() if self.instance.pk else ()
+        category_choices(self.fields["parent"], excluded)
+        self.fields["filter_attributes"].queryset = AttributeDefinition.objects.filter(is_filterable=True, is_visible=True).order_by("sort_order", "name")
+        help_texts = {
+            "parent": "Выберите родительскую категорию. Пустое значение создаёт раздел верхнего уровня.",
+            "slug": "Часть адреса категории. Например: gofrokarton.",
+            "h1": "Главный видимый заголовок страницы. Если пусто, используется название категории.",
+            "seo_title": "Заголовок вкладки браузера и результата поиска. Если пусто, используется название категории.",
+            "meta_description": "Описание для поисковых систем. Если пусто, используется описание категории.",
+            "canonical": "Полный основной адрес страницы. Обычно оставьте пустым: адрес сформируется автоматически.",
+        }
+        for name, help_text in help_texts.items():
+            self.fields[name].help_text = help_text
+
+    @property
+    def groups(self):
+        sections = [
+            ("Категория и вложенность", ["name", "parent", "sort_order", "is_active"]),
+            ("Содержимое каталога", ["description", "filter_attributes", "image_media", "image", "image_url"]),
+            ("SEO категории", ["slug", "h1", "seo_title", "meta_description", "canonical"]),
+            ("Отображение ссылки в соцсетях", ["og_title", "og_description", "og_media"]),
+        ]
+        return [(title, [self[name] for name in names]) for title, names in sections]
+
+    def clean_filter_attributes(self):
+        values = self.cleaned_data["filter_attributes"]
+        if values.count() > 5:
+            raise forms.ValidationError("Для одной категории можно выбрать не более пяти фильтров.")
+        return values
+
     class Meta:
         model = Category
-        fields = ["name", "slug", "image", "image_url", "description", "is_active", *SEO_FIELDS]
+        fields = ["name", "parent", "sort_order", "slug", "image_media", "image", "image_url", "description", "filter_attributes", "is_active", *SEO_FIELDS]
         labels = {
             "name": "Название",
             "image": "Изображение",
@@ -108,6 +236,44 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
         widgets = {
             "image": forms.FileInput(attrs={"accept": "image/*"}),
         }
+
+
+class PromotionForm(forms.ModelForm):
+    class Meta:
+        model = Promotion
+        fields = ["title", "description", "starts_at", "ends_at", "is_active", "sort_order", "media"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 6}),
+            "starts_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "ends_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+            "media": forms.SelectMultiple(attrs={"size": 10}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["starts_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        self.fields["ends_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        self.fields["media"].queryset = SiteMedia.objects.order_by("-created_at")
+        self.fields["media"].help_text = "Выберите один или несколько файлов из общей медиатеки."
+
+
+class PaymentMethodForm(forms.ModelForm):
+    class Meta:
+        model = PaymentMethod
+        fields = ["name", "code", "kind", "provider_code", "is_active", "sort_order"]
+        help_texts = {"provider_code": "Оставьте пустым, пока конкретный онлайн-провайдер не подключён."}
+
+
+class DeliveryMethodForm(forms.ModelForm):
+    class Meta:
+        model = DeliveryMethod
+        fields = ["name", "code", "kind", "description", "provider_code", "handoff_url", "provider_config", "is_active", "sort_order"]
+        help_texts = {
+            "provider_code": "Код зарегистрированного delivery provider. API перевозчиков пока не подключены.",
+            "handoff_url": "Необязательная ссылка на портал перевозчика для ручного расчёта.",
+            "provider_config": "JSON-параметры для будущей интеграции. Не храните здесь секретные ключи.",
+        }
+        widgets = {"provider_config": forms.Textarea(attrs={"rows": 6, "spellcheck": "false"})}
 
 
 class EmployeeForm(forms.ModelForm):
@@ -148,7 +314,7 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
     def groups(self):
         sections = [
             ("Компания и бренд", ["site_name", "company_name", "company_inn", "company_kpp", "logo_text", "logo_image", "logo_alt", "logo_media", "favicon_media"]),
-            ("Общие контакты", ["contact_phone", "contact_email", "contact_email_b2b", "contact_address", "contact_work_hours"]),
+            ("Общие контакты и доставка", ["contact_phone", "contact_email", "contact_email_b2b", "contact_address", "pickup_address", "contact_work_hours"]),
             ("Шапка и основная кнопка", ["header_phone", "header_email", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "cta_label", "cta_url"]),
             ("Подвал и юридическая информация", [name for name in self.fields if name.startswith("footer_")] + ["copyright_text"]),
             ("Поиск и отправка ссылок", ["public_url", "seo_description", "og_media", "allow_indexing"]),
@@ -164,6 +330,7 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
             "contact_email",
             "contact_email_b2b",
             "contact_address",
+            "pickup_address",
             "contact_work_hours",
             "company_name",
             "company_inn",
@@ -261,7 +428,7 @@ class SiteMediaForm(forms.ModelForm):
 
     class Meta:
         model = SiteMedia
-        fields = ["title", "file", "alt"]
+        fields = ["title", "file", "alt", "description"]
         widgets = {"file": forms.FileInput(attrs={"accept": "image/*,video/*,application/pdf"})}
 
 
@@ -307,6 +474,85 @@ class AttributeDefinitionForm(forms.ModelForm):
             instance.save()
 
         return instance
+
+
+class ProductChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, product):
+        sku = f" · {product.sku}" if product.sku else ""
+        return f"{product.name}{sku}"
+
+
+class VariantGroupForm(forms.ModelForm):
+    attributes = forms.ModelMultipleChoiceField(
+        label="Параметры вариантов",
+        required=False,
+        queryset=AttributeDefinition.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+    )
+    products = ProductChoiceField(
+        label="Товары в группе",
+        required=False,
+        queryset=Product.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Отметьте существующие товары. Снятые товары будут исключены из группы без удаления.",
+    )
+
+    class Meta:
+        model = VariantGroup
+        fields = ["name"]
+        labels = {"name": "Название группы"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["attributes"].queryset = AttributeDefinition.objects.filter(
+            is_visible=True
+        ).order_by("sort_order", "name")
+        product_filter = Q(variant_group__isnull=True)
+        if self.instance.pk:
+            product_filter |= Q(variant_group=self.instance)
+        products = Product.objects.filter(product_filter).select_related(
+            "category"
+        ).order_by("name")
+        self.fields["products"].queryset = products
+        if self.instance.pk:
+            self.fields["attributes"].initial = self.instance.attributes.all()
+            self.fields["products"].initial = self.instance.products.all()
+
+
+class VariantParameterForm(forms.Form):
+    name = forms.CharField(label="Название", max_length=120, required=False)
+    value_type = forms.ChoiceField(
+        label="Тип значения",
+        choices=AttributeDefinition.TYPE_CHOICES,
+        required=False,
+    )
+    unit = forms.CharField(label="Единица измерения", max_length=40, required=False)
+    choices_text = forms.CharField(
+        label="Значения списка",
+        required=False,
+        widget=forms.Textarea(
+            attrs={"rows": 2, "placeholder": "Каждый вариант — с новой строки"}
+        ),
+    )
+
+    def clean(self):
+        data = super().clean()
+        name = data.get("name", "").strip()
+        if name:
+            data["name"] = name
+            data["value_type"] = data.get("value_type") or AttributeDefinition.TYPE_TEXT
+        elif any(data.get(key) for key in ("unit", "choices_text")):
+            raise forms.ValidationError("Укажите название параметра.")
+        return data
+
+
+VariantParameterFormSet = formset_factory(
+    VariantParameterForm,
+    extra=0,
+    can_delete=True,
+    max_num=30,
+    validate_max=True,
+)
 
 
 class DynamicProductFieldsForm(forms.Form):
@@ -424,3 +670,8 @@ class SiteLinkForm(ContentValidationMixin, forms.ModelForm):
 
 
 SiteLinkFormSet = forms.inlineformset_factory(SiteSettings, SiteLink, form=SiteLinkForm, extra=1, can_delete=True)
+
+
+CustomerPriceFormSet = forms.inlineformset_factory(
+    Product, CustomerPrice, fields=["user", "price"], extra=1, can_delete=True,
+)

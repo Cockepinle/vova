@@ -1,0 +1,17 @@
+<div class="catalog-category-node" style="--category-depth: {{ node.depth }}">
+  <div class="catalog-category-row">
+    <a class="catalog-category-link{% if node.is_active %} active{% endif %}" href="{% url 'catalog' %}?{% if category_query_string %}{{ category_query_string }}&amp;{% endif %}category={{ node.slug|urlencode }}" {% if node.is_active %}aria-current="page"{% endif %}>{{ node.name }}</a>
+    {% if node.children %}
+      <button class="catalog-category-toggle" type="button" aria-label="{% if node.is_expanded %}Скрыть{% else %}Показать{% endif %} подкатегории: {{ node.name }}" aria-expanded="{{ node.is_expanded|yesno:'true,false' }}" aria-controls="catalog-category-children-{{ tree_id }}-{{ node.id }}">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+      </button>
+    {% endif %}
+  </div>
+  {% if node.children %}
+    <div class="catalog-category-children" id="catalog-category-children-{{ tree_id }}-{{ node.id }}" {% if not node.is_expanded %}hidden{% endif %}>
+      {% for child in node.children %}
+        {% include "store/partials/catalog_category_tree_node.html" with node=child tree_id=tree_id only %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

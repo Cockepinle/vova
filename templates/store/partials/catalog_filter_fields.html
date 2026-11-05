@@ -1,0 +1,19 @@
+{% if filter.kind == 'price' %}
+  <fieldset>
+    <legend>Цена, ₽</legend>
+    <div class="catalog-price-filter">
+      <label><span>От</span><input type="number" name="price_min" min="0" step="0.01" value="{{ filter.price_min }}" aria-label="Минимальная цена"></label>
+      <label><span>До</span><input type="number" name="price_max" min="0" step="0.01" value="{{ filter.price_max }}" aria-label="Максимальная цена"></label>
+    </div>
+  </fieldset>
+{% elif filter.kind == 'availability' %}
+  <fieldset>
+    <legend>Наличие</legend>
+    <select name="availability" aria-label="Фильтр наличия">
+      <option value="">Любое</option>
+      {% for option in filter.options %}
+        <option value="{{ option.value }}" {% if option.value == filter.value %}selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+  </fieldset>
+{% endif %}

@@ -1,0 +1,30 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Способы доставки{% endblock %}
+{% block content %}
+  <section class="mgmt-card">
+    <div class="card-header">
+      <p class="muted">Настройте варианты доставки. Тарифы и интеграции перевозчиков не рассчитываются магазином; ссылка ведёт в сервис перевозчика для ручного расчёта.</p>
+      <a class="primary-button" href="{% url 'management_delivery_method_new' %}">+ Добавить способ</a>
+    </div>
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead><tr><th>Название</th><th>Тип</th><th>Код</th><th>Provider</th><th>Сервис перевозчика</th><th>Статус</th><th></th></tr></thead>
+        <tbody>
+          {% for method in delivery_methods %}
+            <tr>
+              <td><strong>{{ method.name }}</strong></td>
+              <td>{{ method.get_kind_display }}</td>
+              <td>{{ method.code }}</td>
+              <td>{{ method.provider_code|default:"—" }}</td>
+              <td>{% if method.handoff_url %}<a href="{{ method.handoff_url }}" target="_blank" rel="noopener noreferrer">Открыть</a>{% else %}—{% endif %}</td>
+              <td>{% if method.is_active %}<span class="status status-published">Доступен</span>{% else %}<span class="status status-hidden">Выключен</span>{% endif %}</td>
+              <td class="row-actions"><a class="primary-button" href="{% url 'management_delivery_method_edit' method.id %}">Изменить</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">Способы доставки не настроены.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

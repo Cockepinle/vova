@@ -1,0 +1,12 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Покупатели и уровни цен{% endblock %}
+{% block content %}
+<form class="mgmt-card" method="post">{% csrf_token %}
+  <div class="card-header"><p class="muted">Индивидуальная цена товара имеет приоритет. Если её нет, применяется выбранный здесь уровень.</p><button class="primary-button" type="submit">Сохранить уровни</button></div>
+  <div class="table-wrap"><table class="mgmt-table"><thead><tr><th>Покупатель</th><th>Компания</th><th>Уровень цен</th></tr></thead><tbody>
+  {% for row in customers %}<tr><td data-label="Покупатель"><strong>{{ row.user.get_full_name|default:row.user.username }}</strong><small>{{ row.user.email }}</small></td><td data-label="Компания">{{ row.profile.company|default:"—" }}</td><td data-label="Уровень цен"><select name="price_level_{{ row.user.id }}">{% for value,label in price_levels %}<option value="{{ value }}" {% if row.price_level == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td></tr>
+  {% empty %}<tr><td colspan="3">Покупателей пока нет.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="form-actions"><button class="primary-button" type="submit">Сохранить уровни</button></div>
+</form>
+{% endblock %}

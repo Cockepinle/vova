@@ -52,6 +52,7 @@ function syncCardQuantity(control) {
 }
 
 function openProductModal(product) {
+  window.renderProductMedia?.(product, modal.querySelector(".modal-info"));
   modalMainImage.src = product.image;
   modalMainImage.alt = product.name;
   modalBadge.textContent = product.badge || "";
@@ -119,6 +120,7 @@ function closeImageLightbox() {
 window.openProductDetails = openProductModal;
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest(".product-gallery-controls")) return;
   const minus = event.target.closest(".quantity-minus");
   const plus = event.target.closest(".quantity-plus");
   const addButton = event.target.closest(".add-to-cart");
@@ -208,7 +210,7 @@ document.addEventListener("change", (event) => {
 document.addEventListener("keydown", (event) => {
   const productCard = event.target.closest ? event.target.closest(".product-card") : null;
 
-  if (productCard && (event.key === "Enter" || event.key === " ")) {
+  if (productCard && !event.target.closest("button, input, a") && (event.key === "Enter" || event.key === " ")) {
     event.preventDefault();
     openProductModal(getProductFromCard(productCard));
   }

@@ -1,13 +1,18 @@
 {% extends "store/management/base.html" %}
 
-{% block heading %}{% if category %}Редактировать категорию{% else %}Новая категория{% endif %}{% endblock %}
+{% block heading %}{% if category %}Редактировать категорию{% elif form.parent.value %}Новая подкатегория{% else %}Новая категория{% endif %}{% endblock %}
 
 {% block content %}
-  <form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data">
+  <form class="mgmt-form-grid" method="post" enctype="multipart/form-data">
     {% csrf_token %}
-      {{ form.non_field_errors }}
-      <div class="form-grid">
-        {% for field in form %}
+    {{ form.non_field_errors }}
+    {% for group_title, fields in form.groups %}
+      <section class="mgmt-card form-section">
+        <h2>{{ group_title }}</h2>
+        {% if group_title == "Категория и вложенность" %}<p class="section-help">Для подкатегории выберите родительскую категорию. Уровней вложенности может быть несколько.</p>{% endif %}
+        {% if group_title == "SEO категории" %}<p class="section-help">Эти поля управляют адресом, заголовком и описанием страницы в поиске. Пустые поля заполняются данными категории автоматически.</p>{% endif %}
+        <div class="form-grid">
+        {% for field in fields %}
           {% if field.name == "image" %}
             <div class="full image-field">
               <span>Изображение</span>
@@ -22,14 +27,17 @@
               {{ field.errors }}
             </div>
           {% else %}
-            <label class="{% if field.name == 'description' %}full{% endif %}">
+            <label class="{% if field.name == 'description' or field.name == 'filter_attributes' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">
               <span>{{ field.label }}</span>
               {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
             </label>
           {% endif %}
-      {% endfor %}
-    </div>
+        {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить категорию</button>
       <a class="ghost-button" href="{% url 'management_categories' %}">Отмена</a>

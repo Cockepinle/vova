@@ -16,7 +16,7 @@
         <select name="category">
           <option value="">Все категории</option>
           {% for item in categories %}
-            <option value="{{ item.id }}" {% if category == item.id|stringformat:"s" %}selected{% endif %}>{{ item.name }}</option>
+            <option value="{{ item.id }}" {% if category == item.id|stringformat:"s" %}selected{% endif %}>{{ item.tree_label|default:item.name }}</option>
           {% endfor %}
         </select>
         <select name="sort">
@@ -30,7 +30,11 @@
         </select>
         <button class="ghost-button" type="submit">Применить</button>
       </form>
-      <a class="primary-button" href="{% url 'management_product_new' %}">+ Добавить товар</a>
+      <div class="toolbar-actions">
+        <a class="ghost-button" href="{% url 'management_product_export' %}">Экспорт XLSX</a>
+        <a class="ghost-button" href="{% url 'management_product_import' %}">Импорт XLSX</a>
+        <a class="primary-button" href="{% url 'management_product_new' %}">+ Добавить товар</a>
+      </div>
     </div>
 
     <form method="post" action="{% url 'management_product_bulk' %}">
@@ -61,7 +65,6 @@
             {% for product in page %}
               <tr>
                 <td><input type="checkbox" name="ids" value="{{ product.id }}"></td>
-                <input type="hidden" name="product_ids" value="{{ product.id }}">
                 <td class="product-cell">
                   {% if product.display_image_url %}<img src="{{ product.display_image_url }}" alt="">{% endif %}
                   <strong>{{ product.name }}</strong>
@@ -85,6 +88,7 @@
                   </td>
                 {% endfor %}
                 <td class="row-actions">
+                  <input type="hidden" name="product_ids" value="{{ product.id }}">
                   <a class="primary-button" href="{% url 'management_product_edit' product.id %}">Изменить</a>
                   <a href="{% url 'management_product_duplicate' product.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_product_delete' product.id %}" formmethod="post" onclick="return confirm('Удалить товар?')">Удалить</button>

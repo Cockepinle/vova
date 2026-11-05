@@ -1,0 +1,51 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    {% include "store/partials/theme.html" %}
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {% include "store/partials/seo.html" %}
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=33">
+    <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=33">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=36">
+  </head>
+  <body>
+    {% include "store/partials/header.html" %}
+    <main class="promotions-page">
+      <section class="page-hero promotions-hero">
+        <p class="eyebrow">Специальные предложения</p>
+        <h1>{{ seo.h1|default:"Акции" }}</h1>
+        <p>{{ current_page.subtitle|default:"Специальные предложения на картонные коробки и упаковку." }}</p>
+      </section>
+      <section class="promotions-grid">
+        {% for promotion in promotions %}
+          <article class="promotion-card">
+            <div class="promotion-gallery">{% for media in promotion.media.all %}{% if media.is_image %}<img src="{{ media.file.url }}" alt="{{ media.alt|default:promotion.title }}">{% endif %}{% endfor %}</div>
+            <div class="promotion-content">
+              {% if promotion.starts_at or promotion.ends_at %}<p class="promotion-period">{% if promotion.starts_at %}с {{ promotion.starts_at|date:"d.m.Y" }}{% endif %}{% if promotion.ends_at %} до {{ promotion.ends_at|date:"d.m.Y" }}{% endif %}</p>{% endif %}
+              <h2>{{ promotion.title }}</h2>
+              <div class="promotion-description">{{ promotion.description|linebreaks }}</div>
+              <div class="promotion-media">
+                {% for media in promotion.media.all %}
+                  {% if media.is_video %}<figure><video controls preload="metadata" src="{{ media.file.url }}"></video>{% if media.description %}<figcaption>{{ media.description }}</figcaption>{% endif %}</figure>
+                  {% elif not media.is_image %}<a href="{{ media.file.url }}" target="_blank" rel="noopener">{{ media.title }}</a>{% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          </article>
+        {% empty %}<div class="empty-state"><h2>Новых акций пока нет</h2><p>Следите за обновлениями — здесь появятся актуальные предложения.</p></div>{% endfor %}
+      </section>
+    </main>
+    {% include "store/partials/footer.html" %}
+    {% include "store/partials/cart_drawer.html" %}
+    {% include "store/partials/user_drawers.html" %}
+    {% include "store/partials/cookie_modal.html" %}
+    <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
+    <script src="{% static 'store/js/cart.js' %}?v=36"></script>
+    <script src="{% static 'store/js/account.js' %}?v=6"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
+    {% include "store/partials/mobile_actions.html" %}
+    <script src="{% static 'store/js/responsive.js' %}?v=37"></script>
+  </body>
+</html>

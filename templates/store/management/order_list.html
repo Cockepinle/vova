@@ -13,19 +13,39 @@
             <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
+        <select name="payment_status"><option value="">Все статусы оплаты</option>{% for value,label in payment_status_choices %}<option value="{{ value }}" {% if payment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <select name="payment_method"><option value="">Все способы оплаты</option>{% for method in payment_methods %}<option value="{{ method.id }}" {% if payment_method == method.id|stringformat:'s' %}selected{% endif %}>{{ method.name }}</option>{% endfor %}</select>
+        <select name="delivery_method"><option value="">Все способы доставки</option>{% for method in delivery_methods %}<option value="{{ method.id }}" {% if delivery_method == method.id|stringformat:'s' %}selected{% endif %}>{{ method.name }}</option>{% endfor %}</select>
+        <input type="date" name="date_from" value="{{ date_from }}" aria-label="Дата от">
+        <input type="date" name="date_to" value="{{ date_to }}" aria-label="Дата до">
         <button class="ghost-button" type="submit">Найти</button>
       </form>
+      <div class="toolbar-actions">
+        <button class="primary-button" type="submit" form="order-export-form" name="action" value="export_xlsx">Выгрузить выбранные</button>
+        <a class="ghost-button" href="{% url 'management_orders_export' %}?scope=all">Выгрузить все</a>
+      </div>
     </div>
 
+    <form id="order-export-form" method="post" action="{% url 'management_order_bulk' %}">{% csrf_token %}
+    <div class="bulk-bar">
+      <select name="status_action" aria-label="Новый статус выбранных заказов">
+        <option value="">Массово изменить статус</option>
+        {% for value,label in status_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <button class="ghost-button" type="submit" name="action" value="update_status" onclick="return confirm('Изменить статус выбранных заказов?')">Применить статус</button>
+    </div>
     <div class="table-wrap">
       <table class="mgmt-table">
         <thead>
           <tr>
+            <th><input type="checkbox" data-select-all aria-label="Выбрать все на странице"></th>
             <th>Номер</th>
             <th>Дата</th>
             <th>Клиент</th>
             <th>Телефон</th>
             <th>Сумма</th>
+            <th>Оплата</th>
+            <th>Доставка</th>
             <th>Статус</th>
             <th></th>
           </tr>
@@ -33,25 +53,29 @@
         <tbody>
           {% for order in page %}
             <tr>
+              <td><input type="checkbox" name="ids" value="{{ order.id }}" aria-label="Выбрать заказ {{ order.number }}"></td>
               <td><strong>{{ order.number }}</strong></td>
               <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
               <td>{{ order.full_name }}<br><span class="muted">{{ order.email }}</span></td>
               <td>{{ order.phone }}</td>
               <td><strong>{{ order.total }} ₽</strong></td>
+              <td>{{ order.payment_method_name|default:order.payment_method.name|default:"—" }}<br><span class="muted">{{ order.get_payment_status_display }}</span></td>
+              <td>{{ order.delivery_method_name|default:order.delivery_method.name|default:"—" }}{% if order.delivery_provider_code %}<br><span class="muted">{{ order.delivery_provider_code }}</span>{% endif %}</td>
               <td><span class="status status-{{ order.status }}">{{ order.get_status_display }}</span></td>
               <td class="row-actions"><a href="{% url 'management_order_detail' order.id %}">Открыть</a></td>
             </tr>
           {% empty %}
-            <tr><td colspan="7">Заказы пока не найдены.</td></tr>
+            <tr><td colspan="10">Заказы пока не найдены.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    </form>
 
     <div class="pagination">
-      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">Назад</a>{% endif %}
+      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}&payment_status={{ payment_status }}&payment_method={{ payment_method }}&delivery_method={{ delivery_method }}&date_from={{ date_from }}&date_to={{ date_to }}">Назад</a>{% endif %}
       <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">Вперёд</a>{% endif %}
+      {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}&payment_status={{ payment_status }}&payment_method={{ payment_method }}&delivery_method={{ delivery_method }}&date_from={{ date_from }}&date_to={{ date_to }}">Вперёд</a>{% endif %}
     </div>
   </section>
 {% endblock %}

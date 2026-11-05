@@ -1,0 +1,10 @@
+{% extends "store/management/base.html" %}
+{% block heading %}{% if promotion %}Редактировать акцию{% else %}Новая акция{% endif %}{% endblock %}
+{% block content %}
+<form class="mgmt-form-grid" method="post">{% csrf_token %}
+  <section class="mgmt-card"><h2>Содержание и период</h2>{{ form.non_field_errors }}<div class="form-grid">
+  {% for field in form %}<label class="{% if field.name == 'description' or field.name == 'media' %}full{% endif %}"><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}
+  </div><p class="section-help">Новый файл сначала загрузите в разделе <a href="{% url 'management_media' %}" target="_blank">«Общие медиа»</a>, затем выберите его здесь.</p></section>
+  <div class="form-actions"><button class="primary-button" type="submit">Сохранить акцию</button><a class="ghost-button" href="{% url 'management_promotions' %}">Отмена</a></div>
+</form>
+{% endblock %}

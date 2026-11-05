@@ -3,12 +3,13 @@ from urllib.parse import urlencode
 from django.urls import reverse
 from .models import Category, Product
 
-PAGE_PATHS = {'home':'/', 'catalog':'/catalog/', 'team':'/team/', 'contacts':'/contacts/', 'privacy':'/documents/privacy/', 'offer':'/documents/offer/'}
+PAGE_PATHS = {'home':'/', 'catalog':'/catalog/', 'team':'/team/', 'contacts':'/contacts/', 'promotions':'/promotions/', 'privacy':'/documents/privacy/', 'offer':'/documents/offer/'}
 PAGE_DEFAULTS = {
     'home': ('Упаковка для вашего бизнеса', 'Оптовые поставки упаковочных материалов. Подбор упаковки, доставка и консультация для бизнеса.'),
     'catalog': ('Каталог упаковочных материалов', 'Упаковочные материалы: категории, цены и характеристики. Выберите товары и оформите заказ.'),
     'team': ('Наша команда', 'Менеджеры, логисты и специалисты по упаковке. Познакомьтесь с командой и получите помощь в подборе материалов.'),
     'contacts': ('Контакты', 'Телефон, email, адрес и часы работы. Свяжитесь с нами или отправьте запрос на коммерческое предложение.'),
+    'promotions': ('Акции', 'Действующие акции и специальные предложения на упаковочные материалы.'),
     'privacy': ('Политика конфиденциальности', 'Порядок обработки и защиты персональных данных посетителей сайта и покупателей.'),
     'offer': ('Публичная оферта', 'Условия заказа, оплаты и поставки упаковочных материалов. Информация для покупателей.'),
 }
@@ -40,16 +41,16 @@ def metadata(request, settings, pages):
         slug = match.kwargs.get('slug') if match and match.url_name == 'product_detail' else None
         product_id = request.GET.get('product', '')
         if slug:
-            product = Product.objects.filter(slug=slug, status='published', category__is_active=True).first()
+            product = Product.objects.filter(slug=slug, status='published', category_id__in=Category.visible_ids()).first()
         elif product_id.isdigit():
-            product = Product.objects.filter(pk=product_id, status='published', category__is_active=True).first()
+            product = Product.objects.filter(pk=product_id, status='published', category_id__in=Category.visible_ids()).first()
         if product:
             record = product
             title = product.name
             description = product.description or f'{product.name}: цена, характеристики, минимальная партия и оформление заказа.'
             canonical_path = reverse('product_detail', args=[product.slug])
         elif request.GET.get('category'):
-            category = Category.objects.filter(slug=request.GET['category'], is_active=True).first()
+            category = Category.objects.filter(slug=request.GET['category'], pk__in=Category.visible_ids()).first()
             if category:
                 record = category
                 title = category.name
@@ -59,8 +60,10 @@ def metadata(request, settings, pages):
             title = 'Хиты продаж'
             description = 'Популярные упаковочные материалы: цены, характеристики и заказ.'
             canonical_path += '?hits=1'
-        if request.GET.get('q'):
+        has_catalog_modifiers = request.GET.get('q') or request.GET.get('sort') not in (None, '', 'default') or any(key.startswith('filter_') for key in request.GET)
+        if has_catalog_modifiers:
             noindex = True
+        if request.GET.get('q'):
             title = f'Поиск: {request.GET["q"][:100]}'
     seo_title = (getattr(record, 'seo_title', '') or f'{title} · {settings.site_name}')
     description = (getattr(record, 'meta_description', '') or description).strip()[:320]

@@ -39,7 +39,6 @@
             {% for employee in page %}
               <tr>
                 <td><input type="checkbox" name="ids" value="{{ employee.id }}"></td>
-                <input type="hidden" name="employee_ids" value="{{ employee.id }}">
                 <td class="product-cell">{% if employee.display_image_url %}<img src="{{ employee.display_image_url }}" alt="">{% endif %}<strong>{{ employee.name }}</strong></td>
                 <td>{{ employee.role }}</td>
                 <td>
@@ -50,6 +49,7 @@
                   </select>
                 </td>
                 <td class="row-actions">
+                  <input type="hidden" name="employee_ids" value="{{ employee.id }}">
                   <a class="primary-button" href="{% url 'management_employee_edit' employee.id %}">Изменить</a>
                   <a href="{% url 'management_employee_duplicate' employee.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_employee_delete' employee.id %}" formmethod="post" onclick="return confirm('Удалить сотрудника?')">Удалить</button>

@@ -1,6 +1,7 @@
 """Run against a seeded LOCAL server; never point mutation checks at production.
 PAKLINE_AUDIT_URL=http://127.0.0.1:8765 python tests/responsive_audit.py
 Optional PAKLINE_AUDIT_SESSION contains a staff session from the isolated database.
+Optional PAKLINE_AUDIT_THEME=dark checks the dark palette.
 Requires Playwright with chromium and webkit installed.
 """
 import json
@@ -28,7 +29,7 @@ def check_layout(page, label):
 with sync_playwright() as p:
     for name in os.environ.get('PAKLINE_AUDIT_ENGINES', 'chromium,webkit').split(','):
         browser = getattr(p, name).launch()
-        context = browser.new_context(viewport={'width':390,'height':844}, is_mobile=True, has_touch=True)
+        context = browser.new_context(viewport={'width':390,'height':844}, is_mobile=True, has_touch=True, color_scheme=os.environ.get('PAKLINE_AUDIT_THEME', 'light'))
         page = context.new_page()
         page.on('pageerror', lambda e: errors.append(str(e)))
         for path in PUBLIC + ['/management/login/']:
@@ -42,11 +43,12 @@ with sync_playwright() as p:
         page.goto(BASE+'/catalog/', wait_until='domcontentloaded')
         select = page.locator('.catalog-topline select')
         select.select_option(label='Сначала дешевле')
-        prices = page.locator('.catalog-card').evaluate_all("cards => cards.map(c => Number(JSON.parse(c.dataset.product).price.replace(/\\s/g, '').replace(',', '.')))")
+        prices = page.locator('.catalog-card').evaluate_all("cards => cards.map(c => Number(String(JSON.parse(c.dataset.product).price).replace(/\\s/g, '').replace(',', '.')))")
         assert prices == sorted(prices), prices
         select.select_option(label='По умолчанию')
         page.locator('.catalog-card .add-to-cart').first.click()
         page.wait_for_function("document.querySelector('.mobile-actions [data-cart-count]').textContent !== '0'")
+        page.keyboard.press('Escape')  # Adding a product opens the cart drawer.
         page.locator('.mobile-menu-toggle').click()
         assert page.locator('.main-nav').is_visible()
         page.locator('.mobile-menu-toggle').click()
@@ -74,10 +76,10 @@ with sync_playwright() as p:
         assert not page.locator('.mobile-actions').is_visible()
         check_layout(page, f'{name} cookies')
         page.keyboard.press('Escape')
-        page.locator('.js-account-open').click()
+        page.locator('.mobile-actions .js-account-open').click()
         check_layout(page, f'{name} account')
         page.keyboard.press('Escape')
-        page.locator('.js-favorites-open').click()
+        page.locator('.mobile-actions .js-favorites-open').click()
         check_layout(page, f'{name} favorites')
         page.keyboard.press('Escape')
         # Continuous-width sweep catches failures between named devices.

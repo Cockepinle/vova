@@ -1,0 +1,93 @@
+{% extends "store/management/base.html" %}
+{% load static %}
+
+{% block title %}{% if group %}Редактировать группу{% else %}Новая группа{% endif %}{% endblock %}
+{% block heading %}{% if group %}Редактировать группу модификаций{% else %}Новая группа модификаций{% endif %}{% endblock %}
+
+{% block content %}
+  <form class="mgmt-form-grid variant-group-form" method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <section class="mgmt-card form-section">
+      <h2>Название и параметры</h2>
+      <label class="full">
+        <span>{{ form.name.label }}</span>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </label>
+      <div class="full variant-parameter-section">
+        <div class="card-header">
+          <div>
+            <h3>Параметры, по которым отличаются варианты</h3>
+            <p class="muted">Например: «Цвет», «Размер», «Материал». Значения каждого товара задаются отдельно в его карточке.</p>
+          </div>
+          <button class="ghost-button" type="button" data-add-parameter>+ Добавить параметр</button>
+        </div>
+        {% if form.attributes.errors %}{{ form.attributes.errors }}{% endif %}
+        <div class="variant-attribute-options">
+          {% for checkbox in form.attributes %}
+            <label class="variant-checkbox">{{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span></label>
+          {% empty %}
+            <p class="muted">Параметров пока нет. Создайте первый ниже.</p>
+          {% endfor %}
+        </div>
+        <p class="muted">Полное редактирование критериев и их значений: <a class="variant-inline-link" href="{% url 'management_fields' %}">Поля товаров</a>.</p>
+        <div class="variant-parameter-rows" data-parameter-rows>
+          {{ parameter_forms.management_form }}
+          {% for parameter_form in parameter_forms %}
+            <div class="variant-parameter-row">
+              {% for hidden in parameter_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <label><span>{{ parameter_form.name.label }}</span>{{ parameter_form.name }}{{ parameter_form.name.errors }}</label>
+              <label><span>{{ parameter_form.value_type.label }}</span>{{ parameter_form.value_type }}{{ parameter_form.value_type.errors }}</label>
+              <label><span>{{ parameter_form.unit.label }}</span>{{ parameter_form.unit }}{{ parameter_form.unit.errors }}</label>
+              <label><span>{{ parameter_form.choices_text.label }}</span>{{ parameter_form.choices_text }}{{ parameter_form.choices_text.errors }}</label>
+              <label class="variant-parameter-delete">{{ parameter_form.DELETE }}<span>Удалить строку</span></label>
+              {{ parameter_form.non_field_errors }}
+            </div>
+          {% endfor %}
+        </div>
+        <template data-parameter-empty-form>
+          <div class="variant-parameter-row">
+            {% for hidden in parameter_forms.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+            <label><span>{{ parameter_forms.empty_form.name.label }}</span>{{ parameter_forms.empty_form.name }}</label>
+            <label><span>{{ parameter_forms.empty_form.value_type.label }}</span>{{ parameter_forms.empty_form.value_type }}</label>
+            <label><span>{{ parameter_forms.empty_form.unit.label }}</span>{{ parameter_forms.empty_form.unit }}</label>
+            <label><span>{{ parameter_forms.empty_form.choices_text.label }}</span>{{ parameter_forms.empty_form.choices_text }}</label>
+            <label class="variant-parameter-delete">{{ parameter_forms.empty_form.DELETE }}<span>Удалить строку</span></label>
+          </div>
+        </template>
+        {% if parameter_forms.non_form_errors %}{{ parameter_forms.non_form_errors }}{% endif %}
+      </div>
+    </section>
+
+    <section class="mgmt-card form-section">
+      <div class="card-header">
+        <div>
+          <h2>Товары группы</h2>
+          <p class="muted">Выбирайте уже существующие товары. Добавление или исключение из группы не создаёт и не удаляет товары.</p>
+        </div>
+      </div>
+      <label class="variant-product-search">
+        <span>Найти товар</span>
+        <input type="search" data-product-search placeholder="Название или артикул">
+      </label>
+      {{ form.products.errors }}
+      <div class="variant-product-options">
+        {% for checkbox in form.products %}
+          <div class="variant-product-option" data-product-option>
+            <label for="{{ checkbox.id_for_label }}">{{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span></label>
+            <a href="{% url 'management_product_edit' checkbox.data.value %}">Значения</a>
+          </div>
+        {% empty %}
+          <p class="muted">Нет товаров, доступных для добавления в эту группу.</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить группу</button>
+      <a class="ghost-button" href="{% url 'management_variant_groups' %}">Отмена</a>
+    </div>
+  </form>
+  <script src="{% static 'store/js/variant-groups.js' %}?v=1"></script>
+{% endblock %}

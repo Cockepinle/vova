@@ -1,0 +1,3 @@
+{% extends "store/management/base.html" %}
+{% block heading %}{% if method %}Редактировать способ оплаты{% else %}Новый способ оплаты{% endif %}{% endblock %}
+{% block content %}<form class="mgmt-form-grid" method="post">{% csrf_token %}<section class="mgmt-card"><h2>Настройки</h2>{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}</div></section><div class="form-actions"><button class="primary-button" type="submit">Сохранить</button><a class="ghost-button" href="{% url 'management_payment_methods' %}">Отмена</a></div></form>{% endblock %}

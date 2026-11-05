@@ -51,6 +51,10 @@
         {% if account_user.customer_profile.phone %}<span>Телефон: {{ account_user.customer_profile.phone }}</span>{% endif %}
         <button class="account-logout" type="button">Выйти</button>
       </div>
+      <section class="account-orders">
+        <h3>Мои заказы</h3>
+        {% for order in account_orders %}<details class="account-order"><summary><span><strong>{{ order.number }}</strong><small>{{ order.created_at|date:"d.m.Y H:i" }}</small></span><span><strong>{{ order.total }} ₽</strong><small>{{ order.get_status_display }}</small></span></summary><div class="account-order-body"><p>Оплата: <strong>{{ order.payment_method_name|default:order.payment_method.name|default:"—" }}</strong> · {{ order.get_payment_status_display }}</p><p>Доставка: <strong>{{ order.delivery_method_name|default:order.delivery_method.name|default:"Не указана" }}</strong></p>{% if order.delivery_address %}<p>Адрес получения: {{ order.delivery_address }}</p>{% endif %}{% if order.delivery_handoff_url %}<p><a href="{{ order.delivery_handoff_url }}" target="_blank" rel="noopener noreferrer">Перейти к перевозчику</a></p>{% endif %}{% for item in order.items.all %}<div class="account-order-item"><span>{{ item.product_name }} × {{ item.quantity }} {{ item.unit }}</span><strong>{{ item.line_total }} ₽</strong></div>{% endfor %}<button class="account-submit account-repeat-order" type="button" data-order-id="{{ order.id }}">Повторить заказ</button></div></details>{% empty %}<p class="muted">У вас пока нет заказов.</p>{% endfor %}
+      </section>
     {% else %}
       <div class="account-tabs" role="tablist" aria-label="Личный кабинет">
         <button class="account-tab is-active" type="button" data-tab="login">Вход</button>

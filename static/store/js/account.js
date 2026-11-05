@@ -294,6 +294,22 @@ document.addEventListener("click", async (event) => {
   const logoutButton = event.target.closest(".account-logout");
   const resetOpen = event.target.closest(".account-reset-open");
   const backLogin = event.target.closest(".account-back-login");
+  const repeatButton = event.target.closest(".account-repeat-order");
+
+  if (repeatButton) {
+    repeatButton.disabled = true;
+    try {
+      const payload = await postJson(`/account/orders/${repeatButton.dataset.orderId}/repeat/`, {});
+      showAccountMessage(payload.message);
+      document.querySelector(".account-drawer")?.classList.remove("is-open");
+      if (typeof window.applyRepeatedOrder === "function") window.applyRepeatedOrder(payload.cart);
+    } catch (error) {
+      showAccountMessage(error.message, true);
+    } finally {
+      repeatButton.disabled = false;
+    }
+    return;
+  }
 
   if (cookieButton) {
     openCookieModal();

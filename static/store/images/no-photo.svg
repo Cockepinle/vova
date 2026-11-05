@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title">
+  <title id="title">Фото отсутствует</title>
+  <rect width="640" height="480" fill="#f3f5f7"/>
+  <g fill="none" stroke="#aab3bd" stroke-linecap="round" stroke-linejoin="round" stroke-width="12">
+    <rect x="204" y="126" width="232" height="196" rx="18"/>
+    <circle cx="278" cy="194" r="20"/>
+    <path d="m220 292 68-68 48 46 36-34 52 56"/>
+  </g>
+  <text x="320" y="384" fill="#697586" font-family="Arial,sans-serif" font-size="24" text-anchor="middle">Фото отсутствует</text>
+</svg>

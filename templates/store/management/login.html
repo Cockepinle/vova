@@ -3,17 +3,25 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
+    {% include "store/partials/theme.html" %}
     <meta name="robots" content="noindex,nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Вход · PakLine CMS</title>
-    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=7">
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=34">
   </head>
   <body class="mgmt-login-page">
     <main class="login-card">
-      <a class="mgmt-brand" href="{% url 'home' %}">
-        {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span>{{ site_settings.logo_text|default:site_settings.site_name|default:'Сайт' }}</span>{% endif %}
-        <strong>{{ site_settings.site_name|default:'Панель управления' }} CMS</strong>
-      </a>
+      <header class="login-card-header">
+        <a class="mgmt-brand" href="{% url 'home' %}" aria-label="Вернуться на сайт">
+          {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span>{{ site_settings.logo_text|default:site_settings.site_name|default:'Сайт' }}</span>{% endif %}
+          <strong>{{ site_settings.site_name|default:'Панель управления' }} CMS</strong>
+        </a>
+        {% include "store/partials/theme_toggle.html" %}
+      </header>
+      <div class="login-intro">
+        <h1>Вход в панель управления</h1>
+        <p>Введите данные учётной записи администратора.</p>
+      </div>
       <form method="post">
         {% csrf_token %}
         {{ form.non_field_errors }}

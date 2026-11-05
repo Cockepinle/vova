@@ -13,10 +13,7 @@ def site_content(request):
         pages = {}
 
     try:
-        footer_categories = Category.objects.filter(is_active=True).order_by("sort_order", "name")
-
-        if not footer_categories.exists():
-            footer_categories = Category.objects.order_by("sort_order", "name")
+        footer_categories = Category.tree_rows(visible_only=True)
     except Exception:
         footer_categories = []
 

@@ -3,10 +3,11 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
+    {% include "store/partials/theme.html" %}
     <meta name="robots" content="noindex,nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
-    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=7">
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=38">
   </head>
   <body>
     <div class="mgmt-shell">
@@ -18,7 +19,12 @@
         <nav>
           <a class="{% if section == 'dashboard' %}active{% endif %}" href="{% url 'management_dashboard' %}">Обзор</a>
           <a class="{% if section == 'products' %}active{% endif %}" href="{% url 'management_products' %}">Товары</a>
+          <a class="{% if section == 'variants' %}active{% endif %}" href="{% url 'management_variant_groups' %}">Модификации товаров</a>
           <a class="{% if section == 'orders' %}active{% endif %}" href="{% url 'management_orders' %}">Заказы</a>
+          <a class="{% if section == 'customers' %}active{% endif %}" href="{% url 'management_customers' %}">Покупатели</a>
+          <a class="{% if section == 'promotions' %}active{% endif %}" href="{% url 'management_promotions' %}">Акции</a>
+          <a class="{% if section == 'payment_methods' %}active{% endif %}" href="{% url 'management_payment_methods' %}">Способы оплаты</a>
+          <a class="{% if section == 'delivery_methods' %}active{% endif %}" href="{% url 'management_delivery_methods' %}">Способы доставки</a>
           <a class="{% if section == 'categories' %}active{% endif %}" href="{% url 'management_categories' %}">Категории</a>
           <a class="{% if section == 'employees' %}active{% endif %}" href="{% url 'management_employees' %}">Сотрудники</a>
           <a class="{% if section == 'requests' %}active{% endif %}" href="{% url 'management_requests' %}">Запросы на КП</a>
@@ -35,6 +41,7 @@
             <p>Панель управления</p>
             <h1>{% block heading %}Обзор{% endblock %}</h1>
           </div>
+          {% include "store/partials/theme_toggle.html" %}
           <form method="post" action="{% url 'management_logout' %}">
             {% csrf_token %}
             <button class="ghost-button" type="submit">Выйти</button>
@@ -52,6 +59,6 @@
         {% block content %}{% endblock %}
       </main>
     </div>
-    <script src="{% static 'store/js/management.js' %}?v=3"></script>
+    <script src="{% static 'store/js/management.js' %}?v=34"></script>
   </body>
 </html>

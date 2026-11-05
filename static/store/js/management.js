@@ -88,3 +88,18 @@ document.querySelectorAll('[data-copy-url]').forEach(button => button.addEventLi
   try { await navigator.clipboard.writeText(url); button.textContent = 'Ссылка скопирована'; }
   catch { window.prompt('Скопируйте ссылку', url); }
 }));
+
+document.querySelectorAll('.js-customer-price-toggle').forEach(checkbox => {
+  const priceInput = checkbox.closest('.customer-price-row')?.querySelector('input[type="number"]');
+  const syncPriceInput = () => {
+    if (!priceInput) return;
+    priceInput.disabled = !checkbox.checked;
+    if (checkbox.checked && !priceInput.value) priceInput.focus();
+  };
+  checkbox.addEventListener('change', syncPriceInput);
+});
+document.querySelector("[data-select-all]")?.addEventListener("change", (event) => {
+  document.querySelectorAll('#order-export-form input[name="ids"]').forEach((input) => {
+    input.checked = event.target.checked;
+  });
+});

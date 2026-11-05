@@ -1,0 +1,27 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Импорт товаров из Excel{% endblock %}
+{% block content %}
+  <section class="mgmt-card import-card">
+    <h2>Загрузить XLSX</h2>
+    <p class="section-help">Товары сопоставляются по артикулу: существующие обновляются, новые создаются. Товары, которых нет в файле, остаются без изменений.</p>
+    <p class="section-help">Для гарантированной совместимости сначала скачайте экспорт, отредактируйте его и загрузите обратно. Категории из файла должны заранее существовать в каталоге.</p>
+    <form class="mgmt-form media-upload-form" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <label><span>{{ form.file.label }}</span>{{ form.file }}{{ form.file.errors }}</label>
+      <button class="primary-button" type="submit">Начать импорт</button>
+    </form>
+  </section>
+  {% if result %}
+    <section class="mgmt-card import-result">
+      <h2>Результат</h2>
+      <div class="stats-grid">
+        <article><span>Создано</span><strong>{{ result.created }}</strong></article>
+        <article><span>Обновлено</span><strong>{{ result.updated }}</strong></article>
+        <article><span>Пропущено</span><strong>{{ result.skipped }}</strong></article>
+        <article><span>Ошибок</span><strong>{{ result.errors|length }}</strong></article>
+      </div>
+      {% if result.errors %}<div class="import-errors"><h3>Ошибки строк</h3><ul>{% for error in result.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+    </section>
+  {% endif %}
+{% endblock %}

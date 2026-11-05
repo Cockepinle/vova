@@ -1,0 +1,37 @@
+{% extends "store/management/base.html" %}
+
+{% block title %}Модификации товаров{% endblock %}
+{% block heading %}Модификации товаров{% endblock %}
+
+{% block content %}
+  <div class="page-actions">
+    <a class="primary-button" href="{% url 'management_variant_group_new' %}">Создать группу</a>
+  </div>
+  <section class="mgmt-card">
+    {% if groups %}
+      <div class="table-wrap">
+        <table class="mgmt-table">
+          <thead><tr><th>Название группы</th><th>Параметры</th><th>Товары</th><th>Действия</th></tr></thead>
+          <tbody>
+            {% for group in groups %}
+              <tr>
+                <td><strong>{{ group.name }}</strong></td>
+                <td>{% for attribute in group.attributes.all %}<span class="variant-chip">{{ attribute.name }}</span>{% empty %}<span class="muted">Не заданы</span>{% endfor %}</td>
+                <td>{{ group.products.count }}</td>
+                <td class="table-actions">
+                  <a class="ghost-button" href="{% url 'management_variant_group_edit' group.pk %}">Открыть</a>
+                  <form method="post" action="{% url 'management_variant_group_delete' group.pk %}" onsubmit="return confirm('Удалить группу? Товары и их данные останутся.');">
+                    {% csrf_token %}
+                    <button class="ghost-button danger-button" type="submit">Удалить группу</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">Групп пока нет. Создайте группу, выберите параметры и добавьте в неё существующие товары.</p>
+    {% endif %}
+  </section>
+{% endblock %}

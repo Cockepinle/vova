@@ -1,0 +1,60 @@
+/* Shared palette for the storefront and CMS. White on filled actions stays white. */
+:root {
+  color-scheme: light;
+  --blue: #1238f4;
+  --blue-dark: #0d2edf;
+  --text: #172033;
+  --ink: var(--text);
+  --muted: #626d80;
+  --line: #dce2ec;
+  --surface: #ffffff;
+  --section: #f3f5f9;
+  --inverse: #172033;
+  --accent-soft: #edf1ff;
+  --danger: #bf2342;
+  --danger-soft: #ffedf1;
+  --success: #19763a;
+  --success-soft: #eaf7ef;
+  --warning: #855500;
+  --warning-soft: #fff3d9;
+  --radius-control: 12px;
+  --radius-card: 20px;
+  --font: Arial, Helvetica, sans-serif;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --blue: #91aaff;
+  --blue-dark: #b1c1ff;
+  --text: #edf2fc;
+  --muted: #aab6cc;
+  --line: #354258;
+  --surface: #182234;
+  --section: #101827;
+  --inverse: #080e19;
+  --accent-soft: #273759;
+  --danger: #ff91a6;
+  --danger-soft: #442634;
+  --success: #85dca3;
+  --success-soft: #193c30;
+  --warning: #f3cb7a;
+  --warning-soft: #413622;
+}
+body { background: var(--surface); }
+button, input, select, textarea { color: inherit; }
+input, select, textarea { background-color: var(--surface); border-radius: var(--radius-control); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.theme-toggle {
+  display: inline-grid; place-items: center; flex: 0 0 44px;
+  width: 44px; height: 44px; padding: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-control);
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.theme-toggle:hover { background: var(--accent-soft); border-color: var(--blue); }
+.theme-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.theme-sun, [data-theme="dark"] .theme-moon { display: none; }
+[data-theme="dark"] .theme-sun { display: block; }
+/* Dark theme keeps white labels readable on solid blue actions. */
+:root[data-theme="dark"] { --action: #3559df; --action-hover: #2949c2; }
+:root { --action: #1238f4; --action-hover: #0d2edf; }

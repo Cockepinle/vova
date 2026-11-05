@@ -1,0 +1,26 @@
+{% extends "store/management/base.html" %}
+{% block heading %}{% if method %}Редактировать способ доставки{% else %}Новый способ доставки{% endif %}{% endblock %}
+{% block content %}
+  <form class="mgmt-form-grid" method="post">
+    {% csrf_token %}
+    <section class="mgmt-card">
+      <h2>Настройки доставки</h2>
+      <p class="section-help">Добавляйте перевозчиков отдельными способами доставки. API-ключи и реальные интеграции здесь пока не настраиваются.</p>
+      {{ form.non_field_errors }}
+      <div class="form-grid">
+        {% for field in form %}
+          <label class="{% if field.name == 'description' or field.name == 'provider_config' %}full{% endif %}">
+            <span>{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+            {{ field.errors }}
+          </label>
+        {% endfor %}
+      </div>
+    </section>
+    <div class="form-actions">
+      <button class="primary-button" type="submit">Сохранить</button>
+      <a class="ghost-button" href="{% url 'management_delivery_methods' %}">Отмена</a>
+    </div>
+  </form>
+{% endblock %}

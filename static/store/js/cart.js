@@ -2,6 +2,8 @@ const drawer = document.querySelector(".cart-drawer");
 const cartItems = drawer.querySelector(".cart-items");
 const cartTitleCount = drawer.querySelector(".cart-panel-header span");
 const cartTotal = drawer.querySelector(".cart-total strong");
+const cartWeight = drawer.querySelector("[data-cart-weight]");
+const cartVolume = drawer.querySelector("[data-cart-volume]");
 const cartBulkActions = drawer.querySelector(".cart-bulk-actions");
 const cartSelectAll = drawer.querySelector(".cart-select-all");
 const cartRemoveSelected = drawer.querySelector(".cart-remove-selected");
@@ -40,7 +42,69 @@ function openCartDrawer() {
   document.body.classList.add("cart-open");
 }
 
-function openCheckoutDrawer() {
+async function saveCheckoutDraft() {
+  if (!checkoutDrawer) return;
+  const form = checkoutDrawer.querySelector(".checkout-panel");
+  storeCheckoutFormDraft(form);
+  if (!window.isAuthenticated) return;
+  const method = form?.querySelector('input[name="payment_method"]:checked')?.value || "invoice";
+  const deliveryMethod = form?.querySelector('input[name="delivery_method"]:checked')?.value || "delivery";
+  const deliveryAddress = form?.querySelector('[name="delivery_address"]')?.value || "";
+  const storedId = sessionStorage.getItem("paklineCheckoutOrderId") || form?.querySelector('[name="checkout_order_id"]')?.value || "";
+  const response = await fetch("/cart/checkout/start/", {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
+    body: JSON.stringify({payment_method: method, delivery_method: deliveryMethod, delivery_address: deliveryAddress, checkout_order_id: storedId}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (response.ok && payload.checkout_order_id) {
+    sessionStorage.setItem("paklineCheckoutOrderId", String(payload.checkout_order_id));
+    const input = form?.querySelector('[name="checkout_order_id"]');
+    if (input) input.value = String(payload.checkout_order_id);
+  } else if (checkoutDrawer.classList.contains("is-open")) {
+    const message = form?.querySelector(".checkout-message");
+    if (message) {
+      message.hidden = false;
+      message.classList.add("is-error");
+      message.textContent = payload.error || "Не удалось обновить параметры заказа";
+    }
+  }
+}
+
+function storeCheckoutFormDraft(form) {
+  if (!form) return;
+  const draft = Object.fromEntries(
+    [...new FormData(form).entries()].filter(([name]) => name !== "checkout_order_id"),
+  );
+  try {
+    sessionStorage.setItem("paklineCheckoutFormDraft", JSON.stringify(draft));
+  } catch (_) {
+    // Keep the checkout functional if the browser blocks session storage.
+  }
+}
+
+function restoreCheckoutFormDraft(form) {
+  if (!form) return;
+  let draft;
+  try {
+    draft = JSON.parse(sessionStorage.getItem("paklineCheckoutFormDraft") || "null");
+  } catch (_) {
+    sessionStorage.removeItem("paklineCheckoutFormDraft");
+    return;
+  }
+  if (!draft || typeof draft !== "object") return;
+  Object.entries(draft).forEach(([name, value]) => {
+    form.querySelectorAll(`[name="${CSS.escape(name)}"]`).forEach((field) => {
+      if (field.type === "radio") {
+        field.checked = field.value === value;
+      } else {
+        field.value = value;
+      }
+    });
+  });
+}
+
+function openCheckoutDrawer(paymentMethod = "") {
   if (!checkoutDrawer) {
     return;
   }
@@ -54,6 +118,8 @@ function openCheckoutDrawer() {
     message.textContent = "";
     message.classList.remove("is-error");
   }
+  checkoutDrawer.querySelector(".checkout-delivery-link").hidden = true;
+  checkoutDrawer.querySelector(".checkout-delivery-data").hidden = true;
 
   if (submitButton) {
     submitButton.disabled = false;
@@ -61,13 +127,19 @@ function openCheckoutDrawer() {
   }
 
   if (checkoutForm) {
-    checkoutForm.querySelector('[name="comment"]')?.focus();
-    checkoutForm.querySelector('[name="full_name"]')?.focus();
+    restoreCheckoutFormDraft(checkoutForm);
+    if (paymentMethod) {
+      const option = checkoutForm.querySelector(`input[name="payment_method"][value="${paymentMethod}"]`);
+      if (option) option.checked = true;
+    }
+    const storedId = sessionStorage.getItem("paklineCheckoutOrderId");
+    if (storedId) checkoutForm.querySelector('[name="checkout_order_id"]').value = storedId;
   }
 
   checkoutDrawer.classList.add("is-open");
   checkoutDrawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("cart-open");
+  saveCheckoutDraft();
 }
 
 function closeCheckoutDrawer() {
@@ -168,6 +240,10 @@ function isProductFavorite(productId) {
 function renderCart(cart) {
   cartTitleCount.textContent = `(${cart.count})`;
   cartTotal.textContent = `${cart.total} ₽`;
+  const checkoutTotal = checkoutDrawer?.querySelector("[data-checkout-total]");
+  if (checkoutTotal) checkoutTotal.textContent = `${cart.total} ₽`;
+  if (cartWeight) cartWeight.textContent = `${cart.total_weight_kg || "0"} кг`;
+  if (cartVolume) cartVolume.textContent = `${cart.total_volume_m3 || "0"} м³`;
   updateCartBadges(cart.count);
   syncProductCards(cart);
 
@@ -208,6 +284,9 @@ function renderCart(cart) {
     )
     .join("");
   updateCartBulkState();
+  if (checkoutDrawer?.classList.contains("is-open") && window.isAuthenticated) {
+    saveCheckoutDraft();
+  }
 }
 
 async function refreshCartFromApi() {
@@ -325,6 +404,10 @@ async function updateProductInCart(productId, quantity) {
 
 window.setProductCartQuantity = updateProductInCart;
 window.openCartDrawer = openCartDrawer;
+window.applyRepeatedOrder = (cart) => {
+  renderCart(cart);
+  openCartDrawer();
+};
 window.getProductCartQuantity = (productId) => cartProductQuantities[productId] || 0;
 window.refreshCartFromApi = refreshCartFromApi;
 
@@ -404,7 +487,7 @@ document.addEventListener("click", (event) => {
     }
 
     if (typeof window.openCheckoutDrawer === "function") {
-      window.openCheckoutDrawer();
+      window.openCheckoutDrawer(event.target.closest(".cart-invoice") ? "invoice" : "");
     }
 
     return;
@@ -447,6 +530,8 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = checkoutForm.querySelector(".checkout-message");
   const submitButton = checkoutForm.querySelector(".checkout-submit");
+  const deliveryLink = checkoutForm.querySelector(".checkout-delivery-link");
+  const deliveryData = checkoutForm.querySelector(".checkout-delivery-data");
 
   if (submitButton) {
     submitButton.disabled = true;
@@ -476,12 +561,24 @@ document.addEventListener("submit", async (event) => {
   }
 
   if (response.ok) {
+    if (deliveryLink) {
+      deliveryLink.hidden = !payload.delivery_url;
+      if (payload.delivery_url) deliveryLink.href = payload.delivery_url;
+    }
+    if (deliveryData) {
+      const requestData = payload.delivery_data?.request;
+      deliveryData.hidden = !requestData;
+      deliveryData.querySelector("pre").textContent = requestData ? JSON.stringify(requestData, null, 2) : "";
+    }
     renderCart(payload.cart);
+    sessionStorage.removeItem("paklineCheckoutOrderId");
+    sessionStorage.removeItem("paklineCheckoutFormDraft");
     checkoutForm.reset();
     if (submitButton) {
       submitButton.textContent = "Заказ принят";
       submitButton.disabled = true;
     }
+    if (payload.payment_url) window.location.assign(payload.payment_url);
     return;
   }
 
@@ -495,6 +592,15 @@ document.addEventListener("click", (event) => {
   if (event.target.closest(".checkout-close, .checkout-drawer .drawer-backdrop")) {
     closeCheckoutDrawer();
   }
+});
+
+document.addEventListener("change", (event) => {
+  if (event.target.matches('.checkout-panel input[name="payment_method"], .checkout-panel input[name="delivery_method"], .checkout-panel input[name="delivery_address"]')) saveCheckoutDraft();
+});
+
+document.addEventListener("input", (event) => {
+  const form = event.target.closest(".checkout-panel");
+  if (form) storeCheckoutFormDraft(form);
 });
 
 document.addEventListener("keydown", (event) => {

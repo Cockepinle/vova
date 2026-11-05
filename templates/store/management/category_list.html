@@ -30,24 +30,25 @@
           <tbody>
             {% for category in page %}
               <tr>
-                <td><input type="checkbox" name="ids" value="{{ category.id }}"></td>
-                <input type="hidden" name="category_ids" value="{{ category.id }}">
-                <td class="product-cell">{% if category.display_image_url %}<img src="{{ category.display_image_url }}" alt="">{% endif %}<strong>{{ category.name }}</strong></td>
-                <td>
+                <td data-label="Выбрать"><input type="checkbox" name="ids" value="{{ category.id }}"></td>
+                <td class="product-cell" data-label="Название">{% if category.display_image_url %}<img src="{{ category.display_image_url }}" alt="">{% endif %}<span><strong>{{ category.name }}</strong>{% if category.parent %}<small>В категории: {{ category.parent.name }}</small>{% endif %}</span></td>
+                <td data-label="Товары">
                   {% if category.product_count %}
                     <a class="count-link" href="{% url 'management_products' %}?category={{ category.id }}">{{ category.product_count }}</a>
                   {% else %}
                     <span class="muted">0</span>
                   {% endif %}
                 </td>
-                <td>
+                <td data-label="Статус">
                   <select class="status-select" name="status_{{ category.id }}">
                     <option value="published" {% if category.is_active %}selected{% endif %}>Опубликовано</option>
                     <option value="hidden" {% if not category.is_active %}selected{% endif %}>Скрыто</option>
                   </select>
                 </td>
-                <td class="row-actions">
+                <td class="row-actions" data-label="Действия">
+                  <input type="hidden" name="category_ids" value="{{ category.id }}">
                   <a class="primary-button" href="{% url 'management_category_edit' category.id %}">Изменить</a>
+                  <a class="ghost-button" href="{% url 'management_category_new' %}?parent={{ category.id }}">+ Подкатегория</a>
                   <a href="{% url 'management_category_duplicate' category.id %}">Дублировать</a>
                   <button type="submit" formaction="{% url 'management_category_delete' category.id %}" formmethod="post" onclick="return confirm('Удалить категорию?')">Удалить</button>
                 </td>
