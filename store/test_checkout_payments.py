@@ -63,12 +63,12 @@ class CheckoutPaymentTests(TestCase):
 
     def test_started_checkout_is_saved_once_and_visible_to_owner(self):
         first = self.start_checkout().json()
-        second = self.start_checkout("online").json()
+        second = self.start_checkout().json()
         self.assertEqual(first["checkout_order_id"], second["checkout_order_id"])
         self.assertEqual(Order.objects.filter(user=self.customer).count(), 1)
         order = Order.objects.get(user=self.customer)
         self.assertEqual(order.status, Order.STATUS_CHECKOUT_STARTED)
-        self.assertEqual(order.payment_method.code, "online")
+        self.assertEqual(order.payment_method.code, "invoice")
         self.assertEqual(order.items.get().price, Decimal("125.50"))
         self.assertTrue(CartItem.objects.filter(user=self.customer).exists())
         listed = self.client.get(reverse("account_orders")).json()["orders"]
@@ -109,20 +109,16 @@ class CheckoutPaymentTests(TestCase):
         self.client.force_login(manager)
         self.assertContains(self.client.get(reverse("management_orders")), order.number)
 
-    def test_delivery_methods_persist_type_and_pickup_address_without_carrier_handoff(self):
+    def test_disabled_own_delivery_is_rejected_server_side(self):
         own = DeliveryMethod.objects.get(code="own-delivery")
         own_response = self.client.post(
             reverse("checkout_order"),
             json.dumps({**self.payload(), "delivery_method": own.code}),
             content_type="application/json",
         )
-        self.assertEqual(own_response.status_code, 200, own_response.content)
-        own_order = Order.objects.get(user=self.customer)
-        self.assertEqual(own_order.delivery_method, own)
-        self.assertEqual(own_order.delivery_method_kind, DeliveryMethod.KIND_OWN)
-        self.assertEqual(own_order.delivery_method_name, "Собственная доставка")
-        self.assertFalse(own_order.delivery_handoff_url)
-        self.assertEqual(own_order.delivery_provider_data, {})
+        self.assertEqual(own_response.status_code, 400, own_response.content)
+        self.assertFalse(Order.objects.filter(user=self.customer).exists())
+        self.assertTrue(CartItem.objects.filter(user=self.customer).exists())
 
     def test_checkout_ui_shows_all_delivery_choices_and_pickup_location(self):
         shop_settings = SiteSettings.get_solo()
@@ -131,9 +127,11 @@ class CheckoutPaymentTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, "Транспортная компания")
         self.assertContains(response, "Собственная доставка")
-        self.assertContains(response, "по согласованию с менеджером")
+        self.assertContains(response, "Скоро будет доступно")
         self.assertContains(response, "Самовывоз")
         self.assertContains(response, shop_settings.pickup_address)
+        self.assertContains(response, 'value="pickup" required checked')
+        self.assertContains(response, 'value="online" disabled')
 
     def test_pickup_uses_shop_setting_instead_of_carrier(self):
         settings = SiteSettings.get_solo()
@@ -150,7 +148,7 @@ class CheckoutPaymentTests(TestCase):
         self.assertEqual(order.delivery_address, settings.pickup_address)
         self.assertFalse(order.delivery_handoff_url)
 
-    def test_carrier_provider_receives_backend_snapshot_and_returns_handoff(self):
+    def test_disabled_carrier_is_rejected_without_running_provider(self):
         register_delivery_provider(FakeDeliveryProvider())
         self.addCleanup(lambda: delivery_providers.pop("fake-carrier", None))
         carrier = DeliveryMethod.objects.get(code="delivery")
@@ -161,24 +159,16 @@ class CheckoutPaymentTests(TestCase):
             json.dumps({**self.payload(), "delivery_method": carrier.code, "delivery_address": "Казань, ул. Тестовая, 7"}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 200, response.content)
-        order = Order.objects.get(user=self.customer)
-        self.assertEqual(order.delivery_provider_code, "fake-carrier")
-        self.assertEqual(response.json()["delivery_url"], "https://carrier.example.test/calculate")
-        handoff_request = response.json()["delivery_data"]["request"]
-        self.assertEqual(handoff_request["total_weight_kg"], "5.000")
-        self.assertEqual(Decimal(handoff_request["total_volume_m3"]), Decimal("0.120"))
-        self.assertEqual(handoff_request["origin_address"], SiteSettings.get_solo().contact_address)
-        self.assertEqual(handoff_request["destination_address"], "Казань, ул. Тестовая, 7")
-        self.assertEqual(handoff_request["packages"][0]["dimensions_mm"], {"length": "500.00", "width": "400.00", "height": "300.00"})
-        self.assertEqual(order.items.get().length_mm, Decimal("500.00"))
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(Order.objects.filter(user=self.customer).exists())
+        self.assertTrue(CartItem.objects.filter(user=self.customer).exists())
 
     def test_checkout_draft_delivery_totals_follow_backend_cart_changes(self):
         draft = self.start_checkout().json()["checkout_order_id"]
         CartItem.objects.filter(user=self.customer, product=self.product).update(quantity=3)
         response = self.client.post(
             reverse("start_checkout"),
-            json.dumps({"checkout_order_id": draft, "delivery_method": "delivery", "payment_method": "invoice"}),
+            json.dumps({"checkout_order_id": draft, "delivery_method": "pickup", "payment_method": "invoice"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200, response.content)
@@ -187,43 +177,92 @@ class CheckoutPaymentTests(TestCase):
         self.assertEqual(order.total_volume_m3, Decimal("0.180"))
         self.assertEqual(order.items.get().quantity, 3)
 
-    def test_online_provider_and_verified_webhook_update_status(self):
+    def test_online_payment_is_disabled_until_provider_is_configured(self):
         register_provider(FakeProvider())
         self.addCleanup(lambda: payment_providers.pop("fake", None))
         self.online.provider_code = "fake"
         self.online.save(update_fields=["provider_code"])
         response = self.post_checkout("online")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["payment_url"], "https://pay.example.test/session")
-        payment = Payment.objects.get(order__user=self.customer)
-        self.assertEqual(payment.status, Order.PAYMENT_PENDING)
-        self.assertEqual(payment.order.status, Order.STATUS_PENDING_PAYMENT)
-        self.assertNotEqual(payment.order.status, Order.STATUS_PAID)
-        webhook = self.client.post(reverse("payment_webhook", args=["fake"]), json.dumps({"external_id": payment.external_id, "status": "paid"}), content_type="application/json")
-        self.assertEqual(webhook.status_code, 200)
-        payment.refresh_from_db()
-        payment.order.refresh_from_db()
-        self.assertEqual(payment.status, Order.PAYMENT_PAID)
-        self.assertEqual(payment.order.payment_status, Order.PAYMENT_PAID)
-        self.assertEqual(payment.order.status, Order.STATUS_PAID)
-        self.assertEqual(Order.objects.filter(user=self.customer).count(), 1)
-
-        self.client.force_login(self.customer)
-        account_order = self.client.get(reverse("account_orders")).json()["orders"][0]
-        self.assertEqual(account_order["id"], str(payment.order_id))
-        self.assertEqual(account_order["status"], Order.STATUS_PAID)
-        manager = get_user_model().objects.create_user("paid-manager", is_staff=True)
-        self.client.force_login(manager)
-        self.assertContains(self.client.get(reverse("management_orders")), payment.order.number)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Order.objects.filter(user=self.customer).exists())
+        self.assertFalse(Payment.objects.exists())
 
     def test_unfinished_checkout_remains_visible_in_customer_and_manager_views(self):
-        draft_id = self.start_checkout("online").json()["checkout_order_id"]
+        draft_id = self.start_checkout().json()["checkout_order_id"]
         order = Order.objects.get(pk=draft_id)
         self.assertEqual(order.status, Order.STATUS_CHECKOUT_STARTED)
         self.assertEqual(self.client.get(reverse("account_orders")).json()["orders"][0]["id"], str(order.pk))
         manager = get_user_model().objects.create_user("pending-manager", is_staff=True)
         self.client.force_login(manager)
         self.assertContains(self.client.get(reverse("management_orders")), order.number)
+
+    def test_checkout_submission_is_idempotent_for_started_order(self):
+        draft_id = self.start_checkout().json()["checkout_order_id"]
+        payload = {**self.payload(), "delivery_method": "pickup", "checkout_order_id": draft_id}
+        first = self.client.post(
+            reverse("checkout_order"), json.dumps(payload), content_type="application/json",
+        )
+        second = self.client.post(
+            reverse("checkout_order"), json.dumps(payload), content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200, first.content)
+        self.assertEqual(second.status_code, 200, second.content)
+        self.assertEqual(first.json()["order_number"], second.json()["order_number"])
+        self.assertEqual(Order.objects.filter(user=self.customer).count(), 1)
+        self.assertEqual(Payment.objects.filter(order__user=self.customer).count(), 1)
+
+    def test_cart_totals_sum_multiple_products_and_keep_unknown_metrics_unknown(self):
+        second_product = Product.objects.create(
+            category=self.category, name="Второй товар", price=10,
+            weight_kg=Decimal("0.750"), length_mm=1000, width_mm=1000,
+            height_mm=1000, status=Product.STATUS_PUBLISHED,
+        )
+        CartItem.objects.create(user=self.customer, product=second_product, quantity=3)
+        response = self.client.get(reverse("api_cart"))
+        self.assertEqual(response.json()["total_weight_kg"], "7.250")
+        self.assertEqual(Decimal(response.json()["total_volume_m3"]), Decimal("3.120"))
+
+        unknown_product = Product.objects.create(
+            category=self.category, name="Товар без характеристик", price=5,
+            status=Product.STATUS_PUBLISHED,
+        )
+        CartItem.objects.create(user=self.customer, product=unknown_product, quantity=2)
+        response = self.client.get(reverse("api_cart"))
+        self.assertIsNone(response.json()["total_weight_kg"])
+        self.assertIsNone(response.json()["total_volume_m3"])
+        unknown_item = next(item for item in response.json()["items"] if item["name"] == unknown_product.name)
+        self.assertIsNone(unknown_item["line_weight_kg"])
+        self.assertIsNone(unknown_item["line_volume_m3"])
+
+    def test_checkout_requires_csrf_and_preserves_form_token_flow(self):
+        from django.test import Client
+
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.customer)
+        home = client.get(reverse("home"))
+        self.assertEqual(home.status_code, 200)
+        csrf_token = client.cookies["csrftoken"].value
+        payload = {"payment_method": "invoice", "delivery_method": "pickup"}
+        rejected = client.post(
+            reverse("start_checkout"), json.dumps(payload), content_type="application/json",
+        )
+        self.assertEqual(rejected.status_code, 403)
+        accepted = client.post(
+            reverse("start_checkout"),
+            json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+
+    def test_existing_checkout_methods_are_safely_deactivated(self):
+        self.invoice.refresh_from_db()
+        self.online.refresh_from_db()
+        self.assertTrue(self.invoice.is_active)
+        self.assertFalse(self.online.is_active)
+        self.assertTrue(DeliveryMethod.objects.get(code="pickup").is_active)
+        self.assertFalse(DeliveryMethod.objects.get(code="delivery").is_active)
+        self.assertFalse(DeliveryMethod.objects.get(code="own-delivery").is_active)
 
     def test_quote_request_is_separate_from_order_and_payment(self):
         with patch("store.notifications.notify_manager") as notify:

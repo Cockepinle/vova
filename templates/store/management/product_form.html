@@ -53,12 +53,21 @@
       </div>
       <div class="form-grid">
         {% for field in dynamic_form %}
-          <label>
-            <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-            {{ field }}
-            {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
-            {{ field.errors }}
-          </label>
+          {% if field.field.widget.allow_multiple_selected %}
+            <fieldset class="full dynamic-multiple-field">
+              <legend>{{ field.label }}{% if field.field.required %} *{% endif %}</legend>
+              {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+              {{ field.errors }}
+            </fieldset>
+          {% else %}
+            <label>
+              <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+              {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+              {{ field.errors }}
+            </label>
+          {% endif %}
         {% empty %}
           <p class="muted">Пока нет пользовательских полей.</p>
         {% endfor %}

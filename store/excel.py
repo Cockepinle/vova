@@ -2,6 +2,7 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
+import json
 
 from django.db import transaction
 from django.utils.text import slugify
@@ -93,6 +94,8 @@ def attribute_raw_value(row):
     if value_type == AttributeDefinition.TYPE_DATE:
         return row.value_date
     if value_type == AttributeDefinition.TYPE_CHOICE:
+        if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+            return json.dumps(row.value_choices or [], ensure_ascii=False)
         return row.value_choice
     if value_type == AttributeDefinition.TYPE_URL:
         return row.value_url
@@ -111,6 +114,7 @@ def assign_attribute(product, attribute, raw_value):
     item.value_boolean = None
     item.value_date = None
     item.value_choice = ""
+    item.value_choices = []
     item.value_url = ""
     if attribute.value_type == AttributeDefinition.TYPE_INTEGER:
         item.value_integer = integer_value(value, attribute.name)
@@ -124,6 +128,20 @@ def assign_attribute(product, attribute, raw_value):
         except ValueError:
             raise ValueError(f"{attribute.name}: используйте дату ГГГГ-ММ-ДД")
     elif attribute.value_type == AttributeDefinition.TYPE_CHOICE:
+        if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+            try:
+                choices = json.loads(value)
+            except json.JSONDecodeError:
+                choices = [choice.strip() for choice in value.split(",") if choice.strip()]
+            if not isinstance(choices, list) or not all(isinstance(choice, str) for choice in choices):
+                raise ValueError(f"{attribute.name}: ожидается список вариантов")
+            choices = list(dict.fromkeys(choice.strip() for choice in choices if choice.strip()))
+            if attribute.choices and any(choice not in attribute.choices for choice in choices):
+                raise ValueError(f"{attribute.name}: допустимо {', '.join(attribute.choices)}")
+            item.value_choices = choices
+            item.value_choice = ""
+            item.save()
+            return
         if attribute.choices and value not in attribute.choices:
             raise ValueError(f"{attribute.name}: допустимо {', '.join(attribute.choices)}")
         item.value_choice = value

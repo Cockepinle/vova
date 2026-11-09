@@ -80,3 +80,4 @@ class AdminLoginSecurityTests(TestCase):
         self.client.force_login(self.customer)
         self.assertEqual(self.client.get(reverse("management_orders")).status_code, 302)
         self.assertEqual(self.client.get(reverse("admin:index")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("api_management_orders")).status_code, 302)

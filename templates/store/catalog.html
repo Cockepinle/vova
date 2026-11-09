@@ -7,9 +7,9 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=33">
-    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=45">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=40">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
+    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=51">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=47">
   </head>
   <body>
     {% include "store/partials/header.html" %}
@@ -29,7 +29,7 @@
       <section class="catalog-content">
         <form class="catalog-search catalog-search-desktop" method="get" action="{% url 'catalog' %}" data-catalog-search>
           <label class="search-box">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0Z"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
             <input name="q" type="search" value="{{ search_query }}" placeholder="Найти товар по названию, артикулу или характеристикам..." autocomplete="off" aria-label="Поиск по каталогу" aria-autocomplete="list" aria-expanded="false">
           </label>
           <div class="catalog-search-suggestions" role="listbox" hidden></div>
@@ -49,39 +49,18 @@
         </form>
 
         <div class="catalog-toolbar-row" aria-label="Управление каталогом">
-          {% if catalog_filters %}<button type="button" class="catalog-filter-open" aria-controls="catalog-mobile-filter-panel">Фильтры{% if active_filter_count %}<span class="catalog-filter-count">{{ active_filter_count }}</span>{% endif %}</button>{% endif %}
           <form class="catalog-toolbar-control catalog-toolbar-category" method="get" action="{% url 'catalog' %}">
             {% for field in category_query_fields %}<input type="hidden" name="{{ field.name }}" value="{{ field.value }}">{% endfor %}
-            <label>Категории
-              <select name="category" aria-label="Выбрать категорию">
-                <option value="">Все категории</option>
-                {% for option in category_options %}<option value="{{ option.slug }}" {% if selected_category.slug == option.slug %}selected{% endif %}>{{ option.indent }}{{ option.name }}</option>{% endfor %}
-              </select>
-            </label>
+            <span class="catalog-toolbar-label">Категории</span>
+            <details class="catalog-category-menu">
+              <summary aria-label="Выбрать категорию"><span>{% if selected_category %}{{ selected_category.name }}{% else %}Все категории{% endif %}</span></summary>
+              <div class="catalog-category-menu-options" aria-label="Категории каталога">
+                <button class="catalog-category-menu-option" type="submit" name="category" value="" {% if not selected_category %}aria-current="true"{% endif %}>Все категории</button>
+                {% for option in category_options %}<button class="catalog-category-menu-option" type="submit" name="category" value="{{ option.slug }}" {% if selected_category.slug == option.slug %}aria-current="true"{% endif %}>{{ option.indent }}{{ option.name }}</button>{% endfor %}
+              </div>
+            </details>
           </form>
-          <details class="catalog-toolbar-popover catalog-toolbar-price">
-            <summary>Цена <span aria-hidden="true">⌄</span></summary>
-            <form method="get" action="{% url 'catalog' %}">
-              {% for field in price_query_fields %}<input type="hidden" name="{{ field.name }}" value="{{ field.value }}">{% endfor %}
-              <fieldset>
-                <legend>Цена, ₽</legend>
-                <div class="catalog-price-filter">
-                  <label><span>От</span><input type="number" name="price_min" min="0" step="0.01" value="{{ selected_price_min }}" aria-label="Минимальная цена"></label>
-                  <label><span>До</span><input type="number" name="price_max" min="0" step="0.01" value="{{ selected_price_max }}" aria-label="Максимальная цена"></label>
-                </div>
-              </fieldset>
-              <button class="catalog-filter-submit" type="submit">Применить</button>
-            </form>
-          </details>
-          <form class="catalog-toolbar-control catalog-toolbar-availability" method="get" action="{% url 'catalog' %}">
-            {% for field in availability_query_fields %}<input type="hidden" name="{{ field.name }}" value="{{ field.value }}">{% endfor %}
-            <label>Наличие
-              <select name="availability" aria-label="Фильтр наличия">
-                <option value="">Любое</option>
-                {% for option in availability_options %}<option value="{{ option.value }}" {% if option.value == selected_availability %}selected{% endif %}>{{ option.label }}</option>{% endfor %}
-              </select>
-            </label>
-          </form>
+          {% if catalog_filters %}<button type="button" class="catalog-filter-open" aria-controls="catalog-mobile-filter-panel">Фильтры{% if active_filter_count %}<span class="catalog-filter-count">{{ active_filter_count }}</span>{% endif %}</button>{% endif %}
           <span class="catalog-result-count">{{ products|length }} товаров</span>
           <form class="catalog-toolbar-control catalog-toolbar-sort" method="get" action="{% url 'catalog' %}">
             {% for field in sort_query_fields %}<input type="hidden" name="{{ field.name }}" value="{{ field.value }}">{% endfor %}
@@ -142,6 +121,16 @@
               {% for filter in catalog_filters %}
                 {% if filter.kind == 'price' or filter.kind == 'availability' %}
                   {% include "store/partials/catalog_filter_fields.html" %}
+                {% elif filter.kind == 'range' %}
+                  <fieldset><legend>{{ filter.name }}</legend><div class="catalog-price-filter">
+                    <label><span>От</span><input type="number" step="{% if filter.value_type == 'integer' %}1{% else %}any{% endif %}" name="{{ filter.min_parameter }}" value="{{ filter.min_value }}" aria-label="{{ filter.name }}: от"></label>
+                    <label><span>До</span><input type="number" step="{% if filter.value_type == 'integer' %}1{% else %}any{% endif %}" name="{{ filter.max_parameter }}" value="{{ filter.max_value }}" aria-label="{{ filter.name }}: до"></label>
+                  </div></fieldset>
+                {% elif filter.filter_type == 'single' %}
+                  <fieldset><legend>{{ filter.name }}</legend><select name="{{ filter.parameter }}" aria-label="{{ filter.name }}">
+                    <option value="">Любое</option>
+                    {% for option in filter.values %}<option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>{% endfor %}
+                  </select></fieldset>
                 {% else %}<fieldset><legend>{{ filter.name }}</legend>
                   {% for option in filter.values %}<label><input type="checkbox" name="{{ filter.parameter }}" value="{{ option.value }}" {% if option.selected %}checked{% endif %}> <span>{{ option.label }}</span></label>{% endfor %}
                 </fieldset>{% endif %}
@@ -165,6 +154,8 @@
               {% if filter.kind == 'price' and filter.price_min %}<input type="hidden" name="price_min" value="{{ filter.price_min }}">{% endif %}
               {% if filter.kind == 'price' and filter.price_max %}<input type="hidden" name="price_max" value="{{ filter.price_max }}">{% endif %}
               {% if filter.kind == 'availability' and filter.value %}<input type="hidden" name="availability" value="{{ filter.value }}">{% endif %}
+              {% if filter.kind == 'range' and filter.min_value %}<input type="hidden" name="{{ filter.min_parameter }}" value="{{ filter.min_value }}">{% endif %}
+              {% if filter.kind == 'range' and filter.max_value %}<input type="hidden" name="{{ filter.max_parameter }}" value="{{ filter.max_value }}">{% endif %}
               {% for option in filter.values %}{% if option.selected %}<input type="hidden" name="{{ filter.parameter }}" value="{{ option.value }}">{% endif %}{% endfor %}
             {% endfor %}
             <label class="catalog-mobile-sort-select">Сортировать
@@ -183,8 +174,7 @@
 
         <div class="catalog-topline">
           <div>
-            <h1>{{ seo.h1 }}</h1>
-            {% if not active_category and not only_hits and not search_query and not detail_product and catalog_subtitle %}<p>{{ catalog_subtitle }}</p>{% endif %}
+            {% if detail_product %}<h1>{{ seo.h1 }}</h1>{% else %}<h1 class="catalog-title-sr-only">{{ seo.h1 }}</h1>{% endif %}
             {% if search_query %}<p>По запросу «{{ search_query }}»</p>{% endif %}
           </div>
           <form class="catalog-sort-form" method="get">
@@ -195,7 +185,11 @@
             {% if catalog_filters.0.price_min %}<input type="hidden" name="price_min" value="{{ catalog_filters.0.price_min }}">{% endif %}
             {% if catalog_filters.0.price_max %}<input type="hidden" name="price_max" value="{{ catalog_filters.0.price_max }}">{% endif %}
             {% if catalog_filters.1.value %}<input type="hidden" name="availability" value="{{ catalog_filters.1.value }}">{% endif %}
-            {% for filter in catalog_filters %}{% for option in filter.values %}{% if option.selected %}<input type="hidden" name="{{ filter.parameter }}" value="{{ option.value }}">{% endif %}{% endfor %}{% endfor %}
+            {% for filter in catalog_filters %}
+              {% if filter.kind == 'range' and filter.min_value %}<input type="hidden" name="{{ filter.min_parameter }}" value="{{ filter.min_value }}">{% endif %}
+              {% if filter.kind == 'range' and filter.max_value %}<input type="hidden" name="{{ filter.max_parameter }}" value="{{ filter.max_value }}">{% endif %}
+              {% for option in filter.values %}{% if option.selected %}<input type="hidden" name="{{ filter.parameter }}" value="{{ option.value }}">{% endif %}{% endfor %}
+            {% endfor %}
             <select name="sort" aria-label="Сортировка товаров" onchange="this.form.submit()">
               <option value="default" {% if selected_sort == 'default' %}selected{% endif %}>По умолчанию</option>
               <option value="price_asc" {% if selected_sort == 'price_asc' %}selected{% endif %}>Цена по возрастанию</option>
@@ -207,27 +201,7 @@
           </form>
         </div>
 
-        {% if detail_product %}<section class="product-detail-copy" data-product-detail data-product-id="{{ detail_product.pk }}">
-          {% if detail_variants|length > 1 %}
-            <div class="product-variants">
-              <h2>Выберите вариант</h2>
-              <div class="product-variant-list" data-detail-variants>
-                {% for variant in detail_variants %}<a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}" class="product-variant {% if variant.current %}is-current{% endif %} {% if variant.unavailable %}is-unavailable{% endif %}" {% if variant.current %}aria-current="page"{% endif %}><span>{{ variant.label }}</span>{% if variant.unavailable %}<small>Нет в наличии</small>{% elif variant.availability == 'preorder' %}<small>Под заказ</small>{% endif %}</a>{% endfor %}
-              </div>
-            </div>
-          {% endif %}
-          <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
-          <dl class="product-detail-specs" data-detail-specs>
-            {% for label, value in detail_specs %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
-          </dl>
-          <div class="product-media" data-detail-media>
-            {% for media in detail_product.media.all %}
-              {% if media.is_video %}<figure><video controls preload="metadata" src="{{ media.file.url }}"></video><figcaption>{{ media.title }}</figcaption></figure>
-              {% elif not media.is_image %}<a href="{{ media.file.url }}" target="_blank" rel="noopener">{{ media.title }}</a>{% endif %}
-            {% endfor %}
-          </div>
-          <a href="{% url 'catalog' %}">Все товары</a></section>{% endif %}
-        <div class="catalog-grid">
+        <div class="catalog-grid{% if detail_product %} catalog-detail-grid{% endif %}">
           {% for product in products %}
             {% with cart_quantity=cart_quantities|get_item:product.id %}
             <article class="catalog-card {% if cart_quantity %}is-in-cart{% endif %}" data-product-id="{{ product.id }}" {% if detail_product and detail_product.id == product.id %}data-product-detail-card{% endif %} data-product='{{ product|to_json }}'>
@@ -243,9 +217,9 @@
                   <span class="product-sku">{{ product.sku }}</span>
                   <h2>{{ product.name }}</h2>
                   <span class="product-availability">{{ product.availability_label }}{% if product.stock_quantity %} · {{ product.stock_quantity }} {{ product.unit }}{% endif %}</span>
+                  <p class="product-card-description">{{ product.description }}</p>
                 </div>
               </div>
-              <a class="product-permalink" href="{{ product.url }}">Подробнее о товаре</a>
               <div class="catalog-card-buy">
                 <div class="product-buy-row">
                   <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
@@ -266,6 +240,26 @@
             </div>
           {% endfor %}
         </div>
+        {% if detail_product %}<section class="product-detail-copy" data-product-detail data-product-id="{{ detail_product.pk }}">
+          {% if detail_variants|length > 1 %}
+            <div class="product-variants">
+              <h2>Выберите вариант</h2>
+              <div class="product-variant-list" data-detail-variants>
+                {% for variant in detail_variants %}<a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}" class="product-variant {% if variant.current %}is-current{% endif %} {% if variant.unavailable %}is-unavailable{% endif %}" {% if variant.current %}aria-current="page"{% endif %}><span>{{ variant.label }}</span>{% if variant.unavailable %}<small>Нет в наличии</small>{% elif variant.availability == 'preorder' %}<small>Под заказ</small>{% endif %}</a>{% endfor %}
+              </div>
+            </div>
+          {% endif %}
+          <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
+          <dl class="product-detail-specs" data-detail-specs>
+            {% for label, value in detail_specs %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+          </dl>
+          <div class="product-media" data-detail-media>
+            {% for media in detail_product.media.all %}
+              {% if media.is_video %}<figure><video controls preload="metadata" src="{{ media.file.url }}"></video><figcaption>{{ media.title }}</figcaption></figure>
+              {% elif not media.is_image %}<a href="{{ media.file.url }}" target="_blank" rel="noopener">{{ media.title }}</a>{% endif %}
+            {% endfor %}
+          </div>
+          <a href="{% url 'catalog' %}">Все товары</a></section>{% endif %}
       </section>
     </main>
 
@@ -274,7 +268,15 @@
       <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <section class="modal-gallery">
           <span class="hit-badge modal-badge">ХИТ</span>
-          <img class="modal-main-image" src="" alt="">
+          <div class="modal-image-frame">
+            <img class="modal-main-image" src="" alt="">
+            <button class="gallery-arrow modal-image-arrow modal-image-previous" type="button" data-modal-image-step="-1" aria-label="Предыдущее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="gallery-arrow modal-image-arrow modal-image-next" type="button" data-modal-image-step="1" aria-label="Следующее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
           <div class="modal-thumbs"></div>
         </section>
         <section class="modal-info">
@@ -316,11 +318,11 @@
       window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
       window.initialProductToOpen = "{{ open_product_id|escapejs }}";
     </script>
-    <script src="{% static 'store/js/cart.js' %}?v=36"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
     <script src="{% static 'store/js/account.js' %}?v=6"></script>
-    <script src="{% static 'store/js/catalog.js' %}?v=42"></script>
+    <script src="{% static 'store/js/catalog.js' %}?v=48"></script>
     <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
     {% include "store/partials/mobile_actions.html" %}
-    <script src="{% static 'store/js/responsive.js' %}?v=37"></script>
+    <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
   </body>
 </html>

@@ -255,7 +255,7 @@ PRODUCT_DATA = [
         "slug": "archive-box-330-250-350",
         "category": "document-boxes",
         "name": "Архивный короб 330 × 250 × 350 мм",
-        "description": "Увеличенный демонстрационный формат для документов и папок.",
+        "description": "Архивный короб для документов и папок, защищающий содержимое от пыли и повреждений.",
         "price": "78.00",
         "image_url": BOX_PHOTO,
         "dimensions": (330, 250, 350),
@@ -334,10 +334,7 @@ class Command(BaseCommand):
                     "slug": item["slug"],
                     "category": categories[item["category"]],
                     "name": item["name"],
-                    "description": (
-                        f'{item["description"]} Демонстрационная позиция: '
-                        "стоимость и параметры необходимо подтвердить перед заказом."
-                    ),
+                    "description": item["description"],
                     "keywords": "картонная коробка, гофрокороб, опт, демонстрационный товар",
                     "price": Decimal(item["price"]),
                     "unit": "шт",

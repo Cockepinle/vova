@@ -1,6 +1,9 @@
+from django.db.models import Count
+
 from .common import ADDITION, AttributeDefinition, CHANGE, Category, CustomerPrice, CustomerPriceFormSet, CustomerProfile, DELETION, Decimal, DynamicProductFieldsForm
 from .common import HttpResponse, InvalidOperation, Paginator, Product, ProductExcelImportForm, ProductForm, ProductImage, Q, SiteMedia, export_products
 from .common import get_object_or_404, get_user_model, import_products, log_change, management_required, messages, redirect, render, require_POST, transaction
+from ..pricing import price_for_level
 
 @management_required
 def product_duplicate(request, product_id):
@@ -24,7 +27,9 @@ def product_duplicate(request, product_id):
 
 @management_required
 def product_list(request):
-    products = Product.objects.select_related("category").prefetch_related("attributes__attribute")
+    products = Product.objects.select_related("category").prefetch_related("attributes__attribute").annotate(
+        individual_price_count=Count("individual_prices", distinct=True)
+    )
     query = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
     payment_status = request.GET.get("payment_status", "")
@@ -60,6 +65,10 @@ def product_list(request):
 
     paginator = Paginator(products, 10)
     page = paginator.get_page(request.GET.get("page"))
+    for product in page.object_list:
+        product.retail_price_display = price_for_level(product, CustomerProfile.PRICE_RETAIL)
+        product.wholesale_price_display = price_for_level(product, CustomerProfile.PRICE_WHOLESALE)
+        product.special_price_display = price_for_level(product, CustomerProfile.PRICE_SPECIAL)
 
     return render(
         request,

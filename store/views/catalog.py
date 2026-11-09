@@ -223,6 +223,8 @@ def catalog(request, slug=None):
         "q", "category", "scope", "hits", "sort", "price_min",
         "price_max", "availability",
         *(filter_item["parameter"] for filter_item in catalog_filters if filter_item.get("parameter")),
+        *(filter_item["min_parameter"] for filter_item in catalog_filters if filter_item.get("min_parameter")),
+        *(filter_item["max_parameter"] for filter_item in catalog_filters if filter_item.get("max_parameter")),
     }
     query_fields = [
         {"name": name, "value": value}
@@ -241,6 +243,12 @@ def catalog(request, slug=None):
         for filter_item in catalog_filters
         if filter_item.get("parameter")
     }
+    attribute_parameters.update(
+        parameter
+        for filter_item in catalog_filters
+        for parameter in (filter_item.get("min_parameter"), filter_item.get("max_parameter"))
+        if parameter
+    )
     category_options = [
         {
             **category,
@@ -367,6 +375,14 @@ def catalog(request, slug=None):
             if filter_item["value"]:
                 label = dict(Product.AVAILABILITY_CHOICES).get(filter_item["value"], filter_item["value"])
                 tag_values.append(("availability", label))
+        elif filter_kind == "range":
+            range_parts = []
+            if filter_item["min_value"]:
+                range_parts.append(f"от {filter_item['min_value']}")
+            if filter_item["max_value"]:
+                range_parts.append(f"до {filter_item['max_value']}")
+            if range_parts:
+                tag_values.append(("range", filter_item["name"], " · ".join(range_parts)))
         else:
             tag_values.extend(
                 (filter_item["parameter"], option["value"], f"{filter_item['name']}: {option['label']}")
@@ -382,6 +398,11 @@ def catalog(request, slug=None):
             elif filter_kind == "availability":
                 parameters.pop("availability", None)
                 label = item[1]
+            elif filter_kind == "range":
+                parameters.pop(filter_item["min_parameter"], None)
+                parameters.pop(filter_item["max_parameter"], None)
+                _, name, value = item
+                label = f"{name}: {value}"
             else:
                 parameter, value, label = item
                 remaining = [existing for existing in parameters.getlist(parameter) if existing != value]

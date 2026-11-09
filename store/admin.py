@@ -105,14 +105,29 @@ class VariantGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ["name", "sku", "category", "price", "unit", "stock_quantity", "status", "is_hit", "is_new", "is_special", "availability"]
+    list_display = ["name", "sku", "category", "cost_price", "retail_price_display", "wholesale_price_display", "special_price_display", "unit", "stock_quantity", "status", "is_hit", "is_new", "is_special", "availability"]
     list_filter = ["category", "variant_group", "status", "is_hit", "is_new", "is_special", "availability"]
-    list_editable = ["price", "stock_quantity", "status", "is_hit", "is_new", "is_special", "availability"]
+    list_editable = ["stock_quantity", "status", "is_hit", "is_new", "is_special", "availability"]
     prepopulated_fields = {"slug": ["name"]}
     search_fields = ["name", "sku", "description", "keywords"]
     autocomplete_fields = ["category", "variant_group"]
     inlines = [ProductImageInline, ProductAttributeInline, CustomerPriceInline]
-    readonly_fields = ["volume_m3"]
+    readonly_fields = ["volume_m3", "retail_price_display", "wholesale_price_display", "special_price_display"]
+
+    @admin.display(description="Розница")
+    def retail_price_display(self, obj):
+        from .pricing import price_for_level
+        return price_for_level(obj, CustomerProfile.PRICE_RETAIL)
+
+    @admin.display(description="Опт")
+    def wholesale_price_display(self, obj):
+        from .pricing import price_for_level
+        return price_for_level(obj, CustomerProfile.PRICE_WHOLESALE)
+
+    @admin.display(description="Спеццена")
+    def special_price_display(self, obj):
+        from .pricing import price_for_level
+        return price_for_level(obj, CustomerProfile.PRICE_SPECIAL)
 
     @admin.display(description="Объём, м³ (автоматически)")
     def volume_m3(self, obj):
@@ -139,7 +154,7 @@ class ProductAdmin(admin.ModelAdmin):
             "Продажи",
             {
                 "fields": [
-                    "cost_price", "price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "old_price", "vat_rate",
+                    "cost_price", "price", "retail_coefficient", "retail_price_display", "wholesale_coefficient", "wholesale_price_display", "special_coefficient", "special_price_display", "old_price", "vat_rate",
                     "unit",
                     "min_quantity",
                     "stock_quantity",
@@ -177,8 +192,8 @@ class SiteMediaAdmin(admin.ModelAdmin):
 
 @admin.register(AttributeDefinition)
 class AttributeDefinitionAdmin(admin.ModelAdmin):
-    list_display = ["name", "value_type", "unit", "is_required", "is_visible", "is_filterable"]
-    list_filter = ["value_type", "is_required", "is_visible", "is_filterable"]
+    list_display = ["name", "value_type", "filter_type", "unit", "is_required", "is_visible", "is_filterable"]
+    list_filter = ["value_type", "filter_type", "is_required", "is_visible", "is_filterable"]
     list_editable = ["is_required", "is_visible", "is_filterable"]
     exclude = ["slug", "show_in_table", "sort_order"]
     search_fields = ["name", "slug"]
@@ -186,7 +201,7 @@ class AttributeDefinitionAdmin(admin.ModelAdmin):
 
 @admin.register(ProductAttribute)
 class ProductAttributeAdmin(admin.ModelAdmin):
-    list_display = ["product", "attribute", "value_text", "value_integer", "value_decimal", "value_boolean", "value_date", "value_choice", "value_file", "value_url"]
+    list_display = ["product", "attribute", "value_text", "value_integer", "value_decimal", "value_boolean", "value_date", "value_choice", "value_choices", "value_file", "value_url"]
     list_filter = ["attribute", "attribute__value_type"]
     search_fields = ["product__name", "product__sku", "attribute__name", "value_text", "value_choice"]
     autocomplete_fields = ["product", "attribute"]

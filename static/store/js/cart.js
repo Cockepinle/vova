@@ -48,16 +48,23 @@ async function saveCheckoutDraft() {
   storeCheckoutFormDraft(form);
   if (!window.isAuthenticated) return;
   const method = form?.querySelector('input[name="payment_method"]:checked')?.value || "invoice";
-  const deliveryMethod = form?.querySelector('input[name="delivery_method"]:checked')?.value || "delivery";
+  const deliveryMethod = form?.querySelector('input[name="delivery_method"]:checked')?.value || "pickup";
   const deliveryAddress = form?.querySelector('[name="delivery_address"]')?.value || "";
   const storedId = sessionStorage.getItem("paklineCheckoutOrderId") || form?.querySelector('[name="checkout_order_id"]')?.value || "";
-  const response = await fetch("/cart/checkout/start/", {
-    method: "POST",
-    headers: {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
-    body: JSON.stringify({payment_method: method, delivery_method: deliveryMethod, delivery_address: deliveryAddress, checkout_order_id: storedId}),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (response.ok && payload.checkout_order_id) {
+  const csrfToken = form?.querySelector('[name="csrfmiddlewaretoken"]')?.value || "";
+  let response;
+  let payload;
+  try {
+    response = await fetch("/cart/checkout/start/", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest", "X-CSRFToken": csrfToken},
+      body: JSON.stringify({payment_method: method, delivery_method: deliveryMethod, delivery_address: deliveryAddress, checkout_order_id: storedId}),
+    });
+    payload = await response.json().catch(() => ({}));
+  } catch (error) {
+    payload = {error: "Не удалось связаться с сервером. Введённые данные сохранены; проверьте соединение и повторите попытку."};
+  }
+  if (response?.ok && payload.checkout_order_id) {
     sessionStorage.setItem("paklineCheckoutOrderId", String(payload.checkout_order_id));
     const input = form?.querySelector('[name="checkout_order_id"]');
     if (input) input.value = String(payload.checkout_order_id);
@@ -242,8 +249,8 @@ function renderCart(cart) {
   cartTotal.textContent = `${cart.total} ₽`;
   const checkoutTotal = checkoutDrawer?.querySelector("[data-checkout-total]");
   if (checkoutTotal) checkoutTotal.textContent = `${cart.total} ₽`;
-  if (cartWeight) cartWeight.textContent = `${cart.total_weight_kg || "0"} кг`;
-  if (cartVolume) cartVolume.textContent = `${cart.total_volume_m3 || "0"} м³`;
+  if (cartWeight) cartWeight.textContent = cart.total_weight_kg == null ? "Недостаточно данных" : `${cart.total_weight_kg} кг`;
+  if (cartVolume) cartVolume.textContent = cart.total_volume_m3 == null ? "Недостаточно данных" : `${cart.total_volume_m3} м³`;
   updateCartBadges(cart.count);
   syncProductCards(cart);
 
@@ -532,23 +539,32 @@ document.addEventListener("submit", async (event) => {
   const submitButton = checkoutForm.querySelector(".checkout-submit");
   const deliveryLink = checkoutForm.querySelector(".checkout-delivery-link");
   const deliveryData = checkoutForm.querySelector(".checkout-delivery-data");
+  if (submitButton?.disabled) return;
 
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.textContent = "Отправляем";
   }
 
-  const response = await fetch("/cart/checkout/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    body: JSON.stringify(Object.fromEntries(new FormData(checkoutForm).entries())),
-  });
-  const payload = await response.json().catch(() => ({}));
+  let response;
+  let payload;
+  try {
+    response = await fetch("/cart/checkout/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": checkoutForm.querySelector('[name="csrfmiddlewaretoken"]')?.value || "",
+      },
+      body: JSON.stringify(Object.fromEntries(new FormData(checkoutForm).entries())),
+    });
+    payload = await response.json().catch(() => ({}));
+  } catch (error) {
+    payload = {error: "Не удалось связаться с сервером. Введённые данные сохранены; проверьте соединение и повторите попытку."};
+  }
+  const requestSucceeded = Boolean(response?.ok);
 
-  if (!response.ok && payload.auth_required && typeof window.openAccountDrawer === "function") {
+  if (!requestSucceeded && payload.auth_required && typeof window.openAccountDrawer === "function") {
     sessionStorage.setItem("paklinePendingCheckout", "1");
     closeCheckoutDrawer();
     window.openAccountDrawer(payload.error);
@@ -556,11 +572,11 @@ document.addEventListener("submit", async (event) => {
 
   if (message) {
     message.hidden = false;
-    message.classList.toggle("is-error", !response.ok);
+    message.classList.toggle("is-error", !requestSucceeded);
     message.textContent = payload.message || payload.error || "Не удалось оформить заказ";
   }
 
-  if (response.ok) {
+  if (requestSucceeded) {
     if (deliveryLink) {
       deliveryLink.hidden = !payload.delivery_url;
       if (payload.delivery_url) deliveryLink.href = payload.delivery_url;

@@ -31,6 +31,26 @@ class PromotionsPricingTests(TestCase):
         self.assertEqual(resolve_product_price(self.product, self.customer), Decimal("120.00"))
         CustomerPrice.objects.create(user=self.customer, product=self.product, price=Decimal("87.25"))
         self.assertEqual(resolve_product_price(self.product, self.customer), Decimal("87.25"))
+        another_customer = get_user_model().objects.create_user("another", "another@example.test", "password")
+        self.assertEqual(resolve_product_price(self.product, another_customer), Decimal("150.00"))
+
+    def test_calculated_prices_use_half_up_money_rounding(self):
+        product = Product.objects.create(
+            category=self.category, name="Округление", price=0,
+            cost_price=Decimal("10.01"), retail_coefficient=Decimal("1.5000"),
+        )
+        self.assertEqual(resolve_product_price(product), Decimal("15.02"))
+
+    def test_retail_price_is_persisted_when_cost_or_coefficient_changes(self):
+        self.product.cost_price = Decimal("200.00")
+        self.product.save(update_fields=["cost_price"])
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price, Decimal("300.00"))
+
+        self.product.retail_coefficient = Decimal("1.6000")
+        self.product.save(update_fields=["retail_coefficient"])
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price, Decimal("320.00"))
 
     def test_cart_totals_are_calculated_on_backend(self):
         CartItem.objects.create(user=self.customer, product=self.product, quantity=3)
@@ -56,6 +76,11 @@ class PromotionsPricingTests(TestCase):
         self.assertEqual(item.price, Decimal("120.00"))
         self.assertEqual(item.weight_kg, Decimal("0.500"))
         self.assertEqual(item.volume_m3, Decimal("0.100"))
+        self.product.cost_price = Decimal("200.00")
+        self.product.save()
+        item.refresh_from_db()
+        self.assertEqual(item.price, Decimal("120.00"))
+        self.assertEqual(item.line_total, Decimal("240.00"))
 
     def test_only_current_active_promotions_are_public(self):
         now = timezone.now()

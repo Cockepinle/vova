@@ -55,7 +55,6 @@ def update_cart(request):
 
     return JsonResponse(cart_payload(request))
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def start_checkout(request):
@@ -66,8 +65,16 @@ def start_checkout(request):
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
         return JsonResponse({"error": "Некорректные данные"}, status=400)
-    payment_method = PaymentMethod.objects.filter(code=payload.get("payment_method") or "invoice", is_active=True).first()
-    delivery_method = DeliveryMethod.objects.filter(code=payload.get("delivery_method") or "delivery", is_active=True).first()
+    payment_method = PaymentMethod.objects.filter(
+        code=payload.get("payment_method") or "invoice",
+        kind=PaymentMethod.KIND_INVOICE,
+        is_active=True,
+    ).first()
+    delivery_method = DeliveryMethod.objects.filter(
+        code=payload.get("delivery_method") or "pickup",
+        kind=DeliveryMethod.KIND_PICKUP,
+        is_active=True,
+    ).first()
     if not payment_method:
         return JsonResponse({"error": "Выберите способ оплаты"}, status=400)
     if not delivery_method:
@@ -103,7 +110,6 @@ def start_checkout(request):
     request.session.modified = True
     return JsonResponse({"ok": True, "checkout_order_id": order.pk, "order_number": order.number, "status": order.status})
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def checkout_order(request):
@@ -121,16 +127,50 @@ def checkout_order(request):
     email = (payload.get("email") or "").strip().lower()
     company = (payload.get("company") or "").strip()
     comment = (payload.get("comment") or "").strip()
-    # Older storefront clients did not send this field and used invoice flow.
-    payment_method = PaymentMethod.objects.filter(code=payload.get("payment_method") or "invoice", is_active=True).first()
-    delivery_method = DeliveryMethod.objects.filter(code=payload.get("delivery_method") or "delivery", is_active=True).first()
+    payment_method = PaymentMethod.objects.filter(
+        code=payload.get("payment_method") or "invoice",
+        kind=PaymentMethod.KIND_INVOICE,
+        is_active=True,
+    ).first()
+    delivery_method = DeliveryMethod.objects.filter(
+        code=payload.get("delivery_method") or "pickup",
+        kind=DeliveryMethod.KIND_PICKUP,
+        is_active=True,
+    ).first()
 
     if not full_name or not phone or not email:
         return JsonResponse({"error": "Заполните ФИО, телефон и email"}, status=400)
     if not payment_method:
         return JsonResponse({"error": "Выберите способ оплаты"}, status=400)
     if not delivery_method:
-        return JsonResponse({"error": "Выберите способ доставки"}, status=400)
+        return JsonResponse({"error": "Сейчас доступен только самовывоз"}, status=400)
+
+    checkout_order_id = payload.get("checkout_order_id") or request.session.get("checkout_order_id")
+    if str(checkout_order_id or "").isdigit():
+        existing_order = Order.objects.select_for_update().filter(
+            pk=checkout_order_id,
+            user=request.user,
+            status__in=[
+                Order.STATUS_PENDING_PAYMENT,
+                Order.STATUS_AWAITING_INVOICE,
+                Order.STATUS_INVOICED,
+                Order.STATUS_PROCESSING,
+                Order.STATUS_PAID,
+                Order.STATUS_DONE,
+            ],
+        ).first()
+        if existing_order:
+            payment = existing_order.payments.filter(status=Order.PAYMENT_PENDING).first()
+            return JsonResponse({
+                "ok": True,
+                "message": f"Заказ {existing_order.number} уже оформлен.",
+                "order_number": existing_order.number,
+                "payment_url": payment.payment_url if payment else "",
+                "payment_status": existing_order.payment_status,
+                "delivery_url": existing_order.delivery_handoff_url,
+                "delivery_data": existing_order.delivery_provider_data,
+                "cart": cart_payload(request),
+            })
 
     snapshot = locked_checkout_snapshot(request)
     if snapshot["unavailable_products"]:

@@ -8,7 +8,7 @@
     {{ form.non_field_errors }}
     <div class="form-grid">
       {% for item in form %}
-        <label class="{% if item.name == 'choices_text' %}full choice-options-field{% endif %}">
+        <label class="{% if item.name == 'choices_text' %}full choice-options-field{% elif item.name == 'filter_type' %}filter-type-field{% endif %}">
           <span>{{ item.label }}</span>
           {{ item }}
           {% if item.name == 'choices_text' %}
@@ -27,17 +27,25 @@
   <script>
     const typeField = document.querySelector("#id_value_type");
     const choicesField = document.querySelector(".choice-options-field");
+    const filterableField = document.querySelector("#id_is_filterable");
+    const filterTypeField = document.querySelector(".filter-type-field");
+    const filterModeField = document.querySelector("#id_filter_type");
 
     function toggleChoicesField() {
-      if (!typeField || !choicesField) {
-        return;
+      if (typeField && choicesField) choicesField.style.display = typeField.value === "choice" ? "grid" : "none";
+      if (filterableField && filterTypeField) filterTypeField.style.display = filterableField.checked ? "grid" : "none";
+      if (filterModeField) {
+        const multiple = filterModeField.querySelector('option[value="multiple"]');
+        const range = filterModeField.querySelector('option[value="range"]');
+        if (multiple) multiple.disabled = typeField.value !== "choice";
+        if (range) range.disabled = !["integer", "decimal", "price"].includes(typeField.value);
+        if (multiple?.selected && multiple.disabled || range?.selected && range.disabled) filterModeField.value = "single";
       }
-      choicesField.style.display = typeField.value === "choice" ? "grid" : "none";
     }
 
-    if (typeField) {
-      typeField.addEventListener("change", toggleChoicesField);
-    }
+    typeField?.addEventListener("change", toggleChoicesField);
+    filterableField?.addEventListener("change", toggleChoicesField);
+    filterModeField?.addEventListener("change", toggleChoicesField);
     toggleChoicesField();
   </script>
 {% endblock %}

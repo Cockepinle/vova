@@ -46,8 +46,8 @@
     </div>
     <footer class="cart-panel-footer">
       <div class="cart-delivery-totals">
-        <span>Общий вес <strong data-cart-weight>{{ cart_weight_kg }} кг</strong></span>
-        <span>Общий объём <strong data-cart-volume>{{ cart_volume_m3 }} м³</strong></span>
+        <span>Общий вес <strong data-cart-weight>{% if cart_weight_kg != None %}{{ cart_weight_kg }} кг{% else %}Недостаточно данных{% endif %}</strong></span>
+        <span>Общий объём <strong data-cart-volume>{% if cart_volume_m3 != None %}{{ cart_volume_m3 }} м³{% else %}Недостаточно данных{% endif %}</strong></span>
       </div>
       <div class="cart-total">
         <span>Итого</span>
@@ -62,6 +62,7 @@
 <aside class="checkout-drawer" aria-hidden="true">
   <div class="drawer-backdrop"></div>
   <form class="checkout-panel" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+    {% csrf_token %}
     <input type="hidden" name="checkout_order_id">
     <header class="drawer-header">
       <h2 id="checkout-title">Оформление заказа</h2>
@@ -95,12 +96,12 @@
       </label>
       <fieldset class="checkout-payment full">
         <legend>Способ оплаты *</legend>
-        {% for method in payment_methods %}<label class="payment-option"><input type="radio" name="payment_method" value="{{ method.code }}" required {% if method.code == 'invoice' %}checked{% endif %}><span><strong>{{ method.name }}</strong>{% if method.kind == 'online' %}<small>Ссылка на оплату появится после создания заказа.</small>{% else %}<small>Менеджер подготовит и отправит счёт.</small>{% endif %}</span></label>{% empty %}<p>Нет доступных способов оплаты.</p>{% endfor %}
+        {% for method in payment_methods %}<label class="payment-option{% if method.kind != 'invoice' or method.code != 'invoice' or not method.is_active %} is-unavailable{% endif %}"><input type="radio" name="payment_method" value="{{ method.code }}" {% if method.kind == 'invoice' and method.code == 'invoice' and method.is_active %}required checked{% else %}disabled{% endif %}><span><strong>{{ method.name }}</strong>{% if method.kind == 'online' or method.code == 'online' %}<small>Скоро будет доступно</small>{% elif method.kind == 'invoice' and method.code == 'invoice' and method.is_active %}<small>Менеджер подготовит и отправит счёт.</small>{% else %}<small>Скоро будет доступно</small>{% endif %}</span></label>{% empty %}<p>Нет доступных способов оплаты.</p>{% endfor %}
       </fieldset>
     </div>
     <fieldset class="checkout-payment full">
       <legend>Способ доставки</legend>
-      {% for method in delivery_methods %}<label class="payment-option"><input type="radio" name="delivery_method" value="{{ method.code }}" required {% if method.code == 'delivery' %}checked{% endif %}><span><strong>{{ method.name }}</strong>{% if method.kind == 'own' %}<small>по согласованию с менеджером</small>{% elif method.kind == 'pickup' %}<small>{{ method.description|default:"Адрес самовывоза:" }}{% if site_settings.pickup_address or site_settings.contact_address %} {{ site_settings.pickup_address|default:site_settings.contact_address }}{% endif %}</small>{% elif method.kind == 'carrier' %}<small>{{ method.description|default:"Стоимость рассчитывается транспортной компанией." }}</small>{% elif method.description %}<small>{{ method.description }}</small>{% endif %}</span></label>{% empty %}<p>Нет доступных способов доставки.</p>{% endfor %}
+      {% for method in delivery_methods %}<label class="payment-option{% if method.kind != 'pickup' or method.code != 'pickup' or not method.is_active %} is-unavailable{% endif %}"><input type="radio" name="delivery_method" value="{{ method.code }}" {% if method.kind == 'pickup' and method.code == 'pickup' and method.is_active %}required checked{% else %}disabled{% endif %}><span><strong>{{ method.name }}</strong>{% if method.kind == 'pickup' and method.code == 'pickup' and method.is_active %}<small>{{ method.description|default:"Адрес самовывоза:" }}{% if site_settings.pickup_address or site_settings.contact_address %} {{ site_settings.pickup_address|default:site_settings.contact_address }}{% endif %}</small>{% else %}<small>Скоро будет доступно</small>{% endif %}</span></label>{% empty %}<p>Нет доступных способов доставки.</p>{% endfor %}
     </fieldset>
     <p class="checkout-warning">
       Перед оформлением заказа отключите VPN/прокси, иначе уведомление о заказе может не прийти на почту.

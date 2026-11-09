@@ -78,7 +78,17 @@
       .filter(src => typeof src === 'string' && src);
     if (product.image && images[0] !== product.image) images.unshift(product.image);
     const image = frame.querySelector('img');
-    if (!image || images.length < 2) return;
+    if (!image) return;
+    if (card.hasAttribute('data-product-detail-card')) {
+      const setAspectRatio = activeImage => {
+        if (activeImage.naturalWidth && activeImage.naturalHeight) {
+          frame.style.aspectRatio = `${activeImage.naturalWidth} / ${activeImage.naturalHeight}`;
+        }
+      };
+      if (image.complete) setAspectRatio(image);
+      else image.addEventListener('load', () => setAspectRatio(image), {once: true});
+    }
+    if (images.length < 2) return;
     const controls = document.createElement('div');
     controls.className = 'product-gallery-controls';
     controls.setAttribute('role', 'group');
@@ -87,10 +97,10 @@
     const next = document.createElement('button');
     const counter = document.createElement('span');
     previous.type = next.type = 'button';
-    previous.className = 'gallery-previous';
-    next.className = 'gallery-next';
-    previous.textContent = '‹';
-    next.textContent = '›';
+    previous.className = 'gallery-arrow gallery-previous';
+    next.className = 'gallery-arrow gallery-next';
+    previous.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+    next.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
     previous.setAttribute('aria-label', 'Предыдущее фото');
     next.setAttribute('aria-label', 'Следующее фото');
     counter.className = 'gallery-counter';
@@ -110,12 +120,29 @@
     frame.prepend(track);
     const dots = document.createElement('div');
     dots.className = 'gallery-dots';
+    const thumbnails = card.hasAttribute('data-product-detail-card') && images.length > 1
+      ? document.createElement('div')
+      : null;
+    if (thumbnails) {
+      thumbnails.className = 'gallery-thumbnails';
+      thumbnails.setAttribute('role', 'group');
+      thumbnails.setAttribute('aria-label', 'Фотографии товара');
+    }
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let index = 0;
     function update() {
       counter.textContent = `${index + 1} / ${images.length}`;
+      const activeImage = track.children[index];
+      if (card.hasAttribute('data-product-detail-card') && activeImage?.complete) {
+        const width = activeImage.naturalWidth;
+        const height = activeImage.naturalHeight;
+        if (width && height) frame.style.aspectRatio = `${width} / ${height}`;
+      }
       [...dots.children].forEach((dot, i) => {
         dot.setAttribute('aria-current', String(i === index));
+      });
+      [...(thumbnails?.children || [])].forEach((thumbnail, i) => {
+        thumbnail.setAttribute('aria-current', String(i === index));
       });
     }
     function goTo(nextIndex, behavior = reducedMotion.matches ? 'auto' : 'smooth') {
@@ -130,6 +157,28 @@
       dot.setAttribute('aria-label', `Показать фото ${i + 1}`);
       dot.addEventListener('click', () => goTo(i));
       dots.append(dot);
+      if (thumbnails) {
+        const thumbnail = document.createElement('button');
+        const preview = document.createElement('img');
+        thumbnail.type = 'button';
+        thumbnail.className = 'gallery-thumbnail';
+        thumbnail.setAttribute('aria-label', `Показать фото ${i + 1}`);
+        thumbnail.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          goTo(i);
+        });
+        preview.src = src;
+        preview.alt = '';
+        preview.loading = 'lazy';
+        thumbnail.append(preview);
+        thumbnails.append(thumbnail);
+      }
+    });
+    track.querySelectorAll('img').forEach(slide => {
+      slide.addEventListener('load', () => {
+        if (track.children[index] === slide) update();
+      });
     });
     previous.addEventListener('click', () => goTo(index - 1));
     next.addEventListener('click', () => goTo(index + 1));
@@ -176,12 +225,26 @@
     }, {passive: false});
     // Touch and trackpads scroll natively; desktop users can also drag the photo.
     let drag = null;
+    let touchStart = null;
     let suppressClick = false;
     track.addEventListener('pointerdown', event => {
       if (event.pointerType !== 'mouse' || event.button !== 0) return;
       drag = {x: event.clientX, left: track.scrollLeft, index, moved: false};
       suppressClick = false;
     });
+    track.addEventListener('touchstart', event => {
+      if (event.changedTouches.length) {
+        touchStart = {x: event.changedTouches[0].clientX, index};
+      }
+    }, {passive: true});
+    track.addEventListener('touchend', event => {
+      if (!touchStart || !event.changedTouches.length) return;
+      const current = touchStart;
+      touchStart = null;
+      const dx = event.changedTouches[0].clientX - current.x;
+      if (Math.abs(dx) > 40) goTo(current.index + (dx < 0 ? 1 : -1));
+    });
+    track.addEventListener('touchcancel', () => { touchStart = null; }, {passive: true});
     track.addEventListener('pointermove', event => {
       if (!drag) return;
       const dx = event.clientX - drag.x;
@@ -201,7 +264,7 @@
       suppressClick = true;
       const dx = event.clientX - current.x;
       const target = Math.abs(dx) > 40 ? current.index + (dx < 0 ? 1 : -1) : current.index;
-      goTo(Math.max(0, Math.min(images.length - 1, target)));
+      goTo(target);
       setTimeout(() => { suppressClick = false; }, 400);
     };
     track.addEventListener('pointerup', finishDrag);
@@ -213,6 +276,7 @@
     if (window.ResizeObserver) new ResizeObserver(() => goTo(index, 'instant')).observe(track);
     controls.append(previous, dots, counter, next);
     frame.append(controls);
+    if (thumbnails) frame.after(thumbnails);
     update();
   }
   window.refreshProductCardGallery = card => {
@@ -224,6 +288,7 @@
     frame.querySelector('.product-gallery-track')?.remove();
     frame.querySelector('.product-gallery-controls')?.remove();
     frame.querySelector('.gallery-dots')?.remove();
+    frame.parentElement?.querySelector('.gallery-thumbnails')?.remove();
     frame.append(image);
     frame.dataset.galleryReady = '';
     enhance(card);

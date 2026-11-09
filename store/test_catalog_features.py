@@ -11,7 +11,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
-from .cms_forms import CategoryForm, DynamicProductFieldsForm, ProductForm
+from .cms_forms import AttributeDefinitionForm, CategoryForm, DynamicProductFieldsForm, ProductForm
 from .excel import BASE_COLUMNS, export_products, import_products
 from .models import (
     AttributeDefinition, CartItem, Category, CustomerPrice, FavoriteItem, Order, OrderItem,
@@ -68,6 +68,7 @@ class CatalogFeaturesTests(TestCase):
         root_response = self.client.get(reverse('catalog'), {'category': self.root.slug})
         self.assertContains(root_response, self.child.name)
         self.assertContains(root_response, reverse('catalog') + '?category=' + self.child.slug)
+        self.assertNotContains(root_response, 'Подробнее')
         self.assertContains(root_response, root_product.name)
         self.assertNotContains(root_response, child_product.name)
         self.assertNotContains(root_response, self.product.name)
@@ -282,6 +283,31 @@ class CatalogFeaturesTests(TestCase):
         invalid_price = self.client.get(reverse('api_products'), {'price_min': 'NaN'})
         self.assertEqual(invalid_price.status_code, 200)
 
+    def test_guest_price_filters_and_sort_use_calculated_retail_price(self):
+        calculated = Product.objects.create(
+            category=self.leaf, name='Расчётная розница', price=999,
+            cost_price=100, retail_coefficient=Decimal('1.5000'),
+            status=Product.STATUS_PUBLISHED,
+        )
+        higher = Product.objects.create(
+            category=self.leaf, name='Расчётная дорогая розница', price=1,
+            cost_price=100, retail_coefficient=Decimal('2.0000'),
+            status=Product.STATUS_PUBLISHED,
+        )
+        Product.objects.filter(pk=calculated.pk).update(price=999)
+        Product.objects.filter(pk=higher.pk).update(price=1)
+        filtered = self.client.get(reverse('api_products'), {
+            'price_min': '140', 'price_max': '160',
+        }).json()['products']
+        self.assertEqual([item['id'] for item in filtered], [str(calculated.pk)])
+
+        sorted_products = self.client.get(
+            reverse('api_products'), {'sort': 'price_asc'},
+        ).json()['products']
+        ids = [item['id'] for item in sorted_products]
+        self.assertLess(ids.index(str(calculated.pk)), ids.index(str(higher.pk)))
+        self.assertEqual(next(item['price'] for item in sorted_products if item['id'] == str(calculated.pk)), '150.00')
+
     def test_category_filters_use_linked_attributes(self):
         color = AttributeDefinition.objects.create(name='Цвет', value_type='choice', choices=['Белый', 'Крафт'])
         self.leaf.filter_attributes.add(color)
@@ -293,7 +319,144 @@ class CatalogFeaturesTests(TestCase):
         self.assertNotContains(response, kraft.name)
         self.assertContains(response, 'name="robots" content="noindex,follow"', html=False)
 
-    def test_mobile_catalog_drawers_and_active_filter_controls_render(self):
+        size = AttributeDefinition.objects.create(name='Размер короба', value_type='choice', choices=['Малый'])
+        self.root.filter_attributes.add(size)
+        root_product = Product.objects.create(
+            category=self.root,
+            name='Коробка верхней категории',
+            price=60,
+            status='published',
+        )
+        ProductAttribute.objects.create(product=root_product, attribute=size, value_choice='Малый')
+        root_response = self.client.get(reverse('catalog'), {'category': self.root.slug})
+        self.assertContains(root_response, 'name="filter_{}"'.format(size.pk))
+        self.assertNotContains(root_response, 'name="filter_{}"'.format(color.pk))
+        self.assertContains(root_response, root_product.name)
+
+    def test_multiple_and_range_filters_use_saved_product_values_together(self):
+        color = AttributeDefinition.objects.create(
+            name='Цвет — несколько',
+            value_type=AttributeDefinition.TYPE_CHOICE,
+            choices=['Белый', 'Крафт', 'Чёрный'],
+            filter_type=AttributeDefinition.FILTER_MULTIPLE,
+        )
+        length = AttributeDefinition.objects.create(
+            name='Длина для диапазона',
+            value_type=AttributeDefinition.TYPE_INTEGER,
+            filter_type=AttributeDefinition.FILTER_RANGE,
+        )
+        self.leaf.filter_attributes.add(color, length)
+        kraft = Product.objects.create(
+            category=self.leaf, name='Коробка крафт', price=90, status='published',
+        )
+        form = DynamicProductFieldsForm(
+            {
+                f'field_{color.pk}': ['Белый', 'Чёрный'],
+            },
+            product=self.product,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save(self.product)
+        ProductAttribute.objects.create(
+            product=self.product, attribute=length, value_integer=400,
+        )
+        ProductAttribute.objects.create(
+            product=kraft, attribute=color, value_choices=['Крафт'],
+        )
+        ProductAttribute.objects.create(
+            product=kraft, attribute=length, value_integer=250,
+        )
+
+        response = self.client.get(reverse('catalog'), {
+            'category': self.leaf.slug,
+            f'filter_{color.pk}': ['Белый', 'Крафт'],
+            f'filter_{length.pk}_min': '300',
+            f'filter_{length.pk}_max': '500',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item['id'] for item in response.context['products']],
+            [str(self.product.pk)],
+        )
+        self.assertEqual(
+            ProductAttribute.objects.get(product=self.product, attribute=color).value_choices,
+            ['Белый', 'Чёрный'],
+        )
+        self.assertContains(response, f'name="filter_{color.pk}"')
+        self.assertContains(response, f'name="filter_{length.pk}_min"')
+        self.assertEqual(response.context['active_filter_count'], 3)
+        reset_url = response.context['filter_reset_url']
+        self.assertIn(f'category={self.leaf.slug}', unquote(reset_url))
+        self.assertNotIn('filter_', reset_url)
+
+    def test_admin_can_create_update_and_delete_filter_definitions(self):
+        self.client.force_login(self.staff)
+        create_data = {
+            'name': 'Материал',
+            'value_type': AttributeDefinition.TYPE_CHOICE,
+            'filter_type': AttributeDefinition.FILTER_MULTIPLE,
+            'choices_text': 'Картон\nПластик',
+            'unit': '',
+            'is_required': '',
+            'default_value': '',
+            'is_visible': 'on',
+            'is_filterable': 'on',
+        }
+        response = self.client.post(reverse('management_field_new'), create_data)
+        self.assertEqual(response.status_code, 302)
+        definition = AttributeDefinition.objects.get(name='Материал')
+        self.assertEqual(definition.filter_type, AttributeDefinition.FILTER_MULTIPLE)
+        self.assertEqual(definition.choices, ['Картон', 'Пластик'])
+
+        create_data.update({
+            'name': 'Материал упаковки',
+            'filter_type': AttributeDefinition.FILTER_SINGLE,
+            'choices_text': 'Крафт\nБелый',
+        })
+        response = self.client.post(
+            reverse('management_field_edit', args=[definition.pk]),
+            create_data,
+        )
+        self.assertEqual(response.status_code, 302)
+        definition.refresh_from_db()
+        self.assertEqual(definition.name, 'Материал упаковки')
+        self.assertEqual(definition.filter_type, AttributeDefinition.FILTER_SINGLE)
+        self.assertEqual(definition.choices, ['Крафт', 'Белый'])
+
+        self.client.post(reverse('management_field_delete', args=[definition.pk]))
+        self.assertFalse(AttributeDefinition.objects.filter(pk=definition.pk).exists())
+
+    def test_filter_definition_requires_compatible_values_for_range_and_multiple(self):
+        invalid_range = AttributeDefinitionForm(data={
+            'name': 'Неверный диапазон',
+            'value_type': AttributeDefinition.TYPE_TEXT,
+            'filter_type': AttributeDefinition.FILTER_RANGE,
+            'choices_text': '',
+            'unit': '',
+            'is_required': '',
+            'default_value': '',
+            'is_visible': 'on',
+            'is_filterable': 'on',
+        })
+        self.assertFalse(invalid_range.is_valid())
+        self.assertIn('filter_type', invalid_range.errors)
+
+        invalid_multiple = AttributeDefinitionForm(data={
+            'name': 'Неверный множественный',
+            'value_type': AttributeDefinition.TYPE_INTEGER,
+            'filter_type': AttributeDefinition.FILTER_MULTIPLE,
+            'choices_text': '',
+            'unit': '',
+            'is_required': '',
+            'default_value': '',
+            'is_visible': 'on',
+            'is_filterable': 'on',
+        })
+        self.assertFalse(invalid_multiple.is_valid())
+        self.assertIn('filter_type', invalid_multiple.errors)
+
+    def test_catalog_collects_filters_in_filter_button_panel(self):
         response = self.client.get(reverse('catalog'), {
             'category': self.leaf.slug,
             'price_min': '50',
@@ -302,10 +465,30 @@ class CatalogFeaturesTests(TestCase):
         self.assertContains(response, 'class="catalog-filter-open"')
         self.assertContains(response, 'class="catalog-sort-open"')
         self.assertContains(response, 'id="catalog-mobile-filter-panel"')
+        self.assertContains(response, 'name="price_min"')
+        self.assertContains(response, 'name="availability"')
         self.assertContains(response, 'id="catalog-mobile-sort-panel"')
         self.assertEqual(response.context['active_filter_count'], 2)
         self.assertContains(response, 'от 50 ₽')
         self.assertContains(response, 'В наличии')
+
+    def test_category_filter_configuration_is_limited_to_five_attributes(self):
+        attributes = [
+            AttributeDefinition.objects.create(name=f'Фильтр {index}')
+            for index in range(6)
+        ]
+        base_data = {
+            'name': 'Категория с фильтрами',
+            'sort_order': '0',
+            'filter_attributes': [str(attribute.pk) for attribute in attributes[:5]],
+        }
+        form = CategoryForm(data=base_data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        base_data['filter_attributes'] = [str(attribute.pk) for attribute in attributes]
+        form = CategoryForm(data=base_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('filter_attributes', form.errors)
 
     def test_catalog_toolbar_is_outside_category_sidebar_and_preserves_filters(self):
         color = AttributeDefinition.objects.create(
@@ -343,6 +526,7 @@ class CatalogFeaturesTests(TestCase):
         )[1].split('</aside>', 1)[0]
         self.assertEqual(filter_panel.count('name="price_min"'), 1)
         self.assertEqual(filter_panel.count('name="availability"'), 1)
+        self.assertNotContains(response, 'catalog-inline-filter-form')
 
         expected = {
             'category_query_fields': {'q', 'scope', 'price_min', 'availability', 'sort', f'filter_{color.pk}'},
@@ -647,6 +831,49 @@ class CatalogFeaturesTests(TestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.price, Decimal('210.50'))
 
+    def test_excel_round_trips_multiple_choice_attribute_values(self):
+        from openpyxl import load_workbook
+
+        color = AttributeDefinition.objects.create(
+            name='Цвет для Excel',
+            value_type=AttributeDefinition.TYPE_CHOICE,
+            choices=['Белый', 'Крафт'],
+            filter_type=AttributeDefinition.FILTER_MULTIPLE,
+        )
+        self.product.sku = 'MULTI-CHOICE-1'
+        self.product.save(update_fields=['sku'])
+        ProductAttribute.objects.create(
+            product=self.product,
+            attribute=color,
+            value_choices=['Белый', 'Крафт'],
+        )
+
+        workbook = load_workbook(BytesIO(export_products()))
+        headers = [cell.value for cell in workbook.active[1]]
+        attribute_column = headers.index(f'Характеристика: {color.name}') + 1
+        sku_column = headers.index('Артикул') + 1
+        row_number = next(
+            row
+            for row in range(2, workbook.active.max_row + 1)
+            if workbook.active.cell(row, sku_column).value == self.product.sku
+        )
+        self.assertEqual(
+            workbook.active.cell(row_number, attribute_column).value,
+            '["Белый", "Крафт"]',
+        )
+        content = BytesIO()
+        workbook.save(content)
+        content.seek(0)
+
+        result = import_products(content)
+
+        self.assertEqual(result['updated'], 1)
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(
+            ProductAttribute.objects.get(product=self.product, attribute=color).value_choices,
+            ['Белый', 'Крафт'],
+        )
+
     def test_product_media_link_reuses_library_file(self):
         media = SiteMedia.objects.create(title='Общее фото', file=SimpleUploadedFile('shared.jpg', b'file'), alt='Коробка')
         link = ProductImage.objects.create(product=self.product, media=media, is_primary=True, sort_order=0)
@@ -692,7 +919,19 @@ class CatalogFeaturesTests(TestCase):
         self.assertEqual(self.client.get(reverse('api_products')).json()['products'], [])
         self.assertEqual(self.client.get(reverse('product_detail', args=[self.product.slug])).status_code, 404)
         self.client.force_login(self.staff)
-        self.assertContains(self.client.get(reverse('management_products')), self.product.name)
+        self.product.retail_coefficient = Decimal('1.5000')
+        self.product.wholesale_coefficient = Decimal('1.2000')
+        self.product.special_coefficient = Decimal('1.1000')
+        self.product.save()
+        response = self.client.get(reverse('management_products'))
+        self.assertContains(response, self.product.name)
+        self.assertContains(response, 'Себестоимость')
+        self.assertContains(response, 'Индивид. цены')
+        listed_product = response.context['page'].object_list[0]
+        self.assertEqual(listed_product.retail_price_display, Decimal('90.15'))
+        self.assertEqual(listed_product.wholesale_price_display, Decimal('72.12'))
+        self.assertEqual(listed_product.special_price_display, Decimal('66.11'))
+        self.assertEqual(listed_product.individual_price_count, 1)
 
     def test_decimal_volume_zero_unknown_and_changed_dimensions(self):
         self.assertEqual(self.product.volume_m3, Decimal('0.024'))
@@ -766,6 +1005,12 @@ class CatalogFeaturesTests(TestCase):
         self.assertContains(response, '<title>Заказать коробку</title>')
         self.assertContains(response, 'name="description" content="Отдельное SEO-описание"')
 
+    def test_catalog_shows_product_description_and_opens_from_card(self):
+        response = self.client.get(reverse('catalog'))
+        self.assertContains(response, 'class="product-card-description">Прочная упаковка</p>')
+        self.assertContains(response, 'class="open-product" role="button"')
+        self.assertNotContains(response, 'Подробнее')
+
     def test_gallery_and_related_media(self):
         ProductImage.objects.create(product=self.product, image_url='https://example.test/side.jpg')
         video = SiteMedia.objects.create(title='Обзор', file='site_media/review.mp4')
@@ -782,6 +1027,23 @@ class CatalogFeaturesTests(TestCase):
         self.client.force_login(self.staff)
         self.client.post(reverse('management_media_delete', args=[video.pk]))
         self.assertTrue(SiteMedia.objects.filter(pk=video.pk).exists())
+
+    def test_modal_gallery_controls_are_available_for_four_product_images(self):
+        for index in range(3):
+            ProductImage.objects.create(
+                product=self.product,
+                image_url=f'https://example.test/side-{index}.jpg',
+                sort_order=index,
+            )
+
+        payload = self.client.get(reverse('api_products')).json()['products'][0]
+        response = self.client.get(reverse('catalog'))
+
+        self.assertEqual(len(payload['thumbs']), 4)
+        self.assertContains(response, 'class="modal-image-frame"')
+        self.assertContains(response, 'data-modal-image-step="-1"')
+        self.assertContains(response, 'data-modal-image-step="1"')
+        self.assertContains(response, '<svg viewBox="0 0 24 24" aria-hidden="true"><path')
 
     def test_gallery_photo_is_used_when_main_photo_is_empty(self):
         self.product.image_url = ''

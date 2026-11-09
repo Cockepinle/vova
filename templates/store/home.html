@@ -7,8 +7,8 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=33">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=36">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=38">
   </head>
   <body>
     {% include "store/partials/header.html" %}
@@ -118,7 +118,15 @@
       <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <section class="modal-gallery">
           <span class="hit-badge modal-badge">ХИТ</span>
-          <img class="modal-main-image" src="" alt="">
+          <div class="modal-image-frame">
+            <img class="modal-main-image" src="" alt="">
+            <button class="gallery-arrow modal-image-arrow modal-image-previous" type="button" data-modal-image-step="-1" aria-label="Предыдущее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="gallery-arrow modal-image-arrow modal-image-next" type="button" data-modal-image-step="1" aria-label="Следующее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
           <div class="modal-thumbs"></div>
         </section>
         <section class="modal-info">
@@ -151,11 +159,11 @@
       <img class="image-lightbox-img" src="" alt="">
     </div>
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=36"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
     <script src="{% static 'store/js/account.js' %}?v=6"></script>
-    <script src="{% static 'store/js/home.js' %}?v=35"></script>
+    <script src="{% static 'store/js/home.js' %}?v=36"></script>
     <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
     {% include "store/partials/mobile_actions.html" %}
-    <script src="{% static 'store/js/responsive.js' %}?v=37"></script>
+    <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
   </body>
 </html>

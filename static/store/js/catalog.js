@@ -8,6 +8,7 @@ const modalVariants = document.querySelector(".modal-variants");
 const modalSpecs = document.querySelector(".modal-specs");
 const modalPrice = document.querySelector(".modal-price");
 const modalThumbs = document.querySelector(".modal-thumbs");
+const modalImageFrame = document.querySelector(".modal-image-frame");
 const imageLightbox = document.querySelector(".image-lightbox");
 const imageLightboxImg = document.querySelector(".image-lightbox-img");
 const catalogGrid = document.querySelector(".catalog-grid");
@@ -17,11 +18,11 @@ const catalogCategorySection = document.querySelector(".catalog-category-section
 let modalTouchStartX = null;
 let suppressModalImageClick = false;
 
-modalMainImage?.addEventListener("touchstart", (event) => {
+modalImageFrame?.addEventListener("touchstart", (event) => {
   modalTouchStartX = event.changedTouches[0]?.clientX ?? null;
 }, {passive: true});
 
-modalMainImage?.addEventListener("touchend", (event) => {
+modalImageFrame?.addEventListener("touchend", (event) => {
   if (modalTouchStartX === null) return;
   const delta = event.changedTouches[0].clientX - modalTouchStartX;
   modalTouchStartX = null;
@@ -29,9 +30,7 @@ modalMainImage?.addEventListener("touchend", (event) => {
   const thumbs = [...(modalThumbs?.querySelectorAll(".modal-thumb") || [])];
   if (thumbs.length < 2) return;
   const currentIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains("active")));
-  const nextIndex = Math.max(0, Math.min(thumbs.length - 1, currentIndex + (delta < 0 ? 1 : -1)));
-  if (nextIndex === currentIndex) return;
-  thumbs[nextIndex].click();
+  setModalImage(currentIndex + (delta < 0 ? 1 : -1));
   suppressModalImageClick = true;
   setTimeout(() => { suppressModalImageClick = false; }, 350);
 }, {passive: true});
@@ -73,9 +72,9 @@ function productCardHtml(product) {
           <span class="product-sku">${escapeCatalogHtml(product.sku)}</span>
           <h2>${escapeCatalogHtml(product.name)}</h2>
           <span class="product-availability">${escapeCatalogHtml(product.availability_label || "")}${product.stock_quantity ? ` · ${escapeCatalogHtml(product.stock_quantity)} ${escapeCatalogHtml(product.unit)}` : ""}</span>
+          <p class="product-card-description">${escapeCatalogHtml(product.description)}</p>
         </div>
       </div>
-      <a class="product-permalink" href="${escapeCatalogHtml(product.url)}">Подробнее о товаре</a>
       <div class="catalog-card-buy">
         <div class="product-buy-row">
           <p class="price">${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span></p>
@@ -371,9 +370,9 @@ function updateProductCard(product) {
   if (openButton) {
     openButton.setAttribute("aria-label", `Открыть карточку ${product.name}`);
   }
-  const permalink = card.querySelector(".product-permalink");
-  if (permalink) {
-    permalink.href = product.url;
+  const description = card.querySelector(".product-card-description");
+  if (description) {
+    description.textContent = product.description || "";
   }
   const image = card.querySelector(".catalog-card-image img");
   if (image) {
@@ -489,15 +488,17 @@ document.addEventListener("click", (event) => {
     document.body.classList.remove("catalog-category-drawer-open");
   }
 
-  if (event.target.closest(".product-gallery-controls")) return;
+  if (event.target.closest(".product-gallery-controls, .gallery-thumbnails")) return;
   const minus = event.target.closest(".quantity-minus");
   const plus = event.target.closest(".quantity-plus");
   const addButton = event.target.closest(".add-to-cart");
   const variantLink = event.target.closest(".product-variant");
   const openButton = event.target.closest(".open-product");
+  const card = event.target.closest(".catalog-card");
   const closeButton = event.target.closest(".modal-close, .modal-backdrop");
   const lightboxClose = event.target.closest(".image-lightbox-close");
   const thumb = event.target.closest(".modal-thumb");
+  const modalImageStep = event.target.closest("[data-modal-image-step]");
   const quantityInput = event.target.closest(".quantity-input");
 
   if (lightboxClose || event.target === imageLightbox) {
@@ -507,6 +508,13 @@ document.addEventListener("click", (event) => {
 
   if (event.target === modalMainImage) {
     openImageLightbox(modalMainImage.src, modalMainImage.alt);
+    return;
+  }
+
+  if (modalImageStep) {
+    const activeIndex = [...modalThumbs.querySelectorAll(".modal-thumb")]
+      .findIndex((item) => item.classList.contains("active"));
+    setModalImage(activeIndex + Number(modalImageStep.dataset.modalImageStep));
     return;
   }
 
@@ -551,9 +559,14 @@ document.addEventListener("click", (event) => {
   }
 
   if (openButton && !event.target.closest(".favorite-button")) {
-    const card = openButton.closest(".catalog-card");
-    const product = JSON.parse(card.dataset.product);
-    openProductModal(product);
+    if (!event.target.closest("button, input, select, textarea, a")) {
+      openProductModal(JSON.parse(openButton.closest(".catalog-card").dataset.product));
+      return;
+    }
+  }
+
+  if (card && !event.target.closest("button, input, select, textarea, a, [role='button'], .quantity-control")) {
+    openProductModal(JSON.parse(card.dataset.product));
   }
 
   if (closeButton) {
@@ -561,9 +574,8 @@ document.addEventListener("click", (event) => {
   }
 
   if (thumb) {
-    modalMainImage.src = thumb.dataset.image;
-    document.querySelectorAll(".modal-thumb").forEach((item) => item.classList.remove("active"));
-    thumb.classList.add("active");
+    const index = [...modalThumbs.querySelectorAll(".modal-thumb")].indexOf(thumb);
+    setModalImage(index);
   }
 });
 
@@ -688,7 +700,7 @@ window.refreshCatalogProducts = () => loadCatalogFromApi(window.location.href, f
 
 document.addEventListener("change", (event) => {
   const toolbarSelect = event.target.closest
-    ? event.target.closest(".catalog-toolbar-category select, .catalog-toolbar-availability select, .catalog-toolbar-sort select")
+    ? event.target.closest(".catalog-toolbar-category select, .catalog-toolbar-sort select")
     : null;
   if (toolbarSelect) {
     toolbarSelect.form?.requestSubmit();
@@ -760,6 +772,17 @@ function closeImageLightbox() {
   document.body.classList.remove("lightbox-open");
 }
 
+function setModalImage(index) {
+  const thumbs = [...(modalThumbs?.querySelectorAll(".modal-thumb") || [])];
+  if (!thumbs.length) return;
+  const normalizedIndex = (index + thumbs.length) % thumbs.length;
+  const activeThumb = thumbs[normalizedIndex];
+  modalMainImage.src = activeThumb.dataset.image;
+  thumbs.forEach((thumb, thumbIndex) => {
+    thumb.classList.toggle("active", thumbIndex === normalizedIndex);
+  });
+}
+
 function openProductModal(product) {
   window.renderProductMedia?.(product, modal.querySelector(".modal-info"));
   modalMainImage.src = product.image;
@@ -774,12 +797,16 @@ function openProductModal(product) {
   modalSpecs.innerHTML = product.specs
     .map(([label, value]) => `<div><dt>${escapeCatalogHtml(label)}</dt><dd>${escapeCatalogHtml(value)}</dd></div>`)
     .join("");
-  modalThumbs.innerHTML = product.thumbs
+  const images = [...new Set([product.image, ...(product.thumbs || [])].filter(Boolean))];
+  modalThumbs.innerHTML = images
     .map(
       (image, index) =>
         `<button class="modal-thumb ${index === 0 ? "active" : ""}" type="button" data-image="${escapeCatalogHtml(image)}" aria-label="Фото ${index + 1}"><img src="${escapeCatalogHtml(image)}" alt=""></button>`,
     )
     .join("");
+  modal.querySelectorAll(".modal-image-arrow").forEach((arrow) => {
+    arrow.hidden = images.length < 2;
+  });
 
   modal.dataset.productId = product.id;
   const favoriteButton = document.querySelector(`[data-product-id="${product.id}"] .favorite-button`);

@@ -213,6 +213,18 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name, allow_unicode=True)
+        update_fields = kwargs.get("update_fields")
+        price_inputs = {"price", "cost_price", "retail_coefficient"}
+        should_recalculate_retail = (
+            self._state.adding
+            or update_fields is None
+            or bool(price_inputs.intersection(update_fields))
+        )
+        if should_recalculate_retail and self.cost_price is not None and self.retail_coefficient is not None:
+            from ..pricing import as_money
+            self.price = as_money(self.cost_price * self.retail_coefficient)
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"price"}
         super().save(*args, **kwargs)
 
     @property
@@ -304,6 +316,16 @@ class AttributeDefinition(models.Model):
     TYPE_FILE = "file"
     TYPE_URL = "url"
 
+    FILTER_SINGLE = "single"
+    FILTER_MULTIPLE = "multiple"
+    FILTER_RANGE = "range"
+
+    FILTER_TYPE_CHOICES = [
+        (FILTER_SINGLE, "Список — один вариант"),
+        (FILTER_MULTIPLE, "Список — несколько вариантов"),
+        (FILTER_RANGE, "Числовой диапазон"),
+    ]
+
     TYPE_CHOICES = [
         (TYPE_TEXT, "Текст"),
         (TYPE_INTEGER, "Целое число"),
@@ -327,6 +349,12 @@ class AttributeDefinition(models.Model):
     is_visible = models.BooleanField("Видимое", default=True)
     show_in_table = models.BooleanField("Показывать в таблице", default=True)
     is_filterable = models.BooleanField("Использовать в фильтрах", default=True)
+    filter_type = models.CharField(
+        "Тип фильтра",
+        max_length=12,
+        choices=FILTER_TYPE_CHOICES,
+        default=FILTER_SINGLE,
+    )
     sort_order = models.PositiveIntegerField("Порядок", default=0)
 
     class Meta:
@@ -361,6 +389,7 @@ class ProductAttribute(models.Model):
     value_boolean = models.BooleanField("Да/Нет", null=True, blank=True)
     value_date = models.DateField("Дата", null=True, blank=True)
     value_choice = models.CharField("Выбор", max_length=160, blank=True)
+    value_choices = models.JSONField("Выбранные значения", default=list, blank=True)
     value_file = models.FileField("Файл", upload_to="product_fields/", blank=True)
     value_url = models.URLField("Ссылка", blank=True)
 
@@ -385,7 +414,10 @@ class ProductAttribute(models.Model):
         if value_type == AttributeDefinition.TYPE_DATE:
             return self.value_date
         if value_type == AttributeDefinition.TYPE_CHOICE:
-            return self.value_choice
+            if self.attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                values = self.value_choices or ([self.value_choice] if self.value_choice else [])
+                return ", ".join(str(value) for value in values)
+            return self.value_choice or (self.value_choices[0] if self.value_choices else "")
         if value_type in [AttributeDefinition.TYPE_IMAGE, AttributeDefinition.TYPE_FILE]:
             return self.value_file
         if value_type == AttributeDefinition.TYPE_URL:

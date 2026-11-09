@@ -5,13 +5,15 @@
           {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>{% endif %}
           <span class="brand-name">{{ site_settings.site_name|default:"PakLine" }}</span>
         </a>
-        <form class="mobile-header-search" method="get" action="{% url 'catalog' %}" role="search">
-          <label class="search-box">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
-            <input name="q" type="search" placeholder="Поиск товаров" aria-label="Поиск товаров">
-            <button type="submit" aria-label="Найти"><span aria-hidden="true">⌕</span></button>
-          </label>
-        </form>
+        {% if request.resolver_match.url_name == "catalog" %}
+          <form class="mobile-header-search" method="get" action="{% url 'catalog' %}" role="search">
+            <label class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
+              <input name="q" type="search" placeholder="Поиск товаров" aria-label="Поиск товаров">
+              <button type="submit" aria-label="Найти"><span aria-hidden="true">⌕</span></button>
+            </label>
+          </form>
+        {% endif %}
 
         <nav class="main-nav" aria-label="Главная навигация">
       <button class="mobile-nav-close" type="button" aria-label="Закрыть меню">×</button>

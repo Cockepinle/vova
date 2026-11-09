@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from django.core.exceptions import ImproperlyConfigured
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,9 +17,12 @@ if env_path.exists():
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-pakline-secret-key")
-
-DEBUG = os.environ.get("DEBUG", "1") == "1"
+DEBUG = os.environ.get("DEBUG", "0") == "1"
+database_url = os.environ.get("DATABASE_URL", "")
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY and (not DEBUG or database_url or os.environ.get("VERCEL")):
+    raise ImproperlyConfigured("Set SECRET_KEY when running outside local debug mode.")
+SECRET_KEY = SECRET_KEY or "dev-only-pakline-secret-key"
 
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()]
 if os.environ.get("VERCEL"):
@@ -71,8 +75,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "vova.wsgi.application"
-
-database_url = os.environ.get("DATABASE_URL", "")
 
 if database_url:
     parsed_database_url = urlparse(database_url)

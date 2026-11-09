@@ -1185,6 +1185,11 @@ body.cart-open {
 .checkout-payment legend { margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: 1.4px; text-transform: uppercase; }
 .checkout-payment .payment-option { display: flex; grid-template-columns: none; flex-direction: row; align-items: flex-start; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); padding: 12px; cursor: pointer; }
 .checkout-payment .payment-option:has(input:checked) { border-color: var(--blue); background: var(--accent-soft); }
+.checkout-payment .payment-option.is-unavailable { background: color-mix(in srgb, var(--surface) 72%, var(--line)); color: var(--muted); cursor: not-allowed; }
+.checkout-payment .payment-option.is-unavailable strong,
+.checkout-payment .payment-option.is-unavailable small { color: var(--muted); }
+.checkout-payment .payment-option.is-unavailable input { accent-color: var(--muted); cursor: not-allowed; }
+.checkout-payment .payment-option.is-unavailable:has(input:checked) { border-color: var(--line); background: color-mix(in srgb, var(--surface) 72%, var(--line)); }
 .payment-option input { flex: 0 0 20px; width: 20px; min-height: 20px; margin-top: 2px; }
 .payment-option span, .payment-option strong, .payment-option small { display: block; letter-spacing: 0; text-transform: none; }
 .payment-option strong { color: var(--text); font-size: 14px; }

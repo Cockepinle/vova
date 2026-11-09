@@ -7,8 +7,34 @@ const modalDescription = document.querySelector(".modal-description");
 const modalSpecs = document.querySelector(".modal-specs");
 const modalPrice = document.querySelector(".modal-price");
 const modalThumbs = document.querySelector(".modal-thumbs");
+const modalImageFrame = document.querySelector(".modal-image-frame");
 const imageLightbox = document.querySelector(".image-lightbox");
 const imageLightboxImg = document.querySelector(".image-lightbox-img");
+let modalTouchStartX = null;
+let suppressModalImageClick = false;
+
+modalImageFrame?.addEventListener("touchstart", (event) => {
+  modalTouchStartX = event.changedTouches[0]?.clientX ?? null;
+}, {passive: true});
+
+modalImageFrame?.addEventListener("touchend", (event) => {
+  if (modalTouchStartX === null) return;
+  const delta = event.changedTouches[0].clientX - modalTouchStartX;
+  modalTouchStartX = null;
+  if (Math.abs(delta) < 40) return;
+  const thumbs = [...(modalThumbs?.querySelectorAll(".modal-thumb") || [])];
+  if (thumbs.length < 2) return;
+  const currentIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains("active")));
+  setModalImage(currentIndex + (delta < 0 ? 1 : -1));
+  suppressModalImageClick = true;
+  setTimeout(() => { suppressModalImageClick = false; }, 350);
+}, {passive: true});
+
+modalMainImage?.addEventListener("click", (event) => {
+  if (!suppressModalImageClick) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
 
 function changeQuantity(control, delta) {
   const value = control.querySelector(".quantity-input");
@@ -51,6 +77,17 @@ function syncCardQuantity(control) {
   window.setProductCartQuantity(card.dataset.productId, Math.max(minimum, value));
 }
 
+function setModalImage(index) {
+  const thumbs = [...(modalThumbs?.querySelectorAll(".modal-thumb") || [])];
+  if (!thumbs.length) return;
+  const normalizedIndex = (index + thumbs.length) % thumbs.length;
+  const activeThumb = thumbs[normalizedIndex];
+  modalMainImage.src = activeThumb.dataset.image;
+  thumbs.forEach((thumb, thumbIndex) => {
+    thumb.classList.toggle("active", thumbIndex === normalizedIndex);
+  });
+}
+
 function openProductModal(product) {
   window.renderProductMedia?.(product, modal.querySelector(".modal-info"));
   modalMainImage.src = product.image;
@@ -64,12 +101,16 @@ function openProductModal(product) {
   modalSpecs.innerHTML = product.specs
     .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
     .join("");
-  modalThumbs.innerHTML = product.thumbs
+  const images = [...new Set([product.image, ...(product.thumbs || [])].filter(Boolean))];
+  modalThumbs.innerHTML = images
     .map(
       (image, index) =>
         `<button class="modal-thumb ${index === 0 ? "active" : ""}" type="button" data-image="${image}" aria-label="Фото ${index + 1}"><img src="${image}" alt=""></button>`,
     )
     .join("");
+  modal.querySelectorAll(".modal-image-arrow").forEach((arrow) => {
+    arrow.hidden = images.length < 2;
+  });
 
   modal.dataset.productId = product.id;
   const favoriteButton = document.querySelector(`[data-product-id="${product.id}"] .favorite-button`);
@@ -129,6 +170,7 @@ document.addEventListener("click", (event) => {
   const closeButton = event.target.closest(".modal-close, .modal-backdrop");
   const lightboxClose = event.target.closest(".image-lightbox-close");
   const thumb = event.target.closest(".modal-thumb");
+  const modalImageStep = event.target.closest("[data-modal-image-step]");
   const productCard = event.target.closest(".product-card");
 
   if (lightboxClose || event.target === imageLightbox) {
@@ -137,7 +179,15 @@ document.addEventListener("click", (event) => {
   }
 
   if (event.target === modalMainImage) {
+    if (suppressModalImageClick) return;
     openImageLightbox(modalMainImage.src, modalMainImage.alt);
+    return;
+  }
+
+  if (modalImageStep) {
+    const activeIndex = [...modalThumbs.querySelectorAll(".modal-thumb")]
+      .findIndex((item) => item.classList.contains("active"));
+    setModalImage(activeIndex + Number(modalImageStep.dataset.modalImageStep));
     return;
   }
 
@@ -184,9 +234,8 @@ document.addEventListener("click", (event) => {
   }
 
   if (thumb) {
-    modalMainImage.src = thumb.dataset.image;
-    document.querySelectorAll(".modal-thumb").forEach((item) => item.classList.remove("active"));
-    thumb.classList.add("active");
+    const index = [...modalThumbs.querySelectorAll(".modal-thumb")].indexOf(thumb);
+    setModalImage(index);
     return;
   }
 

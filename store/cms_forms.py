@@ -433,6 +433,13 @@ class SiteMediaForm(forms.ModelForm):
 
 
 class AttributeDefinitionForm(forms.ModelForm):
+    filter_type = forms.ChoiceField(
+        label="Тип фильтра в каталоге",
+        choices=AttributeDefinition.FILTER_TYPE_CHOICES,
+        required=False,
+        initial=AttributeDefinition.FILTER_SINGLE,
+    )
+
     choices_text = forms.CharField(
         label="Варианты списка",
         required=False,
@@ -444,6 +451,7 @@ class AttributeDefinitionForm(forms.ModelForm):
         fields = [
             "name",
             "value_type",
+            "filter_type",
             "unit",
             "is_required",
             "default_value",
@@ -453,6 +461,7 @@ class AttributeDefinitionForm(forms.ModelForm):
         labels = {
             "name": "Название поля",
             "value_type": "Тип данных",
+            "filter_type": "Тип фильтра в каталоге",
             "unit": "Единица измерения",
             "is_required": "Обязательное",
             "default_value": "Значение по умолчанию",
@@ -465,9 +474,37 @@ class AttributeDefinitionForm(forms.ModelForm):
         if self.instance.pk and self.instance.choices:
             self.fields["choices_text"].initial = "\n".join(self.instance.choices)
 
+    def clean(self):
+        data = super().clean()
+        data["filter_type"] = data.get("filter_type") or (
+            self.instance.filter_type if self.instance.pk else AttributeDefinition.FILTER_SINGLE
+        )
+        choices = [
+            item.strip()
+            for item in data.get("choices_text", "").splitlines()
+            if item.strip()
+        ]
+        if data.get("value_type") == AttributeDefinition.TYPE_CHOICE and not choices:
+            self.add_error("choices_text", "Для типа «Список» укажите хотя бы один вариант.")
+        if data.get("is_filterable") and data.get("filter_type") == AttributeDefinition.FILTER_RANGE:
+            if data.get("value_type") not in {
+                AttributeDefinition.TYPE_INTEGER,
+                AttributeDefinition.TYPE_DECIMAL,
+                AttributeDefinition.TYPE_PRICE,
+            }:
+                self.add_error("filter_type", "Для диапазона выберите числовой тип данных.")
+        if data.get("is_filterable") and data.get("filter_type") == AttributeDefinition.FILTER_MULTIPLE:
+            if data.get("value_type") != AttributeDefinition.TYPE_CHOICE:
+                self.add_error("filter_type", "Несколько вариантов доступны для типа данных «Список».")
+        return data
+
     def save(self, commit=True):
         instance = super().save(commit=False)
-        instance.choices = [item.strip() for item in self.cleaned_data.get("choices_text", "").splitlines() if item.strip()]
+        instance.choices = list(dict.fromkeys(
+            item.strip()
+            for item in self.cleaned_data.get("choices_text", "").splitlines()
+            if item.strip()
+        ))
         instance.show_in_table = True
 
         if commit:
@@ -573,6 +610,11 @@ class DynamicProductFieldsForm(forms.Form):
 
     def _initial_value(self, definition, value):
         if not value:
+            if (
+                definition.value_type == AttributeDefinition.TYPE_CHOICE
+                and definition.filter_type == AttributeDefinition.FILTER_MULTIPLE
+            ):
+                return [definition.default_value] if definition.default_value else []
             return definition.default_value
 
         if definition.value_type == AttributeDefinition.TYPE_INTEGER:
@@ -584,7 +626,11 @@ class DynamicProductFieldsForm(forms.Form):
         if definition.value_type == AttributeDefinition.TYPE_DATE:
             return value.value_date
         if definition.value_type == AttributeDefinition.TYPE_CHOICE:
-            return value.value_choice
+            if definition.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                return value.value_choices or ([value.value_choice] if value.value_choice else [])
+            return value.value_choice or (
+                value.value_choices[0] if value.value_choices else ""
+            )
         if definition.value_type in [AttributeDefinition.TYPE_IMAGE, AttributeDefinition.TYPE_FILE]:
             return value.value_file
         if definition.value_type == AttributeDefinition.TYPE_URL:
@@ -610,6 +656,15 @@ class DynamicProductFieldsForm(forms.Form):
             return forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_CHOICE:
             choices = [("", "Не выбрано")] + [(choice, choice) for choice in definition.choices]
+            if definition.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                return forms.MultipleChoiceField(
+                    choices=choices[1:],
+                    required=definition.is_required,
+                    initial=initial,
+                    widget=forms.CheckboxSelectMultiple,
+                    label=definition.name,
+                    help_text=definition.unit,
+                )
             return forms.ChoiceField(choices=choices, **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_IMAGE:
             kwargs["required"] = definition.is_required and not initial
@@ -627,7 +682,7 @@ class DynamicProductFieldsForm(forms.Form):
             field_name = f"field_{definition.pk}"
             value = self.cleaned_data.get(field_name)
 
-            if value in ["", None] and not definition.is_required:
+            if value in ["", None, []] and not definition.is_required:
                 ProductAttribute.objects.filter(product=product, attribute=definition).delete()
                 continue
 
@@ -642,6 +697,7 @@ class DynamicProductFieldsForm(forms.Form):
         product_attribute.value_boolean = None
         product_attribute.value_date = None
         product_attribute.value_choice = ""
+        product_attribute.value_choices = []
         product_attribute.value_url = ""
 
         if definition.value_type == AttributeDefinition.TYPE_INTEGER:
@@ -653,7 +709,11 @@ class DynamicProductFieldsForm(forms.Form):
         elif definition.value_type == AttributeDefinition.TYPE_DATE:
             product_attribute.value_date = value
         elif definition.value_type == AttributeDefinition.TYPE_CHOICE:
-            product_attribute.value_choice = value
+            if definition.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                product_attribute.value_choices = list(value or [])
+                product_attribute.value_choice = ""
+            else:
+                product_attribute.value_choice = value
         elif definition.value_type in [AttributeDefinition.TYPE_IMAGE, AttributeDefinition.TYPE_FILE]:
             if value:
                 product_attribute.value_file = value

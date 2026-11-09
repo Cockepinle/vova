@@ -98,6 +98,7 @@ def get_product(product_id):
 
 def category_filter_context(category, products, request):
     filters = []
+    category_products = products
     if category:
         attributes = category.filter_attributes.filter(
             is_filterable=True,
@@ -107,6 +108,67 @@ def category_filter_context(category, products, request):
         attributes = []
     for attribute in attributes:
         parameter = f"filter_{attribute.pk}"
+        if attribute.filter_type == AttributeDefinition.FILTER_RANGE:
+            min_parameter = f"{parameter}_min"
+            max_parameter = f"{parameter}_max"
+            min_value = request.GET.get(min_parameter, "").strip()
+            max_value = request.GET.get(max_parameter, "").strip()
+            lookup_field = (
+                "value_integer"
+                if attribute.value_type == AttributeDefinition.TYPE_INTEGER
+                else "value_decimal"
+            )
+            has_values = ProductAttribute.objects.filter(
+                product__in=category_products,
+                attribute=attribute,
+            ).exclude(**{f"{lookup_field}__isnull": True}).exists()
+            if not has_values:
+                continue
+            min_number = max_number = None
+            for raw, bound in ((min_value, "gte"), (max_value, "lte")):
+                if not raw:
+                    continue
+                try:
+                    number = Decimal(raw)
+                    if not number.is_finite():
+                        raise InvalidOperation
+                except (InvalidOperation, ValueError):
+                    if bound == "gte":
+                        min_value = ""
+                    else:
+                        max_value = ""
+                    continue
+                if bound == "gte":
+                    min_number = number
+                else:
+                    max_number = number
+            if min_value and max_value:
+                if min_number is not None and max_number is not None and min_number > max_number:
+                    min_value = max_value = ""
+                    min_number = max_number = None
+            if min_number is not None:
+                products = products.filter(**{
+                    "attributes__attribute": attribute,
+                    f"attributes__{lookup_field}__gte": min_number,
+                })
+            if max_number is not None:
+                products = products.filter(**{
+                    "attributes__attribute": attribute,
+                    f"attributes__{lookup_field}__lte": max_number,
+                })
+            filters.append({
+                "name": attribute.name,
+                "kind": "range",
+                "filter_type": attribute.filter_type,
+                "value_type": attribute.value_type,
+                "parameter": parameter,
+                "min_parameter": min_parameter,
+                "max_parameter": max_parameter,
+                "min_value": min_value,
+                "max_value": max_value,
+            })
+            continue
+
         selected = request.GET.getlist(parameter)
         values = []
         seen = set()
@@ -114,28 +176,51 @@ def category_filter_context(category, products, request):
             product__in=products,
             attribute=attribute,
         ).select_related("attribute")
-        for row in rows:
-            display = row.display_value()
-            if display in (None, ""):
-                continue
-            raw = (
-                "1" if row.value_boolean else "0"
-            ) if attribute.value_type == AttributeDefinition.TYPE_BOOLEAN else str(display)
-            if raw not in seen:
-                seen.add(raw)
-                values.append({
-                    "value": raw,
-                    "label": f"{display}{(' ' + attribute.unit) if attribute.unit else ''}",
-                    "selected": raw in selected,
-                })
+        option_rows = ProductAttribute.objects.filter(
+            product__in=category_products,
+            attribute=attribute,
+        ).select_related("attribute")
+        for row in option_rows:
+            if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                raw_values = row.value_choices or ([row.value_choice] if row.value_choice else [])
+                row_values = [(value, value) for value in raw_values]
+            else:
+                display = row.display_value()
+                raw_value = (
+                    "1" if row.value_boolean else "0"
+                ) if attribute.value_type == AttributeDefinition.TYPE_BOOLEAN else str(display)
+                row_values = [] if display in (None, "") else [(raw_value, display)]
+            for raw, display in row_values:
+                raw = str(raw)
+                if raw not in seen:
+                    seen.add(raw)
+                    values.append({
+                        "value": raw,
+                        "label": f"{display}{(' ' + attribute.unit) if attribute.unit else ''}",
+                        "selected": raw in selected,
+                    })
         if selected:
-            choice_query = Q()
-            for value in selected:
-                choice_query |= Q(**attribute_lookup(attribute, value))
-            products = products.filter(choice_query)
+            valid_selected = [value for value in selected if value in seen]
+            if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+                matching_ids = [
+                    row.product_id
+                    for row in rows
+                    if set(valid_selected).intersection(
+                        str(value) for value in (
+                            row.value_choices or ([row.value_choice] if row.value_choice else [])
+                        )
+                    )
+                ]
+                products = products.filter(pk__in=matching_ids)
+            elif valid_selected:
+                choice_query = Q()
+                for value in valid_selected:
+                    choice_query |= Q(**attribute_lookup(attribute, value))
+                products = products.filter(choice_query)
         if values:
             filters.append({
                 "name": attribute.name,
+                "filter_type": attribute.filter_type,
                 "parameter": parameter,
                 "values": values,
             })
@@ -166,18 +251,13 @@ def category_filter_context(category, products, request):
         max_price = None
 
     user = getattr(request, "user", None)
-    if user and user.is_authenticated and (min_price is not None or max_price is not None):
-        individual_prices = individual_price_map(user)
+    if min_price is not None or max_price is not None:
+        individual_prices = individual_price_map(user) if user and user.is_authenticated else None
         products = [
             product for product in products
             if (min_price is None or resolve_product_price(product, user, individual_prices) >= min_price)
             and (max_price is None or resolve_product_price(product, user, individual_prices) <= max_price)
         ]
-    else:
-        if min_price is not None:
-            products = products.filter(price__gte=min_price)
-        if max_price is not None:
-            products = products.filter(price__lte=max_price)
 
     filters.insert(0, {
         "name": "Цена, ₽",
@@ -374,8 +454,8 @@ def format_price(value):
 
 def sort_products(products, sort, request=None):
     user = getattr(request, "user", None)
-    if sort in {"price_asc", "price_desc"} and user and user.is_authenticated:
-        individual_prices = individual_price_map(user)
+    if sort in {"price_asc", "price_desc"}:
+        individual_prices = individual_price_map(user) if user and user.is_authenticated else None
         reverse_order = sort == "price_desc"
         return sorted(
             products,
@@ -386,12 +466,6 @@ def sort_products(products, sort, request=None):
         )
 
     if not hasattr(products, "order_by"):
-        if sort in {"price_asc", "price_desc"}:
-            reverse_order = sort == "price_desc"
-            return sorted(
-                products,
-                key=lambda product: (product.price * (-1 if reverse_order else 1), product.name.casefold()),
-            )
         if sort == "name_desc":
             return sorted(products, key=lambda product: product.name.casefold(), reverse=True)
         if sort == "newest":
