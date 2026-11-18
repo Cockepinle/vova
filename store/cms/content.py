@@ -1,6 +1,9 @@
+import json
+
 from .common import ADDITION, AttributeDefinition, AttributeDefinitionForm, CHANGE, DELETION, PageContent, PageContentForm, ProductAttribute, SiteLinkFormSet, SiteMedia
 from .common import SiteMediaForm, SiteSettings, SiteSettingsForm, delete_unreferenced_file, get_object_or_404, log_change, management_required, messages, redirect, render
 from .common import require_POST, transaction
+from django.http import HttpResponseBadRequest, JsonResponse
 
 def media_usage(media):
     usage = []
@@ -17,9 +20,15 @@ def media_usage(media):
 @require_POST
 def page_content_delete(request, page_id):
     page = get_object_or_404(PageContent, pk=page_id)
+    if not page.is_custom:
+        messages.error(request, "Системные страницы нельзя удалить. Можно изменить их содержимое и видимость.")
+        return redirect("management_pages")
+    if page.children.exists():
+        messages.error(request, "Сначала переместите или удалите вложенные страницы.")
+        return redirect("management_pages")
     log_change(request, page, DELETION, "Текст страницы удалён")
     page.delete()
-    messages.success(request, "Текст страницы удалён.")
+    messages.success(request, "Страница удалена.")
     return redirect("management_pages")
 
 @management_required
@@ -141,13 +150,27 @@ def page_content_form(request, page_id=None):
         if form.is_valid():
             is_new = page is None
             page = form.save()
-            log_change(request, page, ADDITION if is_new else CHANGE, "Текст страницы сохранён")
-            messages.success(request, "Текст страницы сохранён.")
+            log_change(request, page, ADDITION if is_new else CHANGE, "Страница сохранена через CMS")
+            messages.success(request, "Страница сохранена.")
             return redirect("management_pages")
         messages.error(request, "Проверьте ошибки в форме.")
     else:
         form = PageContentForm(instance=page)
 
+    preview_url = ""
+    if page:
+        if page.is_custom and page.slug:
+            preview_url = f"/pages/{page.slug}/?preview=1"
+        else:
+            preview_url = {
+                "home": "/",
+                "catalog": "/catalog/",
+                "team": "/team/",
+                "contacts": "/contacts/",
+                "promotions": "/promotions/",
+                "privacy": "/documents/privacy/",
+                "offer": "/documents/offer/",
+            }.get(page.page, "")
     return render(
         request,
         "store/management/page_content_form.html",
@@ -155,21 +178,104 @@ def page_content_form(request, page_id=None):
             "section": "pages",
             "page_content": page,
             "form": form,
+            "preview_url": preview_url,
         },
     )
 
 @management_required
 def page_content_list(request):
-    pages = PageContent.objects.order_by("page")
+    pages = list(PageContent.objects.select_related("parent").order_by("sort_order", "page"))
+    children = {}
+    for page in pages:
+        page.tree_url = (
+            f"/pages/{page.slug}/"
+            if page.is_custom and page.slug
+            else {
+                "home": "/",
+                "catalog": "/catalog/",
+                "team": "/team/",
+                "contacts": "/contacts/",
+                "promotions": "/promotions/",
+                "privacy": "/documents/privacy/",
+                "offer": "/documents/offer/",
+            }.get(page.page, "")
+        )
+        page.display_name = page.title or page.get_page_display()
+        page.is_protected = not page.is_custom
+        children.setdefault(page.parent_id, []).append(page)
+
+    def build_tree(parent_id=None, ancestors=frozenset()):
+        nodes = []
+        for page in children.get(parent_id, []):
+            if page.pk in ancestors:
+                continue
+            page.tree_children = build_tree(parent_id=page.pk, ancestors=ancestors | {page.pk})
+            nodes.append(page)
+        return nodes
+
+    query = request.GET.get("q", "").strip()
+    tree = build_tree()
 
     return render(
         request,
         "store/management/page_content_list.html",
         {
             "section": "pages",
-            "pages": pages,
+            "page_tree": tree,
+            "page_count": len(pages),
+            "query": query,
         },
     )
+
+@management_required
+@require_POST
+def page_content_reorder(request):
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Некорректный JSON.")
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        return HttpResponseBadRequest("Ожидался список страниц.")
+
+    try:
+        items = [
+            (
+                int(item["id"]),
+                int(item["parent_id"]) if item.get("parent_id") is not None else None,
+                int(item.get("order", order)),
+            )
+            for order, item in enumerate(payload["items"])
+        ]
+    except (KeyError, TypeError, ValueError):
+        return HttpResponseBadRequest("Некорректные данные порядка страниц.")
+
+    page_ids = {page_id for page_id, _, _ in items}
+    existing_ids = set(PageContent.objects.values_list("pk", flat=True))
+    if len(page_ids) != len(items) or page_ids != existing_ids:
+        return HttpResponseBadRequest("Обновите список страниц и повторите изменение.")
+
+    parent_by_id = {page_id: parent_id for page_id, parent_id, _ in items}
+    if any(parent_id is not None and parent_id not in page_ids for parent_id in parent_by_id.values()):
+        return HttpResponseBadRequest("Родительская страница не найдена.")
+    for page_id, parent_id, order in items:
+        if order < 0:
+            return HttpResponseBadRequest("Порядок страницы не может быть отрицательным.")
+    for page_id in page_ids:
+        visited = set()
+        current_id = page_id
+        while current_id is not None:
+            if current_id in visited:
+                return HttpResponseBadRequest("Циклическая вложенность страниц запрещена.")
+            visited.add(current_id)
+            current_id = parent_by_id.get(current_id)
+
+    with transaction.atomic():
+        for page_id, parent_id, order in items:
+            PageContent.objects.filter(pk=page_id).update(parent_id=parent_id, sort_order=order)
+        if items:
+            page = PageContent.objects.get(pk=items[0][0])
+            log_change(request, page, CHANGE, "Порядок и вложенность страниц обновлены")
+    return JsonResponse({"saved": True})
 
 @management_required
 def field_form(request, field_id=None):

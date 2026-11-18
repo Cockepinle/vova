@@ -1,0 +1,33 @@
+<li class="page-tree-node" data-page-id="{{ node.pk }}" draggable="true">
+  <div class="page-tree-row">
+    <button class="page-tree-toggle" type="button" data-tree-toggle aria-label="Свернуть вложенные страницы" {% if not node.tree_children %}hidden disabled{% endif %}>⌄</button>
+    <button class="page-tree-grip" type="button" draggable="true" aria-label="Перетащить страницу" title="Перетащите, чтобы изменить порядок">⠿</button>
+    <span class="page-tree-icon" aria-hidden="true">{% if node.page == "home" %}⌂{% else %}▤{% endif %}</span>
+    <div class="page-tree-main">
+      <a class="page-tree-title" href="{% url 'management_page_edit' node.pk %}">{{ node.display_name }}</a>
+      <span class="page-tree-url">{{ node.tree_url|default:"URL не задан" }}</span>
+    </div>
+    <div class="page-tree-badges">
+      {% if node.page == "home" %}<span class="page-tree-badge is-home">Главная</span>{% endif %}
+      {% if node.is_protected %}<span class="page-tree-badge">Системная</span>{% endif %}
+      <span class="status {% if node.is_visible %}status-published{% else %}status-hidden{% endif %}">{% if node.is_visible %}Опубликована{% else %}Скрыта{% endif %}</span>
+    </div>
+    <div class="page-tree-actions">
+      {% if node.tree_url %}<a href="{{ node.tree_url }}{% if node.is_custom and not node.is_visible %}?preview=1{% endif %}" target="_blank" rel="noopener noreferrer" aria-label="Предпросмотр: {{ node.display_name }}">Предпросмотр</a>{% endif %}
+      <a href="{% url 'management_page_edit' node.pk %}">Изменить</a>
+      {% if node.is_custom %}
+        <form method="post" action="{% url 'management_page_delete' node.pk %}">
+          {% csrf_token %}
+          <button type="submit" onclick="return confirm('Удалить страницу «{{ node.display_name|escapejs }}»?')">Удалить</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if node.tree_children %}
+    <ul class="page-tree-list" data-parent-id="{{ node.pk }}">
+      {% for page in node.tree_children %}
+        {% include "store/management/page_tree_node.html" with node=page %}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</li>

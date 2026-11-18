@@ -34,6 +34,7 @@ from .cms import (
     page_content_delete,
     page_content_form,
     page_content_list,
+    page_content_reorder,
     payment_method_form,
     payment_method_list,
     product_bulk_action,

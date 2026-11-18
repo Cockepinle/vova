@@ -117,6 +117,7 @@ class Order(models.Model):
     delivery_handoff_url = models.URLField("Ссылка на сервис перевозчика", blank=True)
     delivery_provider_data = models.JSONField("Данные для delivery provider", default=dict, blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    stock_decremented = models.BooleanField("Остаток списан", default=False)
     created_at = models.DateTimeField("Создан", auto_now_add=True)
     updated_at = models.DateTimeField("Обновлён", auto_now=True)
 

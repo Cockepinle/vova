@@ -1,21 +1,74 @@
 {% extends "store/management/base.html" %}
 {% block heading %}Настройки сайта{% endblock %}
 {% block content %}
-<form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data">
+<form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data" data-page-editor>
   {% csrf_token %}
-  <p class="section-help">Общие контакты используются на всём сайте. Контакты шапки и подвала заполняйте только для отдельных значений. Изображение из медиатеки имеет приоритет над прямой загрузкой. <a href="{% url 'management_media' %}">Открыть медиатеку</a>.</p>
+  <p class="section-help">Настройки сайта сгруппированы по основным разделам магазина.</p>
   {% if form.instance.logo_url %}<div class="media-previews"><img src="{{ form.instance.logo_url }}" alt="Текущий логотип"><button class="ghost-button" type="submit" name="remove_logo" value="1">Удалить логотип</button></div>{% endif %}
-  {% include "store/management/content_fields.html" %}
-  <section class="settings-section">
+  <div class="page-editor-tabs settings-tabs" role="tablist" aria-label="Разделы настроек">
+    <button type="button" class="page-editor-tab active" role="tab" aria-selected="true" data-page-tab="settings-main">Основное</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-contacts">Контакты</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-brand">Шапка и подвал</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-seo">SEO сайта</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-currency">Валюта</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-order">Заказ</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-links">Меню и ссылки</button>
+  </div>
+  {{ form.non_field_errors }}
+  {% for title, fields in form.groups %}
+    {% if title == "Компания и бренд" %}
+      <section class="settings-section page-editor-panel active" data-page-panel="settings-main">
+    {% elif title == "Общие контакты и доставка" %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-contacts" hidden>
+    {% elif title == "Шапка и основная кнопка" or title == "Подвал и юридическая информация" %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-brand" hidden>
+    {% elif title == "Валюта магазина" %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-currency" hidden>
+    {% elif title == "Настройки заказа" %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-order" hidden>
+    {% else %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-seo" hidden>
+    {% endif %}
+      <h2>{{ title }}</h2>
+      <div class="form-grid">
+        {% for field in fields %}
+          <label><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+  <section class="settings-section page-editor-panel" data-page-panel="settings-links" hidden>
     <h2>Меню, ссылки и социальные сети</h2>
     <p class="section-help">Выберите размещение, подпись и адрес. Меньшее число показывается раньше. Чтобы временно убрать ссылку, снимите «Показывать».</p>
     {{ link_formset.management_form }}{{ link_formset.non_form_errors }}
     <div data-link-forms>
-      {% for link_form in link_formset %}<div class="link-editor">{{ link_form.non_field_errors }}{% for hidden in link_form.hidden_fields %}{{ hidden }}{% endfor %}<div class="form-grid">{% for field in link_form.visible_fields %}<label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div></div>{% endfor %}
+      {% for link_form in link_formset %}
+        <div class="link-editor">
+          {{ link_form.non_field_errors }}
+          {% for hidden in link_form.hidden_fields %}{{ hidden }}{% endfor %}
+          <div class="form-grid">
+            {% for field in link_form.visible_fields %}
+              <label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
     </div>
-    <template id="link-empty-form"><div class="link-editor">{% for hidden in link_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}<div class="form-grid">{% for field in link_formset.empty_form.visible_fields %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}</div></div></template>
+    <template id="link-empty-form">
+      <div class="link-editor">
+        {% for hidden in link_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+        <div class="form-grid">
+          {% for field in link_formset.empty_form.visible_fields %}
+            <label><span>{{ field.label }}</span>{{ field }}</label>
+          {% endfor %}
+        </div>
+      </div>
+    </template>
     <button class="ghost-button" type="button" data-add-link>Добавить ссылку</button>
   </section>
-  <div class="form-actions"><button class="primary-button" type="submit">Сохранить настройки</button><a class="ghost-button" href="{% url 'management_dashboard' %}">Отмена</a></div>
+  <div class="form-actions page-editor-footer">
+    <button class="primary-button" type="submit">Сохранить настройки</button>
+    <a class="ghost-button" href="{% url 'management_dashboard' %}">Отмена</a>
+  </div>
 </form>
 {% endblock %}

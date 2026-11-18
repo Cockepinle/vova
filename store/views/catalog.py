@@ -163,6 +163,27 @@ def home(request):
         context,
     )
 
+def custom_page(request, slug):
+    page = get_object_or_404(PageContent, is_custom=True, slug=slug)
+    preview = request.GET.get("preview") == "1" and request.user.is_authenticated and request.user.is_staff
+    if not page.is_visible and not preview:
+        from django.http import Http404
+        raise Http404
+    if page.requires_login and not request.user.is_authenticated:
+        from django.shortcuts import redirect
+        return redirect("account_login")
+
+    context = {
+        "categories": get_store_categories(),
+        "custom_page": page,
+        "show_footer_cta": False,
+    }
+    apply_common_context(request, context)
+    context["current_page"] = page
+    from ..seo import metadata
+    context["seo"] = metadata(request, SiteSettings.get_solo(), {"custom_page": page})
+    return render(request, "store/custom_page.html", context)
+
 def team(request):
     context = {
         "categories": get_store_categories(),

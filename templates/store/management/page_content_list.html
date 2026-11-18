@@ -1,35 +1,33 @@
 {% extends "store/management/base.html" %}
 
-{% block heading %}Тексты страниц{% endblock %}
+{% block title %}Страницы{% endblock %}
+{% block heading %}Страницы{% endblock %}
 
 {% block content %}
-  <section class="mgmt-card">
-    <div class="card-header">
-      <h2>Страницы сайта</h2><a class="primary-button" href="{% url 'management_page_new' %}">Настроить страницу</a>
+  <section class="mgmt-card page-manager">
+    <div class="page-manager-toolbar">
+      <form class="toolbar" method="get" role="search">
+        <label class="page-search">
+          <span class="sr-only">Поиск страниц</span>
+          <input type="search" name="q" value="{{ query }}" data-page-search placeholder="Введите адрес или название" autocomplete="off">
+        </label>
+        <span class="muted" data-page-count>{{ page_count }} страниц</span>
+      </form>
+      <div class="toolbar-actions">
+        <button class="ghost-button" type="button" data-page-tree-toggle aria-expanded="true">Свернуть дерево</button>
+        <a class="primary-button" href="{% url 'management_page_new' %}"><span aria-hidden="true">+</span> Создать страницу</a>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table class="mgmt-table">
-        <thead><tr><th>Страница</th><th>H1</th><th>Title</th><th>Собственный контент</th><th></th></tr></thead>
-        <tbody>
-          {% for page in pages %}
-            <tr>
-              <td>{{ page.get_page_display }}</td>
-              <td>{{ page.h1|default:"—" }}</td>
-              <td>{{ page.seo_title|default:"—" }}</td>
-              <td>{% if page.is_visible %}<span class="status status-published">Используется</span>{% else %}<span class="status status-hidden">Резервные значения</span>{% endif %}</td>
-              <td class="row-actions">
-                <a class="primary-button" href="{% url 'management_page_edit' page.id %}">Редактировать</a>
-                <form method="post" action="{% url 'management_page_delete' page.id %}">
-                  {% csrf_token %}
-                  <button type="submit" onclick="return confirm('Удалить текст страницы?')">Удалить</button>
-                </form>
-              </td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="5">Тексты страниц ещё не созданы.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <p class="section-help">Перетаскивайте строки для изменения порядка; перетащите страницу на другую строку, чтобы сделать её вложенной. Системные страницы защищены от удаления.</p>
+    <div class="page-tree" data-page-tree data-reorder-url="{% url 'management_page_reorder' %}">
+      <ul class="page-tree-list" data-parent-id="">
+        {% for page in page_tree %}
+          {% include "store/management/page_tree_node.html" with node=page %}
+        {% empty %}
+          <li class="page-tree-empty">Страниц пока нет.</li>
+        {% endfor %}
+      </ul>
+      <p class="page-tree-status" data-page-tree-status role="status" aria-live="polite"></p>
     </div>
   </section>
 {% endblock %}

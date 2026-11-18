@@ -89,7 +89,7 @@ def locked_checkout_snapshot(request):
     cart_rows = list(
         CartItem.objects.select_for_update()
         .filter(user=request.user, product__status=Product.STATUS_PUBLISHED, product__category_id__in=Category.visible_ids())
-        .select_related("product__category", "product__variant_group")
+        .select_related("product")
         .prefetch_related("product__images__media", "product__media", "product__attributes__attribute", "product__variant_group__attributes")
     )
     rows = []

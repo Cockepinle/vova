@@ -1,4 +1,4 @@
-from .common import CartItem, CustomerProfile, CustomerRequest, EmailVerificationCode, FavoriteItem, JsonResponse, Order, User, auth_required_payload, authenticate
+from .common import CartItem, CustomerProfile, CustomerRequest, EmailVerificationCode, FavoriteItem, JsonResponse, Order, SiteSettings, User, auth_required_payload, authenticate
 from .common import cart_payload, csrf_exempt, get_favorite_ids, get_object_or_404, get_product, get_store_products, get_store_products_queryset, json, login, logout
 from .common import merge_session_cart_to_user, normalize_quantity, notify_manager_safely, require_GET, require_POST, send_account_code, serialize_order, serialize_product, staff_member_required, transaction
 
@@ -70,6 +70,8 @@ def account_login(request):
 def repeat_order(request, order_id):
     if not request.user.is_authenticated:
         return auth_required_payload()
+    if not SiteSettings.get_solo().allow_repeat_orders:
+        return JsonResponse({"error": "Повторные заказы отключены настройками магазина."}, status=409)
     order = get_object_or_404(Order.objects.prefetch_related("items"), pk=order_id, user=request.user)
     available = {
         product.pk: product for product in get_store_products_queryset().filter(

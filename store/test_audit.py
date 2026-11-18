@@ -80,6 +80,20 @@ class SiteAuditTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'processing')
 
+    def test_orders_without_payment_or_delivery_methods_render(self):
+        self.client.force_login(self.staff)
+        order = Order.objects.create(user=self.staff, full_name='Покупатель', phone='+79990000000', email='test@example.com')
+
+        list_response = self.client.get(reverse('management_orders'))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, order.number)
+        self.assertContains(list_response, '—')
+
+        detail_response = self.client.get(reverse('management_order_detail', args=[order.pk]))
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, 'Способ оплаты:</strong> —')
+        self.assertContains(detail_response, 'Способ доставки:</strong> —')
+
     def test_api_preserves_minimum_quantity(self):
         product = self.client.get('/api/products/').json()['products'][0]
         self.assertEqual(product['min_quantity'], 10)

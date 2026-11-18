@@ -7,10 +7,39 @@
     <article><span>Товары</span><strong>{{ stats.products }}</strong></article>
     <article><span>Опубликовано</span><strong>{{ stats.published }}</strong></article>
     <article><span>Черновики</span><strong>{{ stats.drafts }}</strong></article>
+    <article><span>Категории</span><strong>{{ stats.categories }}</strong></article>
     <article><span>Заказы</span><strong>{{ stats.orders }}</strong></article>
+    <article><span>Новые заказы</span><strong>{{ stats.new_orders }}</strong></article>
+    <article><span>В обработке</span><strong>{{ stats.processing_orders }}</strong></article>
     <article><span>Сотрудники</span><strong>{{ stats.employees }}</strong></article>
     <article><span>Заявки</span><strong>{{ stats.requests }}</strong></article>
     <article><span>Пользовательские поля</span><strong>{{ stats.fields }}</strong></article>
+    <article><span>Выручка</span><strong>{{ stats.revenue }} ₽</strong></article>
+  </section>
+
+  <section class="mgmt-card">
+    <div class="card-header">
+      <h2>Последние заказы</h2>
+      <a class="primary-button" href="{% url 'management_orders' %}">Открыть все</a>
+    </div>
+    <div class="table-wrap">
+      <table class="mgmt-table">
+        <thead><tr><th>Номер</th><th>Покупатель</th><th>Сумма</th><th>Статус</th><th>Дата</th></tr></thead>
+        <tbody>
+          {% for order in recent_orders %}
+            <tr>
+              <td><a href="{% url 'management_order_detail' order.id %}">{{ order.number|default:order.id }}</a></td>
+              <td>{{ order.full_name }}</td>
+              <td>{{ order.total }} ₽</td>
+              <td><span class="status status-{{ order.status }}">{{ order.get_status_display }}</span></td>
+              <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Нет заказов.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="mgmt-card">

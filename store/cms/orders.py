@@ -1,5 +1,6 @@
 from .common import CHANGE, DeliveryMethod, HttpResponse, Order, Paginator, PaymentMethod, Q, apply_provider_result, date, get_object_or_404
 from .common import get_order_exporter, log_change, management_required, messages, redirect, render, require_POST, transaction
+from ..services.orders import apply_order_stock_adjustment
 
 @management_required
 def order_list(request):
@@ -88,6 +89,9 @@ def order_detail(request, order_id):
     order = get_object_or_404(Order.objects.select_related("user", "payment_method", "delivery_method").prefetch_related("items", "payments", "status_history"), pk=order_id)
 
     if request.method == "POST":
+        if order.status in [Order.STATUS_DONE, Order.STATUS_CANCELED]:
+            messages.error(request, "Заказ в финальном статусе больше нельзя редактировать.")
+            return redirect("management_order_detail", order_id=order.pk)
         if "payment_status" in request.POST:
             new_payment_status = request.POST.get("payment_status")
             payment = order.payments.first()
@@ -102,6 +106,7 @@ def order_detail(request, order_id):
         if new_status in dict(Order.STATUS_CHOICES):
             order.status = new_status
             order.save(update_fields=["status", "updated_at"])
+            apply_order_stock_adjustment(order)
             log_change(request, order, CHANGE, "Статус заказа изменён через CMS")
             messages.success(request, "Статус заказа сохранён.")
             return redirect("management_order_detail", order_id=order.pk)
@@ -141,6 +146,7 @@ def order_bulk_action(request):
         if order.status != status:
             order.status = status
             order.save(update_fields=["status", "updated_at"])
+            apply_order_stock_adjustment(order)
             log_change(request, order, CHANGE, "Статус заказа изменён массовым действием через CMS")
             updated_count += 1
     messages.success(request, f"Статус обновлён. Изменено заказов: {updated_count}.")

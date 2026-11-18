@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from .common import ADDITION, AttributeDefinition, CHANGE, Category, Count, CustomerRequest, DELETION, DeliveryMethod, DeliveryMethodForm, Employee
-from .common import EmployeeForm, LogEntry, Order, Paginator, PaymentMethod, PaymentMethodForm, Product, Promotion, PromotionForm, Q
+from .common import EmployeeForm, LogEntry, Order, Paginator, PaymentMethod, PaymentMethodForm, Product, Promotion, PromotionForm, Q, Sum
 from .common import get_object_or_404, log_change, management_required, messages, redirect, render, require_POST
 
 @management_required
@@ -171,6 +173,8 @@ def employee_bulk_action(request):
 
 @management_required
 def dashboard(request):
+    processing_statuses = [Order.STATUS_PROCESSING, Order.STATUS_INVOICED, Order.STATUS_PAID]
+    revenue_total = Order.objects.aggregate(total=Sum("total"))["total"] or Decimal("0.00")
     stats = {
         "products": Product.objects.count(),
         "published": Product.objects.filter(status=Product.STATUS_PUBLISHED).count(),
@@ -180,8 +184,17 @@ def dashboard(request):
         "employees": Employee.objects.count(),
         "requests": CustomerRequest.objects.count(),
         "orders": Order.objects.count(),
+        "new_orders": Order.objects.filter(status__in=[Order.STATUS_NEW, Order.STATUS_CHECKOUT_STARTED]).count(),
+        "orders_processing": Order.objects.filter(status__in=processing_statuses).count(),
+        "processing_orders": Order.objects.filter(status__in=processing_statuses).count(),
+        "sales_total": revenue_total,
+        "revenue": revenue_total,
     }
+    stats["orders_in_processing"] = stats["processing_orders"]
+    stats["new_orders_count"] = stats["new_orders"]
+
     recent_products = Product.objects.select_related("category").order_by("-updated_at")[:8]
+    recent_orders = Order.objects.select_related("user").order_by("-created_at")[:8]
     categories = Category.objects.annotate(product_count=Count("products")).order_by("name")[:8]
     history = LogEntry.objects.select_related("user", "content_type").order_by("-action_time")[:10]
 
@@ -192,6 +205,7 @@ def dashboard(request):
             "section": "dashboard",
             "stats": stats,
             "recent_products": recent_products,
+            "recent_orders": recent_orders,
             "categories": categories,
             "history": history,
         },

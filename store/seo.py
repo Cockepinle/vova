@@ -32,7 +32,11 @@ def metadata(request, settings, pages):
     record = pages.get(key)
     title, description = PAGE_DEFAULTS.get(key, (settings.site_name, settings.seo_description))
     canonical_path = PAGE_PATHS.get(key, request.path)
-    noindex = not settings.allow_indexing or bool(record and record.noindex)
+    if key == "custom_page" and record:
+        title = record.title or title
+        description = record.meta_description or record.subtitle or description
+        canonical_path = reverse("custom_page", args=[record.slug])
+    noindex = not settings.allow_indexing or bool(record and (record.noindex or record.requires_login))
     if key == 'home' and settings.seo_description:
         description = settings.seo_description
     category = None

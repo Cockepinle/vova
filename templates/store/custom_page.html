@@ -1,0 +1,42 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    {% include "store/partials/theme.html" %}
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    {% include "store/partials/seo.html" %}
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
+    <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=32">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=46">
+  </head>
+  <body>
+    {% include "store/partials/header.html" %}
+    <main class="contacts-page document-page">
+      {% if current_page.hero_label %}<p class="eyebrow">{{ current_page.hero_label }}</p>{% endif %}
+      <h1>{{ seo.h1 }}</h1>
+      {% include "store/partials/hero_media.html" %}
+      {% if current_page.hero_button_text and current_page.hero_button_url %}
+        <p><a class="primary-button" href="{{ current_page.hero_button_url }}">{{ current_page.hero_button_text }}</a></p>
+      {% endif %}
+      {% if current_page.subtitle %}<p class="document-lead">{{ current_page.subtitle|linebreaksbr }}</p>{% endif %}
+      {% if current_page.content_title or current_page.content_subtitle or current_page.content_text %}
+        <section class="document-card">
+          {% if current_page.content_title %}<h2>{{ current_page.content_title }}</h2>{% endif %}
+          {% if current_page.content_subtitle %}<h3>{{ current_page.content_subtitle }}</h3>{% endif %}
+          {% if current_page.content_text %}<div class="document-note">{{ current_page.content_text|linebreaksbr }}</div>{% endif %}
+        </section>
+      {% endif %}
+    </main>
+    {% include "store/partials/footer.html" %}
+    {% include "store/partials/cart_drawer.html" %}
+    {% include "store/partials/user_drawers.html" %}
+    {% include "store/partials/cookie_modal.html" %}
+    <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
+    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
+    <script src="{% static 'store/js/account.js' %}?v=6"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
+    {% include "store/partials/mobile_actions.html" %}
+    <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
+  </body>
+</html>

@@ -12,8 +12,8 @@
         <p><strong>Итого:</strong> {{ order.total }} ₽</p>
         <p><strong>Вес:</strong> {{ order.total_weight_kg|default_if_none:"Не указан для всех позиций" }} кг</p>
         <p><strong>Объём:</strong> {{ order.total_volume_m3|default_if_none:"Не указан для всех позиций" }} м³</p>
-        <p><strong>Способ оплаты:</strong> {{ order.payment_method_name|default:order.payment_method.name|default:"—" }}</p>
-        <p><strong>Способ доставки:</strong> {{ order.delivery_method_name|default:order.delivery_method.name|default:"—" }}</p>
+        <p><strong>Способ оплаты:</strong> {% if order.payment_method_name %}{{ order.payment_method_name }}{% elif order.payment_method %}{{ order.payment_method.name }}{% else %}—{% endif %}</p>
+        <p><strong>Способ доставки:</strong> {% if order.delivery_method_name %}{{ order.delivery_method_name }}{% elif order.delivery_method %}{{ order.delivery_method.name }}{% else %}—{% endif %}</p>
         <p><strong>Тип доставки:</strong> {{ order.get_delivery_method_kind_display|default:"—" }}</p>
         <p><strong>Delivery provider:</strong> {{ order.delivery_provider_code|default:"—" }}</p>
         <p><strong>Адрес отправления:</strong> {{ order.delivery_origin_address|default:"—" }}</p>
@@ -42,7 +42,7 @@
       </section>
     {% endif %}
 
-    <section class="mgmt-card"><div class="card-header"><h2>Платежи</h2>{% if order.payment_method.kind == 'invoice' and order.payments.exists %}<form class="toolbar-actions" method="post">{% csrf_token %}<select name="payment_status">{% for value,label in payment_status_choices %}<option value="{{ value }}" {% if order.payment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="primary-button" type="submit">Сохранить оплату</button></form>{% endif %}</div>{% for payment in order.payments.all %}<div class="order-info-grid"><p><span>Дата</span><strong>{{ payment.created_at|date:"d.m.Y H:i" }}</strong></p><p><span>Сумма</span><strong>{{ payment.amount }} {{ payment.currency }}</strong></p><p><span>Статус</span><strong>{{ payment.get_status_display }}</strong></p><p><span>Провайдер</span><strong>{{ payment.provider_code|default:"—" }}</strong></p></div>{% empty %}<p class="muted">Записей об оплате нет.</p>{% endfor %}</section>
+    <section class="mgmt-card"><div class="card-header"><h2>Платежи</h2>{% if order.payment_method and order.payment_method.kind == 'invoice' and order.payments.exists %}<form class="toolbar-actions" method="post">{% csrf_token %}<select name="payment_status">{% for value,label in payment_status_choices %}<option value="{{ value }}" {% if order.payment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="primary-button" type="submit">Сохранить оплату</button></form>{% endif %}</div>{% for payment in order.payments.all %}<div class="order-info-grid"><p><span>Дата</span><strong>{{ payment.created_at|date:"d.m.Y H:i" }}</strong></p><p><span>Сумма</span><strong>{{ payment.amount }} {{ payment.currency }}</strong></p><p><span>Статус</span><strong>{{ payment.get_status_display }}</strong></p><p><span>Провайдер</span><strong>{{ payment.provider_code|default:"—" }}</strong></p></div>{% empty %}<p class="muted">Записей об оплате нет.</p>{% endfor %}</section>
 
     <section class="mgmt-card">
       <h2>Данные клиента</h2>

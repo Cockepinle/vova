@@ -22,6 +22,27 @@ class SiteSettings(models.Model):
     footer_extra_text = models.TextField("Дополнительный текст подвала", blank=True)
     footer_legal_text = models.TextField("Юридическая информация в подвале", blank=True)
     allow_indexing = models.BooleanField("Разрешить индексацию сайта", default=True)
+    currency_code = models.CharField("Код валюты", max_length=3, default="RUB")
+    currency_symbol = models.CharField("Символ валюты", max_length=10, default="₽")
+    currency_decimals = models.PositiveSmallIntegerField("Знаков после запятой", default=2)
+    track_abandoned_carts = models.BooleanField("Отслеживать брошенные корзины", default=True)
+    mark_products_in_orders = models.BooleanField("Маркировать товары в заказах", default=False)
+    show_zero_price_note = models.BooleanField("Показывать примечание вместо нулевой цены", default=True)
+    zero_price_note_text = models.CharField("Текст примечания для нулевой цены", max_length=220, default="Цена по запросу")
+    hide_cart_login = models.BooleanField("Скрывать форму авторизации в корзине", default=False)
+    STOCK_ON_CREATION = "creation"
+    STOCK_ON_CONFIRMATION = "confirmation"
+    STOCK_NEVER = "never"
+    STOCK_CHANGE_CHOICES = [
+        (STOCK_ON_CREATION, "При создании заказа"),
+        (STOCK_ON_CONFIRMATION, "При подтверждении заказа"),
+        (STOCK_NEVER, "Не списывать автоматически"),
+    ]
+    stock_change_mode = models.CharField("Списание остатка", max_length=20, choices=STOCK_CHANGE_CHOICES, default=STOCK_ON_CONFIRMATION)
+    track_referrer = models.BooleanField("Отслеживать referrer и UTM", default=True)
+    manage_transactions = models.BooleanField("Управлять транзакциями платежей", default=True)
+    allow_repeat_orders = models.BooleanField("Разрешать повторные заказы", default=True)
+    checkout_steps = models.PositiveSmallIntegerField("Количество шагов оформления", default=1)
 
     @property
     def logo_url(self):
@@ -150,7 +171,12 @@ class PageContent(models.Model):
         ("offer", "Оферта"),
     ]
 
-    page = models.CharField("Страница", max_length=40, choices=PAGE_CHOICES, unique=True)
+    page = models.CharField("Страница", max_length=40, unique=True)
+    is_custom = models.BooleanField("Произвольная страница", default=False)
+    slug = models.SlugField("URL-адрес", max_length=180, allow_unicode=True, unique=True, null=True, blank=True)
+    parent = models.ForeignKey("self", verbose_name="Родительская страница", related_name="children", on_delete=models.PROTECT, null=True, blank=True)
+    sort_order = models.PositiveIntegerField("Порядок отображения", default=0)
+    requires_login = models.BooleanField("Только для авторизованных", default=False)
     title = models.CharField("Заголовок", max_length=220, blank=True)
     subtitle = models.TextField("Подзаголовок / текст", blank=True)
     hero_label = models.CharField("Метка", max_length=160, blank=True)
@@ -170,10 +196,42 @@ class PageContent(models.Model):
     class Meta:
         verbose_name = "Текст страницы"
         verbose_name_plural = "Тексты страниц"
-        ordering = ["page"]
+        ordering = ["sort_order", "page"]
+
+    def descendant_ids(self):
+        children = {}
+        for page_id, parent_id in PageContent.objects.values_list("pk", "parent_id"):
+            children.setdefault(parent_id, []).append(page_id)
+        found, stack = set(), [self.pk]
+        while stack:
+            page_id = stack.pop()
+            if page_id in found:
+                continue
+            found.add(page_id)
+            stack.extend(children.get(page_id, []))
+        return found
+
+    def clean(self):
+        super().clean()
+        visited = {self.pk} if self.pk else set()
+        parent_id = self.parent_id
+        while parent_id:
+            if parent_id in visited:
+                raise ValidationError({"parent": "Страница не может быть вложена в себя или своего потомка."})
+            visited.add(parent_id)
+            parent_id = PageContent.objects.filter(pk=parent_id).values_list("parent_id", flat=True).first()
+        if self.is_custom and not self.slug:
+            self.slug = slugify(self.title, allow_unicode=True)
+        if self.is_custom and not self.title.strip():
+            raise ValidationError({"title": "Укажите название страницы."})
+        if self.is_custom and not self.slug:
+            raise ValidationError({"slug": "Не удалось сформировать URL страницы."})
 
     def __str__(self):
-        return self.get_page_display()
+        return self.title or self.get_page_display()
+
+    def get_page_display(self):
+        return dict(self.PAGE_CHOICES).get(self.page, self.page)
 
 class SiteMedia(models.Model):
     TYPE_IMAGE = "image"

@@ -3,6 +3,65 @@ from ..models import DeliveryMethod, Order, OrderItem, SiteSettings
 from ..deliveries import prepare_delivery_handoff
 from .catalog import decimal_value, format_price, money
 
+
+CONFIRMED_ORDER_STATUSES = {
+    "processing",
+    "invoiced",
+    "paid",
+    "done",
+}
+
+
+def apply_order_stock_adjustment(order):
+    """Apply stock movement once per order and support order cancellation."""
+    from django.db import transaction
+    from django.db.models import Sum
+    from ..models import Product, SiteSettings
+
+    settings = SiteSettings.get_solo()
+    mode = settings.stock_change_mode
+    if mode == SiteSettings.STOCK_NEVER:
+        return
+
+    with transaction.atomic():
+        locked_order = order.__class__.objects.select_for_update().get(pk=order.pk)
+        should_decrement = False
+        if locked_order.status == locked_order.STATUS_CANCELED:
+            should_restore = locked_order.stock_decremented
+        else:
+            should_restore = False
+            if mode == SiteSettings.STOCK_ON_CREATION:
+                should_decrement = locked_order.status not in {
+                    locked_order.STATUS_CHECKOUT_STARTED,
+                    locked_order.STATUS_ABANDONED,
+                }
+            elif mode == SiteSettings.STOCK_ON_CONFIRMATION:
+                should_decrement = locked_order.status in CONFIRMED_ORDER_STATUSES
+
+        quantities = (
+            locked_order.items
+            .values("product_id")
+            .annotate(quantity=Sum("quantity"))
+        )
+        if should_restore:
+            for row in quantities:
+                product = Product.objects.select_for_update().get(pk=row["product_id"])
+                product.stock_quantity += row["quantity"]
+                product.save(update_fields=["stock_quantity"])
+            locked_order.stock_decremented = False
+            locked_order.save(update_fields=["stock_decremented"])
+        elif should_decrement and not locked_order.stock_decremented:
+            for row in quantities:
+                product = Product.objects.select_for_update().get(pk=row["product_id"])
+                if product.stock_quantity < row["quantity"]:
+                    return
+            for row in quantities:
+                product = Product.objects.select_for_update().get(pk=row["product_id"])
+                product.stock_quantity -= row["quantity"]
+                product.save(update_fields=["stock_quantity"])
+            locked_order.stock_decremented = True
+            locked_order.save(update_fields=["stock_decremented"])
+
 def set_order_delivery(order, method, address):
     shop_settings = SiteSettings.get_solo()
     order.delivery_method = method
@@ -54,6 +113,7 @@ def replace_order_snapshot(order, snapshot):
             width_mm=product.width_mm,
             height_mm=product.height_mm,
         )
+    apply_order_stock_adjustment(order)
 
 def serialize_order(order, include_items=False):
     data = {

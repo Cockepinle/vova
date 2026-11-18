@@ -3,6 +3,8 @@ from django.forms import formset_factory
 from django.db.models import Q
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.utils.text import slugify
+from uuid import uuid4
 
 from .models import CustomerPrice, AttributeDefinition, Category, DeliveryMethod, Employee, PageContent, PaymentMethod, Product, ProductAttribute, Promotion, SiteMedia, SiteSettings, SiteLink, VariantGroup
 
@@ -318,6 +320,12 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
             ("Шапка и основная кнопка", ["header_phone", "header_email", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "cta_label", "cta_url"]),
             ("Подвал и юридическая информация", [name for name in self.fields if name.startswith("footer_")] + ["copyright_text"]),
             ("Поиск и отправка ссылок", ["public_url", "seo_description", "og_media", "allow_indexing"]),
+            ("Валюта магазина", ["currency_code", "currency_symbol", "currency_decimals"]),
+            ("Настройки заказа", [
+                "track_abandoned_carts", "mark_products_in_orders", "show_zero_price_note",
+                "zero_price_note_text", "hide_cart_login", "stock_change_mode",
+                "track_referrer", "manage_transactions", "allow_repeat_orders", "checkout_steps",
+            ]),
         ]
         return [(title, [self[name] for name in names]) for title, names in sections]
 
@@ -327,6 +335,10 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
             "site_name", "logo_text", "logo_media", "favicon_media", "public_url", "seo_description", "og_media", "allow_indexing",
             "cta_label", "cta_url", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "footer_extra_text", "footer_legal_text",
             "contact_phone",
+            "currency_code", "currency_symbol", "currency_decimals",
+            "track_abandoned_carts", "mark_products_in_orders", "show_zero_price_note",
+            "zero_price_note_text", "hide_cart_login", "stock_change_mode",
+            "track_referrer", "manage_transactions", "allow_repeat_orders", "checkout_steps",
             "contact_email",
             "contact_email_b2b",
             "contact_address",
@@ -375,10 +387,106 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
 
 
 class PageContentForm(ContentValidationMixin, forms.ModelForm):
+    page_type = forms.ChoiceField(
+        label="Тип страницы",
+        choices=[("fixed", "Существующий раздел сайта"), ("custom", "Новая произвольная страница")],
+        required=False,
+        initial="fixed",
+    )
+    title = forms.CharField(label="Название страницы", max_length=220, required=False)
+    slug = forms.SlugField(label="URL-адрес", max_length=180, allow_unicode=True, required=False)
+    parent = forms.ModelChoiceField(
+        label="Родительская страница",
+        queryset=PageContent.objects.none(),
+        required=False,
+        empty_label="Без родительской страницы",
+    )
+    sort_order = forms.IntegerField(label="Порядок отображения", min_value=0, required=False, initial=0)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        custom = bool(self.instance.pk and self.instance.is_custom)
+        self.fields["page_type"].initial = "custom" if custom else "fixed"
+        self.fields["page_type"].disabled = bool(self.instance.pk)
+        if self.instance.pk:
+            choices = list(PageContent.PAGE_CHOICES)
+            self.fields["page"].choices = choices
+            self.fields["page"].required = not custom
+            if custom:
+                self.fields["page"].widget = forms.HiddenInput()
+        else:
+            used_pages = PageContent.objects.filter(is_custom=False).values_list("page", flat=True)
+            self.fields["page"].choices = [
+                choice for choice in PageContent.PAGE_CHOICES if choice[0] not in used_pages
+            ]
+            self.fields["page"].required = False
+
+        excluded = set()
+        if self.instance.pk:
+            children = {}
+            for page_id, parent_id in PageContent.objects.values_list("pk", "parent_id"):
+                children.setdefault(parent_id, []).append(page_id)
+            stack = [self.instance.pk]
+            while stack:
+                page_id = stack.pop()
+                if page_id not in excluded:
+                    excluded.add(page_id)
+                    stack.extend(children.get(page_id, []))
+        self.fields["parent"].queryset = PageContent.objects.exclude(pk__in=excluded).order_by("sort_order", "page")
+        self.fields["parent"].label_from_instance = lambda page: page.title or page.get_page_display()
+        if self.instance.pk:
+            self.fields["sort_order"].initial = self.instance.sort_order
+
+    def clean(self):
+        cleaned_data = super().clean()
+        page_type = cleaned_data.get("page_type") or ("custom" if self.instance.pk and self.instance.is_custom else "fixed")
+        cleaned_data["page_type"] = page_type
+        is_custom = page_type == "custom" or bool(self.instance.pk and self.instance.is_custom)
+        if is_custom:
+            title = (cleaned_data.get("title") or "").strip()
+            slug = cleaned_data.get("slug") or slugify(title, allow_unicode=True)
+            if not title:
+                self.add_error("title", "Укажите название страницы.")
+            if not slug:
+                self.add_error("slug", "Укажите URL страницы или заполните название.")
+            cleaned_data["title"] = title
+            cleaned_data["slug"] = slug
+            cleaned_data["is_custom"] = True
+            page_key = self.instance.page if self.instance.pk else f"custom-{uuid4().hex}"
+            cleaned_data["page"] = page_key
+            self.instance.page = page_key
+            self.instance.is_custom = True
+        elif not cleaned_data.get("page"):
+            self.add_error("page", "Выберите раздел сайта.")
+
+        parent = cleaned_data.get("parent")
+        if self.instance.pk and parent and parent.pk in self.instance.descendant_ids():
+            self.add_error("parent", "Нельзя переместить страницу внутрь неё самой или её потомка.")
+        return cleaned_data
+
+    def save(self, commit=True):
+        page = super().save(commit=False)
+        custom = self.cleaned_data.get("page_type") == "custom" or bool(self.instance.pk and self.instance.is_custom)
+        page.is_custom = custom
+        page.sort_order = self.cleaned_data.get("sort_order") or 0
+        page.requires_login = bool(self.cleaned_data.get("requires_login")) if custom else False
+        if custom:
+            page.title = self.cleaned_data["title"]
+            page.slug = self.cleaned_data["slug"]
+            page.page = self.cleaned_data["page"]
+        else:
+            page.title = self.cleaned_data.get("title", "")
+            page.slug = None
+            page.page = self.cleaned_data["page"]
+        if commit:
+            page.save()
+            self.save_m2m()
+        return page
+
     @property
     def groups(self):
         sections = [
-            ("Страница", ["page", "h1", "is_visible"]),
+            ("Страница", ["page_type", "page", "title", "slug", "parent", "sort_order", "h1", "is_visible", "requires_login"]),
             ("Главный блок", ["hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media"]),
             ("Дополнительные тексты", ["content_title", "content_subtitle", "content_text", "b2b_title"]),
             ("Поисковые системы", ["seo_title", "meta_description", "canonical", "noindex"]),
@@ -388,7 +496,7 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
 
     class Meta:
         model = PageContent
-        fields = ["page", *SEO_FIELDS, "noindex", "hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media", "content_title", "b2b_title", "content_subtitle", "content_text", "is_visible"]
+        fields = ["page", "title", "slug", "parent", "sort_order", "requires_login", *SEO_FIELDS, "noindex", "hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media", "content_title", "b2b_title", "content_subtitle", "content_text", "is_visible"]
         labels = {
             "page": "Страница",
             "subtitle": "Текст главного блока",
