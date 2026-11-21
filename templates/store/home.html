@@ -7,7 +7,7 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=38">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=39">
     <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=49">
     {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
@@ -27,7 +27,7 @@
         <p class="eyebrow">{{ page_content.home.hero_label|default:"Оптовые поставки · Москва и Россия" }}</p>
         <h1>{{ page_content.home.h1|default:"Упаковка для вашего бизнеса" }}</h1>
         <p class="hero-copy">
-          {{ page_content.home.subtitle|default:"Короба для отправлений, переезда, хранения и маркетплейсов. Каталог содержит демонстрационные товары и цены — уточняйте характеристики и условия перед заказом." }}
+          {{ page_content.home.subtitle|without_demo_copy|default:"Короба для отправлений, переезда, хранения и маркетплейсов." }}
         </p>
         <div class="hero-actions">
           <a class="primary-cta" href="{{ current_page.hero_button_url|default:'/catalog/' }}">
@@ -42,10 +42,14 @@
 
     <section class="stats-band" aria-label="Показатели компании">
       {% for stat in stats %}
-        <div class="stat-item">
-          <strong>{{ stat.value }}</strong>
-          <span>{{ stat.label }}</span>
-        </div>
+        {% with label=stat.label|without_demo_copy %}
+          {% if label %}
+            <div class="stat-item">
+              <strong>{{ stat.value }}</strong>
+              <span>{{ label }}</span>
+            </div>
+          {% endif %}
+        {% endwith %}
       {% endfor %}
     </section>
 
@@ -78,9 +82,7 @@
               <div class="open-product">
                 <div class="product-image">
                   {% if product.badge %}<span class="hit-badge">{{ product.badge }}</span>{% endif %}
-                  <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-                  </button>
+                  {% include "store/partials/image_favorite.html" with product_id=product.id %}
                   <img src="{{ product.image }}" alt="{{ product.name }}">
                 </div>
                 <div class="product-info">
@@ -171,7 +173,7 @@
     <script src="{% static 'store/js/cart.js' %}?v=43"></script>
     <script src="{% static 'store/js/account.js' %}?v=8"></script>
     <script src="{% static 'store/js/home.js' %}?v=41"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=22"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=23"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=42"></script>
   </body>

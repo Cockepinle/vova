@@ -774,3 +774,36 @@ if (window.initialProductToOpen) {
     openProductModal(JSON.parse(cardToOpen.dataset.product));
   }
 }
+
+
+const categoryMenu = document.querySelector(".catalog-category-menu");
+if (categoryMenu) {
+  const trigger = categoryMenu.querySelector("summary");
+  const search = categoryMenu.querySelector(".catalog-category-search");
+  const options = [...categoryMenu.querySelectorAll(".catalog-category-menu-option")];
+  if (search) {
+    search.hidden = false;
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLocaleLowerCase("ru");
+      options.forEach((option) => {
+        option.hidden = !option.textContent.toLocaleLowerCase("ru").includes(query);
+      });
+    });
+    search.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        options.find((option) => !option.hidden)?.focus();
+      }
+    });
+  }
+  categoryMenu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && categoryMenu.open) {
+      event.preventDefault();
+      categoryMenu.open = false;
+      trigger.focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!categoryMenu.contains(event.target)) categoryMenu.open = false;
+  });
+}

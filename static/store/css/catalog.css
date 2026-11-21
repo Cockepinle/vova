@@ -1072,7 +1072,7 @@ body.modal-open {
   display: flex;
   width: 175px;
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -1114,7 +1114,7 @@ body.modal-open {
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .2);
   padding: 6px;
@@ -1122,10 +1122,9 @@ body.modal-open {
 .catalog-category-menu-option {
   width: 100%;
   min-width: 0;
-  min-height: 36px;
-  overflow: hidden;
+  min-height: 44px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text);
   padding: 7px 10px;
@@ -1133,9 +1132,12 @@ body.modal-open {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-inline-start: calc(10px + min(var(--category-depth, 0), 6) * 13px);
 }
+.catalog-category-menu-option[hidden] { display: none; }
+.catalog-category-search { padding: 8px 10px; min-height: 44px; min-width: 0; border: 1px solid var(--line); }
 .catalog-category-menu-option:hover,
 .catalog-category-menu-option[aria-current="true"] { background: var(--accent-soft); color: var(--blue); }
 .catalog-category-menu > summary:focus-visible,

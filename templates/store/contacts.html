@@ -64,7 +64,7 @@
           <div class="b2b-box">
             <h3>{{ page_content.contacts.b2b_title|default:"Для корпоративных клиентов" }}</h3>
             <h4>{{ page_content.contacts.content_subtitle|default:"Персональный менеджер и индивидуальные условия" }}</h4>
-            <p>{{ page_content.contacts.content_text|default:"Постоплата 30/60 дней, скидки от объёма, брендированная упаковка, SLA на поставки." }}</p>
+            {% with text=page_content.contacts.content_text|default:"Постоплата 30/60 дней, скидки от объёма, брендированная упаковка, SLA на поставки."|without_demo_copy %}<p>{{ text }}</p>{% endwith %}
             <a href="mailto:{{ site_settings.contact_email_b2b|default:'b2b@pakline.ru' }}">Написать в B2B</a>
           </div>
         </section>
@@ -78,7 +78,7 @@
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
     <script src="{% static 'store/js/cart.js' %}?v=43"></script>
     <script src="{% static 'store/js/account.js' %}?v=8"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=22"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=23"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=42"></script>
   </body>

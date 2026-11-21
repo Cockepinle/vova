@@ -8,9 +8,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
     <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=37">
-    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=54">
+    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=55">
     <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=48">
-    <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=5">
     {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
   <body data-product-image-fallback="{% static 'store/images/no-photo.svg' %}">
@@ -76,8 +76,9 @@
             <details class="catalog-category-menu">
               <summary aria-label="Выбрать категорию"><span>{% if selected_category %}{{ selected_category.name }}{% else %}Все категории{% endif %}</span></summary>
               <div class="catalog-category-menu-options" aria-label="Категории каталога">
+                {% if category_options|length > 12 %}<input class="catalog-category-search" type="search" placeholder="Найти категорию" aria-label="Найти категорию" hidden>{% endif %}
                 <button class="catalog-category-menu-option" type="submit" name="category" value="" {% if not selected_category %}aria-current="true"{% endif %}>Все категории</button>
-                {% for option in category_options %}<button class="catalog-category-menu-option" type="submit" name="category" value="{{ option.slug }}" {% if selected_category.slug == option.slug %}aria-current="true"{% endif %}>{{ option.indent }}{{ option.name }}</button>{% endfor %}
+                {% for option in category_options %}<button class="catalog-category-menu-option" type="submit" name="category" value="{{ option.slug }}" style="--category-depth:{{ option.depth }}" {% if selected_category.slug == option.slug %}aria-current="true"{% endif %}>{{ option.name }}</button>{% endfor %}
               </div>
             </details>
           </form>
@@ -196,7 +197,7 @@
         <div class="catalog-topline">
           <div>
             <h1 class="catalog-title-sr-only">{{ seo.h1 }}</h1>
-            {% if current_page.subtitle and not search_query and not active_category %}<p>{{ current_page.subtitle }}</p>{% endif %}
+            {% with subtitle=current_page.subtitle|without_demo_copy %}{% if subtitle and not search_query and not active_category %}<p>{{ subtitle }}</p>{% endif %}{% endwith %}
             {% if search_query %}<p>По запросу «{{ search_query }}»</p>{% endif %}
           </div>
           <form class="catalog-sort-form" method="get">
@@ -289,8 +290,8 @@
     </script>
     <script src="{% static 'store/js/cart.js' %}?v=43"></script>
     <script src="{% static 'store/js/account.js' %}?v=8"></script>
-    <script src="{% static 'store/js/catalog.js' %}?v=53"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=22"></script>
+    <script src="{% static 'store/js/catalog.js' %}?v=54"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=23"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=42"></script>
   </body>

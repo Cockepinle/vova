@@ -1,12 +1,7 @@
-<nav class="catalog-breadcrumbs product-breadcrumbs" aria-label="Хлебные крошки">
-  <a class="product-breadcrumb-root" href="{% url 'catalog' %}">Каталог</a>
-  {% for category in breadcrumbs %}
-    <span aria-hidden="true">/</span>
-    <a{% if forloop.last %} class="product-breadcrumb-parent"{% endif %} href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">{{ category.name }}</a>
-  {% endfor %}
-  <span aria-hidden="true">/</span>
-  <span class="product-breadcrumb-current" aria-current="page">{{ detail_product.name|truncatechars:26 }}</span>
-</nav>
+<a class="product-back" href="{{ catalog_back_url }}">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h12"/></svg>
+  Назад
+</a>
 <section class="product-detail-page" data-product-detail data-product-id="{{ detail_product.pk }}">
   <div class="product-detail-summary">
     <div class="product-detail-gallery" data-detail-gallery data-image-index="0">
@@ -14,6 +9,7 @@
         <button class="product-detail-gallery-zoom" type="button" data-detail-gallery-zoom aria-label="Открыть фотографию крупно">
           <img data-detail-main-image src="{{ detail_gallery_images.0.url }}" alt="{{ detail_gallery_images.0.alt }}" fetchpriority="high">
         </button>
+        {% include "store/partials/image_favorite.html" with product_id=detail_data.id %}
         {% if detail_gallery_images|length > 1 %}
           <button class="detail-gallery-arrow detail-gallery-prev" type="button" data-detail-gallery-step="-1" aria-label="Предыдущее фото">‹</button>
           <button class="detail-gallery-arrow detail-gallery-next" type="button" data-detail-gallery-step="1" aria-label="Следующее фото">›</button>
@@ -71,7 +67,6 @@
         <button class="primary-button product-detail-add" type="button" data-add-detail-product="{{ detail_product.pk }}"
                 {% if not detail_can_purchase %}data-purchase-disabled disabled{% endif %}>{% if detail_is_hidden %}Предпросмотр{% elif not detail_can_purchase %}Нет в наличии{% elif detail_cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
       </div>
-      <button class="ghost-button favorite-button detail-favorite{% if detail_data.id in favorite_ids %} is-active{% endif %}" type="button" aria-pressed="{% if detail_data.id in favorite_ids %}true{% else %}false{% endif %}" aria-label="{% if detail_data.id in favorite_ids %}Убрать из избранного{% else %}Добавить в избранное{% endif %}">Избранное</button>
       <small id="detail-quantity-rules">Минимум {{ detail_data.min_quantity }} {{ detail_product.unit }} · кратность {{ detail_data.quantity_step }} {{ detail_product.unit }}</small>
     </div>
   </div>

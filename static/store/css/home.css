@@ -297,7 +297,7 @@ svg {
 
 .stats-band {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(25%, 1fr));
   background: var(--action);
   color: #fff;
   padding: 20px 64px;

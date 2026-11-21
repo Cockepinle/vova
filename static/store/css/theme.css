@@ -58,3 +58,51 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: .
 /* Dark theme keeps white labels readable on solid blue actions. */
 :root[data-theme="dark"] { --action: #3559df; --action-hover: #2949c2; }
 :root { --action: #1238f4; --action-hover: #0d2edf; }
+
+
+/* Keep native controls and their platform picker in both storefront and CMS. */
+:root { --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23586778' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+:root[data-theme="dark"] { --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23c1cadd' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"); }
+body select:not([multiple]):not([size]), body select:not([multiple])[size="1"] {
+  appearance: none;
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 12px 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background-image: var(--select-arrow);
+  background-position: right 11px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  font-family: inherit;
+  text-overflow: ellipsis;
+}
+body select:not([multiple]):not([size]):enabled:hover,
+body select:not([multiple])[size="1"]:enabled:hover { border-color: var(--blue); }
+@media (forced-colors: active) {
+  body select:not([multiple]):not([size]), body select:not([multiple])[size="1"] { appearance: auto; }
+}
+body .image-favorite {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: 0 2px 8px rgb(0 0 0 / .12);
+}
+body .image-favorite.is-active { color: var(--danger); }
+body .image-favorite:hover { border-color: currentColor; }
+body .image-favorite svg { display: block; width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+body .image-favorite.is-active svg { fill: currentColor; }
+body .image-favorite[aria-busy="true"] svg { display: block; }
+body .image-favorite > .store-action-spinner { display: none; }

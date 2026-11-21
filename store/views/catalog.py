@@ -1,4 +1,4 @@
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from django.template.loader import render_to_string
 from django.views.decorators.cache import never_cache
@@ -211,6 +211,18 @@ def team(request):
         context,
     )
 
+def catalog_back_url(request, category):
+    path = reverse("catalog")
+    origin = urlsplit(request.build_absolute_uri(path))
+    try:
+        source = urlsplit(request.headers.get("Referer", ""))
+    except ValueError:
+        source = None
+    if source and (source.scheme, source.netloc, source.path) == (origin.scheme, origin.netloc, path):
+        return f"{path}?{source.query}" if source.query else path
+    return f"{path}?{urlencode({'category': category.slug})}" if category else path
+
+
 @never_cache
 def catalog(request, slug=None):
     search_query = " ".join(request.GET.get("q", "").split())
@@ -293,13 +305,6 @@ def catalog(request, slug=None):
         for parameter in (filter_item.get("min_parameter"), filter_item.get("max_parameter"))
         if parameter
     )
-    category_options = [
-        {
-            **category,
-            "indent": "— " * category["depth"],
-        }
-        for category in categories
-    ]
 
     if slug:
         page_title = detail_product.name
@@ -394,6 +399,7 @@ def catalog(request, slug=None):
         "selected_category": selected,
         "products": product_items,
         "detail_product": detail_product,
+        "catalog_back_url": catalog_back_url(request, selected) if detail_product else "",
         "detail_data": detail_data,
         "detail_is_hidden": detail_is_hidden,
         "detail_can_purchase": not detail_is_hidden and detail_data.get("can_purchase", False),
@@ -413,7 +419,7 @@ def catalog(request, slug=None):
         "search_in_category": search_in_category,
         "selected_sort": selected_sort,
         "catalog_filters": catalog_filters,
-        "category_options": category_options,
+        "category_options": categories,
         "category_query_string": category_query_parameters.urlencode(),
         "search_query_fields": preserved_fields({"q", "category", "scope"}),
         "category_query_fields": preserved_fields({"category"}),

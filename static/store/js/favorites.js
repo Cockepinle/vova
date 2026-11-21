@@ -66,7 +66,7 @@ function setFavoriteState(productId, isFavorite) {
   document.querySelectorAll(`[data-product-id="${productId}"] .favorite-button`).forEach((button) => {
     button.classList.toggle("is-active", isFavorite);
     if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(isFavorite));
-    if (button.classList.contains("cart-favorite") || button.classList.contains("detail-favorite")) {
+    if (button.classList.contains("cart-favorite")) {
       const label = isFavorite ? "Убрать из избранного" : "Добавить в избранное";
       button.setAttribute("aria-label", label);
       button.title = label;
@@ -103,10 +103,11 @@ async function toggleFavorite(productId, button) {
     return;
   }
 
+  const wasFavorite = favoriteProductIds.has(String(productId));
   const updateFavorite = async () => {
     const favorite = await postStoreAction("/favorites/toggle/", {
       product_id: productId,
-      is_favorite: !favoriteProductIds.has(String(productId)),
+      is_favorite: !wasFavorite,
     });
     setFavoriteState(favorite.product_id, favorite.is_favorite);
     updateFavoriteCounts(favorite.count);
@@ -117,9 +118,11 @@ async function toggleFavorite(productId, button) {
 
   favoriteActionPending = true;
   const restore = setStoreButtonPending(button);
+  setFavoriteState(String(productId), !wasFavorite);
   try {
     await updateFavorite();
   } catch (error) {
+    setFavoriteState(String(productId), wasFavorite);
     notifyStore(error.message, true);
   } finally {
     restore();

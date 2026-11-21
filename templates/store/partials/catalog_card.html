@@ -6,9 +6,7 @@
     <a class="open-product" href="{{ product.url }}" aria-label="Открыть карточку {{ product.name }}">
       <img src="{{ product.image }}" alt="{{ product.name }}" loading="lazy" decoding="async">
     </a>
-    <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Избранное" aria-pressed="{% if product.id in favorite_ids %}true{% else %}false{% endif %}">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-    </button>
+    {% include "store/partials/image_favorite.html" with product_id=product.id %}
   </div>
   <div class="catalog-card-info">
     <h2><a href="{{ product.url }}">{{ product.name }}</a></h2>
