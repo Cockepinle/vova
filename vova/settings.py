@@ -17,16 +17,22 @@ if env_path.exists():
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-DEBUG = os.environ.get("DEBUG", "0") == "1"
+IS_VERCEL = bool(os.environ.get("VERCEL"))
+DEBUG = not IS_VERCEL and os.environ.get("DEBUG", "0") == "1"
 database_url = os.environ.get("DATABASE_URL", "")
 SECRET_KEY = os.environ.get("SECRET_KEY")
-if not SECRET_KEY and (not DEBUG or database_url or os.environ.get("VERCEL")):
+if not SECRET_KEY and (not DEBUG or database_url):
     raise ImproperlyConfigured("Set SECRET_KEY when running outside local debug mode.")
 SECRET_KEY = SECRET_KEY or "dev-only-pakline-secret-key"
 
+if IS_VERCEL and not database_url:
+    raise ImproperlyConfigured("Set DATABASE_URL to a persistent database when running on Vercel.")
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host.strip()]
-if os.environ.get("VERCEL"):
-    ALLOWED_HOSTS.extend([".vercel.app", "localhost", "127.0.0.1"])
+if IS_VERCEL:
+    ALLOWED_HOSTS.extend(
+        host for name in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL")
+        if (host := os.environ.get(name))
+    )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -38,7 +44,7 @@ INSTALLED_APPS = [
     "store",
 ]
 
-if os.environ.get("VERCEL") or not DEBUG:
+if not DEBUG:
     INSTALLED_APPS.insert(-1, "whitenoise.runserver_nostatic")
 
 if os.environ.get("CLOUDINARY_URL"):
@@ -121,6 +127,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = True
 MEDIA_URL = os.environ.get("MEDIA_URL") or "/media/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media")
+# Reserve space for multipart headers and form fields in the standard Vercel request limit.
+CMS_UPLOAD_MAX_BYTES = (4 if IS_VERCEL else 20) * 1024 * 1024
 
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -129,6 +137,8 @@ STORAGES = {
 if os.environ.get("CLOUDINARY_URL"):
     CLOUDINARY_STORAGE = {"PREFIX": "media/"}
     STORAGES["default"]["BACKEND"] = "store.media_storage.StoreCloudinaryStorage"
+elif IS_VERCEL:
+    STORAGES["default"]["BACKEND"] = "store.uploads.ReadOnlyMediaStorage"
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_HTTPONLY = True
@@ -158,10 +168,9 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
-if os.environ.get("VERCEL"):
-    CSRF_TRUSTED_ORIGINS.extend(["https://*.vercel.app", "http://localhost:8000", "http://127.0.0.1:8000"])
-
-if os.environ.get("VERCEL") or not DEBUG:
+if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

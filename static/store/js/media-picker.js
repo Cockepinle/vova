@@ -3,17 +3,29 @@
   if (!picker) return;
   const grid = picker.querySelector("[data-media-picker-grid]");
   const upload = picker.querySelector("[data-media-picker-upload]");
+  const pending = picker.querySelector("[data-media-picker-pending]");
+  const send = picker.querySelector("[data-media-picker-send]");
   const search = picker.querySelector("[data-media-picker-search]");
   const apply = picker.querySelector("[data-media-picker-apply]");
   const count = picker.querySelector("[data-media-picker-selection]");
   const status = picker.querySelector("[data-media-picker-status]");
   const closeButton = picker.querySelector("button[data-media-picker-close]");
+  const workspace = document.querySelector(".mgmt-shell");
   let session = null;
+
+  function setVisible(visible) {
+    picker.hidden = !visible;
+    if (workspace) workspace.inert = visible;
+    document.body.classList.toggle("management-modal-open", visible);
+  }
 
   function close() {
     const trigger = session?.trigger;
     session = null;
-    picker.hidden = true;
+    setVisible(false);
+    pending.hidden = true;
+    upload.value = "";
+    upload.dispatchEvent(new Event("upload-reset"));
     trigger?.focus();
   }
 
@@ -52,6 +64,7 @@
       button.className = "media-picker-item";
       if (item.type === "image" && item.url) {
         const image = document.createElement("img");
+        window.setManagementImageFallback(image);
         image.src = item.url;
         image.alt = "";
         image.loading = "lazy";
@@ -92,11 +105,12 @@
       selected: new Map((options.selected || []).map(item => [String(item.id), item])),
       exclude: new Set(options.exclude || []), items: new Map(),
     };
-    picker.hidden = false;
+    setVisible(true);
     grid.replaceChildren();
     search.value = "";
     upload.multiple = current.multiple;
-    upload.accept = {image: "image/*", attachment: "video/*,application/pdf"}[current.kind] || "image/*,video/*,application/pdf";
+    const policy = JSON.parse(document.getElementById("upload-policy-" + current.kind).textContent);
+    upload.dispatchEvent(new CustomEvent("upload-policy", {detail: policy}));
     updateSelection();
     closeButton.focus();
     announce("Загрузка медиатеки…");
@@ -142,7 +156,9 @@
     }
   });
 
-  upload.addEventListener("change", async () => {
+  upload.addEventListener("change", () => { pending.hidden = true; });
+  upload.addEventListener("image-upload-ready", () => { pending.hidden = !session; });
+  send.addEventListener("click", async () => {
     if (!session || session.uploading || !upload.files.length) return;
     const current = session;
     const files = [...upload.files];
@@ -150,6 +166,7 @@
       || document.cookie.split("; ").find(cookie => cookie.startsWith("csrftoken="))?.split("=")[1];
     current.uploading = true;
     upload.disabled = true;
+    send.disabled = true;
     updateSelection();
     const failures = [];
     try {
@@ -164,8 +181,10 @@
           const response = await fetch(document.body.dataset.mediaUploadApi, {
             method: "POST", headers: {"X-CSRFToken": csrf || ""}, body: data,
           });
-          const item = await response.json();
+          if (response.status === 413) throw new Error("Сервер отклонил слишком большой запрос.");
+          const item = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(item.error || "Не удалось загрузить файл.");
+          if (!item.id) throw new Error("Не удалось получить данные файла. Проверьте вход в панель управления.");
           if (session !== current) return;
           if (!current.multiple) {
             finish([item]);
@@ -184,6 +203,9 @@
       current.uploading = false;
       upload.value = "";
       upload.disabled = false;
+      send.disabled = false;
+      pending.hidden = true;
+      upload.dispatchEvent(new Event("upload-reset"));
       if (session === current) updateSelection();
     }
   });
@@ -194,6 +216,7 @@
     const fieldName = label.firstChild?.textContent.trim() || label.querySelector("span")?.textContent.trim() || "Файл";
     const legacy = label.matches("[data-content-image]") ? label : null;
     const removeLegacy = legacy?.querySelector('input[type="hidden"]');
+    const directUpload = legacy && document.getElementById(legacy.dataset.directUpload);
     const wrapper = document.createElement("div");
     wrapper.className = "media-picker-control";
     const controls = document.createElement("div");
@@ -214,13 +237,14 @@
     }));
     const refresh = () => {
       const selected = readSelected();
-      if (!selected.length && legacy?.dataset.fallbackUrl && removeLegacy?.value !== "1") {
+      if (!selected.length && !directUpload?.files.length && legacy?.dataset.fallbackUrl && removeLegacy?.value !== "1") {
         selected.push({url: legacy.dataset.fallbackUrl, type: "image", title: "Текущее изображение"});
       }
       previews.replaceChildren(...selected.map(item => {
         const tile = document.createElement("div");
         if (item.url && item.type === "image") {
           const image = document.createElement("img");
+          window.setManagementImageFallback(image);
           image.src = item.url;
           image.alt = "";
           tile.append(image);
@@ -233,6 +257,10 @@
       clear.hidden = !selected.length || select.required;
     };
     const changeSelection = items => {
+      if (directUpload) {
+        directUpload.value = "";
+        directUpload.dispatchEvent(new Event("upload-reset"));
+      }
       if (removeLegacy) removeLegacy.value = items.length ? "" : "1";
       const byId = new Map(items.map(item => [String(item.id), item]));
       items.forEach(item => {
@@ -254,6 +282,11 @@
     clear.addEventListener("click", () => { changeSelection([]); choose.focus(); });
     select.addEventListener("change", refresh);
     select.addEventListener("media-picker-sync", refresh);
+    directUpload?.addEventListener("image-upload-ready", () => {
+      removeLegacy.value = "";
+      select.value = "";
+      select.dispatchEvent(new Event("change", {bubbles: true}));
+    });
     select.classList.add("media-picker-select");
     if (legacy) {
       choose.textContent = "Выбрать или загрузить";
@@ -269,6 +302,7 @@
     const choose = component.querySelector("[data-block-choose]");
     const clear = component.querySelector("[data-block-clear]");
     const picture = component.querySelector("[data-block-thumbnail]");
+    window.setManagementImageFallback(picture);
     const url = component.querySelector("[data-block-image-url]");
     const replacement = component.querySelector('[name="replace-image"]');
     const render = () => {

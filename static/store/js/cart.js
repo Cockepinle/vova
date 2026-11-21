@@ -50,7 +50,11 @@ async function postStoreAction(url, payload) {
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": checkoutDrawer.querySelector('[name="csrfmiddlewaretoken"]').value,
+      },
       body: JSON.stringify(payload),
     });
   } catch {
@@ -345,7 +349,7 @@ function renderCart(cart, {saveDraft = true} = {}) {
               <h3>${escapeHtml(item.name)}</h3>
               <p>${escapeHtml(item.sku)}</p>
             </div>
-            <button class="favorite-button cart-favorite ${isProductFavorite(item.id) ? "is-active" : ""}" type="button" aria-label="Переместить в избранное" title="Переместить в избранное">
+            <button class="favorite-button cart-favorite ${isProductFavorite(item.id) ? "is-active" : ""}" type="button" aria-pressed="${isProductFavorite(item.id)}" aria-label="${isProductFavorite(item.id) ? "Убрать из избранного" : "Добавить в избранное"}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
             </button>
             <div class="cart-item-row">

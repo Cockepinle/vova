@@ -1,5 +1,6 @@
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION
 from django.db import transaction
+from django.db.models import Count, Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -11,11 +12,12 @@ from .common import (
     messages,
 )
 from ..cms_forms import VariantGroupForm, VariantParameterFormSet
+from ..models import ProductAttribute
 
 
 @management_required
 def variant_group_list(request):
-    groups = VariantGroup.objects.prefetch_related("products").all()
+    groups = VariantGroup.objects.annotate(product_count=Count("products")).prefetch_related("attributes")
     return render(
         request,
         "store/management/variant_group_list.html",
@@ -50,11 +52,11 @@ def variant_group_form(request, group_id=None):
                         "value_type": data["value_type"]
                         or AttributeDefinition.TYPE_TEXT,
                         "unit": data["unit"],
-                        "choices": [
+                        "choices": list(dict.fromkeys(
                             item.strip()
                             for item in data["choices_text"].splitlines()
                             if item.strip()
-                        ],
+                        )),
                     },
                 )
                 if parameter.is_visible:
@@ -70,6 +72,12 @@ def variant_group_form(request, group_id=None):
         messages.success(request, "Группа модификаций сохранена.")
         return redirect("management_variant_group_edit", group_id=group.pk)
 
+    linked_products = []
+    if group:
+        values = ProductAttribute.objects.filter(attribute__variant_groups=group).select_related("attribute")
+        linked_products = group.products.order_by("name", "pk").prefetch_related(
+            Prefetch("attributes", queryset=values, to_attr="variant_values")
+        )
     return render(
         request,
         "store/management/variant_group_form.html",
@@ -78,16 +86,17 @@ def variant_group_form(request, group_id=None):
             "group": group,
             "form": form,
             "parameter_forms": parameter_forms,
+            "linked_products": linked_products,
         },
     )
 
 
 @management_required
 @require_POST
+@transaction.atomic
 def variant_group_delete(request, group_id):
-    group = get_object_or_404(VariantGroup, pk=group_id)
+    group = get_object_or_404(VariantGroup.objects.select_for_update(), pk=group_id)
     log_change(request, group, DELETION, "Удалена группа модификаций")
-    group.products.update(variant_group=None)
     group.delete()
     messages.success(
         request,

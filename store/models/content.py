@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
+from ..uploads import local_media_missing
 
 
 class SiteSettings(models.Model):
@@ -50,7 +51,7 @@ class SiteSettings(models.Model):
         if not file_field or not file_field.name:
             return ""
         try:
-            if not file_field.storage.exists(file_field.name):
+            if local_media_missing(file_field):
                 return ""
             return file_field.url
         except (OSError, ValueError):

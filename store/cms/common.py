@@ -12,6 +12,7 @@ from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils.encoding import filepath_to_uri
 from django.views.decorators.http import require_POST
 from ..cms_forms import (
     AttributeDefinitionForm,
@@ -47,6 +48,12 @@ def delete_unreferenced_file(name, storage, current_settings_id=None):
     file_references = [
         (SiteSettings, "logo_image"),
         (PageContent, "hero_image"),
+        (Category, "image"),
+        (Product, "image"),
+        (ProductImage, "image"),
+        (Employee, "image"),
+        (ProductAttribute, "value_file"),
+        (CustomerRequest, "attachment"),
     ]
     for model, field_name in file_references:
         queryset = model.objects.filter(**{field_name: name})
@@ -54,6 +61,19 @@ def delete_unreferenced_file(name, storage, current_settings_id=None):
             queryset = queryset.exclude(pk=current_settings_id)
         if queryset.exists():
             return
+    urls = {storage.url(name)}
+    if getattr(storage, "is_local_name", lambda path: True)(name):
+        urls.add(f"/media/{filepath_to_uri(name)}")
+    for url in urls:
+        if BuilderRevision.objects.filter(structure__icontains=url).exists() or PageContent.objects.filter(
+            Q(draft_structure__icontains=url) | Q(published_structure__icontains=url)
+        ).exists():
+            return
+    for model in (Category, Product, ProductImage, Employee):
+        if model.objects.filter(image_url__in=urls).exists():
+            return
+    if ProductAttribute.objects.filter(value_url__in=urls).exists():
+        return
     storage.delete(name)
 
 class ManagementLoginView(LoginView):
@@ -111,6 +131,7 @@ class ManagementLoginView(LoginView):
 class AdminLoginView(ManagementLoginView):
     success_url = reverse_lazy("admin:index")
 
+@require_POST
 def management_logout(request):
     logout(request)
     messages.success(request, "Вы вышли из панели управления.")

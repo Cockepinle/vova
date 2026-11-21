@@ -164,7 +164,7 @@ class SiteAuditTests(TestCase):
             settings.logo_image.save(first.name, first, save=True)
             old_name = settings.logo_image.name
             payload = self._settings_payload(settings)
-            with patch('store.cms.content.delete_unreferenced_file') as cleanup:
+            with patch('store.cms.content.delete_unreferenced_file') as cleanup, self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(reverse('management_settings'), {**payload, 'logo_image': image_file('second.png')})
             self.assertEqual(response.status_code, 302)
             settings.refresh_from_db()
@@ -191,7 +191,7 @@ class SiteAuditTests(TestCase):
             old_file = SimpleUploadedFile('direct.png', b'direct')
             settings.logo_image.save(old_file.name, old_file, save=True)
             old_name = settings.logo_image.name
-            with patch('store.cms.content.delete_unreferenced_file') as cleanup:
+            with patch('store.cms.content.delete_unreferenced_file') as cleanup, self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(reverse('management_settings'), {**self._settings_payload(settings), 'logo_media': media.pk})
             self.assertEqual(response.status_code, 302, response.content.decode())
             self.assertEqual(response.status_code, 302)

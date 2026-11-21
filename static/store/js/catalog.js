@@ -295,11 +295,14 @@ function setDetailGalleryImage(gallery, index) {
 }
 
 function renderVariantLinks(variants) {
-  return variants && variants.length > 1
-    ? `<h3>Выберите вариант</h3><div class="product-variant-list">${variants.map(variant =>
+  if (!variants || variants.length < 2) return "";
+  const links = `<div class="product-variant-list">${variants.map(variant =>
         `<a class="product-variant ${variant.current ? "is-current" : ""} ${variant.unavailable ? "is-unavailable" : ""}" href="${escapeCatalogHtml(variant.url)}" data-product-id="${escapeCatalogHtml(variant.id)}" data-product-url="${escapeCatalogHtml(variant.data_url || `/api/products/${variant.id}/`)}" ${variant.current ? 'aria-current="page"' : ""}><span>${escapeCatalogHtml(variant.label)}</span>${variant.show_identity ? `<small>${escapeCatalogHtml(variant.sku || variant.name)}</small>` : ""}${variant.unavailable ? "<small>Нет в наличии</small>" : variant.availability === "preorder" ? "<small>Под заказ</small>" : ""}</a>`
-      ).join("")}</div>`
-    : "";
+      ).join("")}</div>`;
+  const choices = variants.length > 6
+    ? `<details class="detail-variant-more"><summary>Все варианты (${variants.length})</summary>${links}</details>`
+    : links;
+  return `<h3>Выберите вариант</h3>${choices}`;
 }
 
 document.addEventListener("click", (event) => {

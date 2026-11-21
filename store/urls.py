@@ -82,6 +82,7 @@ urlpatterns = [
     path("management/categories/bulk/", cms_views.category_bulk_action, name="management_category_bulk"),
     path("management/employees/", cms_views.employee_list, name="management_employees"),
     path("management/employees/new/", cms_views.employee_form, name="management_employee_new"),
+    path("management/employees/<int:employee_id>/", cms_views.employee_detail, name="management_employee_detail"),
     path("management/employees/<int:employee_id>/edit/", cms_views.employee_form, name="management_employee_edit"),
     path("management/employees/<int:employee_id>/duplicate/", cms_views.employee_duplicate, name="management_employee_duplicate"),
     path("management/employees/<int:employee_id>/delete/", cms_views.employee_delete, name="management_employee_delete"),

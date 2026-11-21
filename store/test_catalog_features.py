@@ -1412,7 +1412,7 @@ class CatalogFeaturesTests(TestCase):
                 removed = self.post_json('update_cart', {'product_ids': [self.product.pk, other.pk], 'quantity': 0})
                 self.assertEqual(removed.json()['items'], [])
 
-    def test_move_cart_item_to_favorites_is_atomic_and_idempotent(self):
+    def test_cart_and_favorites_keep_separate_collections_even_with_legacy_move_flag(self):
         action = {'product_id': self.product.pk, 'is_favorite': True, 'move_from_cart': True}
         self.post_json('add_to_cart', {'product_id': self.product.pk, 'quantity': 2})
         response = self.post_json('toggle_favorite', action)
@@ -1422,13 +1422,27 @@ class CatalogFeaturesTests(TestCase):
         self.client.force_login(self.customer)
         CartItem.objects.create(user=self.customer, product=self.product, quantity=2)
         CartItem.objects.create(user=self.other, product=self.product, quantity=2)
+        group = VariantGroup.objects.create(name="Варианты для проверки корзины")
+        group.products.add(self.product)
+        variant = Product.objects.create(category=self.leaf, variant_group=group, name="Другая модификация", price=10, status="published")
+        self.post_json('add_to_cart', {'product_id': variant.pk, 'quantity': 1})
         for _ in range(2):
             response = self.post_json('toggle_favorite', action)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()['cart']['items'], [])
+            self.assertNotIn('cart', response.json())
             self.assertTrue(response.json()['is_favorite'])
         self.assertEqual(FavoriteItem.objects.filter(user=self.customer, product=self.product).count(), 1)
         self.assertTrue(CartItem.objects.filter(user=self.other, product=self.product).exists())
+        self.post_json('update_cart', {'product_id': self.product.pk, 'quantity': 5})
+        removed = self.post_json('toggle_favorite', {**action, 'is_favorite': False})
+        self.assertFalse(removed.json()['is_favorite'])
+        self.client.get(reverse('catalog'))
+        items = {item['id']: item['quantity'] for item in self.client.get(reverse('api_cart')).json()['items']}
+        self.assertEqual(items, {str(self.product.pk): 5, str(variant.pk): 1})
+        self.post_json('toggle_favorite', {'product_id': self.product.pk, 'is_favorite': True})
+        self.post_json('update_cart', {'product_id': self.product.pk, 'quantity': 0})
+        self.assertTrue(FavoriteItem.objects.filter(user=self.customer, product=self.product).exists())
+        self.assertTrue(CartItem.objects.filter(user=self.customer, product=variant).exists())
 
     def test_recommendations_and_accessories_are_loaded_from_product_relations(self):
         recommended = Product.objects.create(

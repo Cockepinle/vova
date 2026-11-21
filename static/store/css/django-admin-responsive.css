@@ -1,0 +1,50 @@
+/* Native Django admin: keep wide lists and inline formsets inside their panels. */
+.main > .content, #content-main, #content-main form, #content-main fieldset,
+#content-main .form-row > div, #content-main .related-widget-wrapper {
+  min-inline-size: 0;
+}
+
+#changelist-form .results, #changelist .paginator {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+}
+
+#changelist .paginator {
+  overflow: visible;
+  white-space: normal;
+}
+
+.inline-related.tabular > fieldset.module {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+#content-main :is(select, textarea, .vTextField, .vURLField, .vLargeTextField) {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+#content-main .related-widget-wrapper {
+  flex-wrap: wrap;
+}
+
+#content-main .select2-container--admin-autocomplete {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.select2-container--admin-autocomplete .select2-results__option {
+  overflow-wrap: anywhere;
+}
+
+#content-main :is(.readonly, .help), #changelist-form .results td {
+  overflow-wrap: anywhere;
+}
+
+.breadcrumbs, .change-form #content > :is(h1, h2) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

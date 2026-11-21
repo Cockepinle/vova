@@ -1,5 +1,5 @@
 /* Shared layout safeguards, loaded after page styles. */
-:root { --mobile-actions-height: 72px; }
+:root { --mobile-actions-height: calc(72px + env(safe-area-inset-bottom, 0px)); }
 html { scroll-padding-block: 90px; -webkit-text-size-adjust: 100%; }
 body { overflow-x: visible; }
 html, body { max-width: 100%; overflow-x: clip; }
@@ -34,6 +34,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .drawer-header, .cart-panel-header { height: auto; min-height: 64px; gap: 12px; }
 .cookie-actions { flex-wrap: wrap; }
 .cookie-actions button { min-height: 48px; }
+.cookie-status { color: var(--danger, #b42318); }
+form[aria-busy="true"] button[type="submit"] { cursor: progress; opacity: .75; }
 body.overlay-active { overflow: hidden; }
 body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibility: hidden; pointer-events: none; }
 @media (min-width: 721px) and (max-width: 1100px) {
@@ -55,7 +57,7 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .catalog-mobile-filters a, .catalog-topline select { min-height: 44px; }
 }
 @media (max-width: 720px) {
-  body { padding-bottom: calc(var(--mobile-actions-height) + env(safe-area-inset-bottom, 0px)); }
+  body { padding-bottom: var(--mobile-actions-height); }
   .site-footer { padding-bottom: 0; }
   .header-inner { display: grid; grid-template-columns: minmax(74px,auto) minmax(0,1fr); gap: 10px; padding: 8px 12px; }
   .brand { gap: 7px; min-width: 0; }
@@ -154,9 +156,16 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
  .site-header { height: auto; min-height: 68px; }
  .header-inner { min-height: 68px; padding-block: 8px; }
  .brand, .header-actions { flex-shrink: 0; }
+ .header-inner .brand { max-inline-size: min(25vw, 17rem); }
+ .header-inner .brand-name { min-inline-size: 0; }
 }
-@media (max-width: 1100px) { .header-cta { display: none; } }
+.main-nav .mobile-nav-cta { display: none; }
+@media (min-width: 721px) and (max-width: 1100px) {
+  .header-inner .header-cta { flex: 0 1 auto; max-width: 11rem; padding-inline: 12px; text-align: center; }
+}
 @media (max-width: 720px) {
+ .main-nav .mobile-nav-cta { display: flex; grid-column: 1 / -1; color: var(--blue); }
+ .main-nav { max-height: calc(100dvh - var(--mobile-actions-height) - env(safe-area-inset-top, 0px) - 16px); overflow-y: auto; overscroll-behavior: contain; }
  .mobile-actions a, .mobile-actions button { white-space: normal; overflow-wrap: anywhere; text-align: center; }
  .page-hero-media img { max-height: 320px; }
 }
@@ -288,6 +297,18 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .mobile-action-button { font-size: 9px; }
 }
 
+@media (max-width: 720px) {
+  .site-header .header-inner { grid-template-columns: minmax(0, 1fr); }
+  .site-header .header-inner.has-mobile-search { grid-template-columns: minmax(0, 40%) minmax(0, 1fr); }
+  .has-mobile-search .mobile-header-search input { font-size: 16px; }
+  .site-header .brand-name {
+    min-inline-size: 0;
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Shared storefront shapes, using the same tokens as forms and CMS. */
 .category-card, .advantage-card, .team-card, .document-card, .work-cta, .b2b-box,
 .search-box, .catalog-topline select, .catalog-sidebar a, .catalog-mobile-filters a,
@@ -415,4 +436,7 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .modal-main-image { max-height: min(35dvh, 300px); }
   .modal-thumbs { gap: 8px; padding: 10px 10px 12px; }
   .modal-thumb { flex-basis: 62px; }
+}
+@media (min-width: 350px) and (max-width: 620px) {
+  .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

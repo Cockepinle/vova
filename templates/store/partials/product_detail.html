@@ -1,11 +1,11 @@
-<nav class="catalog-breadcrumbs" aria-label="Хлебные крошки">
-  <a href="{% url 'catalog' %}">Каталог</a>
+<nav class="catalog-breadcrumbs product-breadcrumbs" aria-label="Хлебные крошки">
+  <a class="product-breadcrumb-root" href="{% url 'catalog' %}">Каталог</a>
   {% for category in breadcrumbs %}
     <span aria-hidden="true">/</span>
-    <a href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">{{ category.name }}</a>
+    <a{% if forloop.last %} class="product-breadcrumb-parent"{% endif %} href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">{{ category.name }}</a>
   {% endfor %}
   <span aria-hidden="true">/</span>
-  <span aria-current="page">{{ detail_product.name }}</span>
+  <span class="product-breadcrumb-current" aria-current="page">{{ detail_product.name|truncatechars:26 }}</span>
 </nav>
 <section class="product-detail-page" data-product-detail data-product-id="{{ detail_product.pk }}">
   <div class="product-detail-summary">
@@ -31,8 +31,9 @@
       {% endif %}
     </div>
     <div class="product-detail-purchase">
-      <p class="product-sku" data-detail-sku>Артикул: {{ detail_product.sku|default:"—" }}</p>
       <h1>{{ detail_product.h1|default:detail_product.name }}</h1>
+      <p class="product-sku" data-detail-sku>Артикул: {{ detail_product.sku|default:"—" }}</p>
+      <p class="product-availability" data-detail-availability>{{ detail_product.get_availability_display }}</p>
       {% if detail_product.h1 and detail_product.h1 != detail_product.name %}<p class="product-detail-category">{{ detail_product.name }}</p>{% endif %}
       <p class="product-detail-category" data-detail-category>
         {% if detail_product.category.parent %}<a href="{% url 'catalog' %}?category={{ detail_product.category.parent.slug }}">{{ detail_product.category.parent.name }}</a> / {% endif %}
@@ -41,6 +42,10 @@
       {% if detail_variants|length > 1 %}
         <section class="product-variants detail-variant-picker">
           <h2>Модификации</h2>
+          {% if detail_variants|length > 6 %}
+          <details class="detail-variant-more">
+            <summary>{% for variant in detail_variants %}{% if variant.current %}{{ variant.label|truncatechars:72 }} · {% endif %}{% endfor %}Все варианты ({{ detail_variants|length }})</summary>
+          {% endif %}
           <div class="product-variant-list" data-detail-variants>
             {% for variant in detail_variants %}
               <a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}"
@@ -52,10 +57,10 @@
               </a>
             {% endfor %}
           </div>
+          {% if detail_variants|length > 6 %}</details>{% endif %}
         </section>
       {% endif %}
       <p class="price product-detail-price" data-detail-price>{{ detail_data.price }} ₽ <span>/ {{ detail_product.unit }}</span></p>
-      <p class="product-availability" data-detail-availability>{{ detail_product.get_availability_display }}</p>
       <div class="detail-buy-actions">
         <div class="quantity-control" role="group" aria-label="Количество">
           <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not detail_can_purchase %}disabled{% endif %}>−</button>
@@ -66,6 +71,7 @@
         <button class="primary-button product-detail-add" type="button" data-add-detail-product="{{ detail_product.pk }}"
                 {% if not detail_can_purchase %}data-purchase-disabled disabled{% endif %}>{% if detail_is_hidden %}Предпросмотр{% elif not detail_can_purchase %}Нет в наличии{% elif detail_cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
       </div>
+      <button class="ghost-button favorite-button detail-favorite{% if detail_data.id in favorite_ids %} is-active{% endif %}" type="button" aria-pressed="{% if detail_data.id in favorite_ids %}true{% else %}false{% endif %}" aria-label="{% if detail_data.id in favorite_ids %}Убрать из избранного{% else %}Добавить в избранное{% endif %}">Избранное</button>
       <small id="detail-quantity-rules">Минимум {{ detail_data.min_quantity }} {{ detail_product.unit }} · кратность {{ detail_data.quantity_step }} {{ detail_product.unit }}</small>
     </div>
   </div>

@@ -1,51 +1,45 @@
 {% extends "store/management/base.html" %}
+{% load static %}
 
 {% block heading %}{% if field %}Редактировать поле{% else %}Добавить поле{% endif %}{% endblock %}
 
 {% block content %}
-  <form class="mgmt-card mgmt-form" method="post">
+  <form class="mgmt-form-grid mgmt-form" method="post" data-field-editor>
     {% csrf_token %}
+    <input type="hidden" name="table_settings" value="1">
     {{ form.non_field_errors }}
-    <div class="form-grid">
-      {% for item in form %}
-        <label class="{% if item.name == 'choices_text' %}full choice-options-field{% elif item.name == 'filter_type' %}filter-type-field{% endif %}">
-          <span>{{ item.label }}</span>
-          {{ item }}
-          {% if item.name == 'choices_text' %}
-            <small>Заполняется только для типа «Список». Например: Белый, Чёрный, Прозрачный — каждый вариант с новой строки.</small>
-          {% endif %}
-          {{ item.errors }}
-        </label>
-      {% endfor %}
-    </div>
+    <section class="mgmt-card form-section">
+      <h2>Что вводится в поле</h2>
+      <div class="form-grid">
+        {% include "store/management/field_editor_input.html" with input=form.name %}
+        {% include "store/management/field_editor_input.html" with input=form.value_type %}
+        <p class="muted full" data-field-type-help hidden></p>
+        <div class="full" data-field-options>
+          {% include "store/management/field_editor_input.html" with input=form.choices_text %}
+        </div>
+        {% include "store/management/field_editor_input.html" with input=form.unit %}
+        {% include "store/management/field_editor_input.html" with input=form.default_value %}
+        {% include "store/management/field_editor_toggle.html" with input=form.is_required %}
+      </div>
+    </section>
+    <section class="mgmt-card form-section">
+      <h2>Где показывается поле</h2>
+      <div class="form-grid">
+        {% include "store/management/field_editor_input.html" with input=form.sort_order %}
+        {% include "store/management/field_editor_toggle.html" with input=form.is_visible %}
+        {% include "store/management/field_editor_toggle.html" with input=form.show_in_table %}
+        {% include "store/management/field_editor_toggle.html" with input=form.is_filterable %}
+        {% include "store/management/field_editor_input.html" with input=form.filter_type %}
+      </div>
+    </section>
+    <section class="mgmt-card form-section" data-field-preview hidden>
+      <h2>Предпросмотр в форме товара</h2>
+      <div data-field-preview-content></div>
+    </section>
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить поле</button>
-      <a class="ghost-button" href="{% url 'management_fields' %}">Отмена</a>
+      <a class="ghost-button" href="{% url 'management_fields' %}">К списку полей</a>
     </div>
   </form>
-
-  <script>
-    const typeField = document.querySelector("#id_value_type");
-    const choicesField = document.querySelector(".choice-options-field");
-    const filterableField = document.querySelector("#id_is_filterable");
-    const filterTypeField = document.querySelector(".filter-type-field");
-    const filterModeField = document.querySelector("#id_filter_type");
-
-    function toggleChoicesField() {
-      if (typeField && choicesField) choicesField.style.display = typeField.value === "choice" ? "grid" : "none";
-      if (filterableField && filterTypeField) filterTypeField.style.display = filterableField.checked ? "grid" : "none";
-      if (filterModeField) {
-        const multiple = filterModeField.querySelector('option[value="multiple"]');
-        const range = filterModeField.querySelector('option[value="range"]');
-        if (multiple) multiple.disabled = typeField.value !== "choice";
-        if (range) range.disabled = !["integer", "decimal", "price"].includes(typeField.value);
-        if (multiple?.selected && multiple.disabled || range?.selected && range.disabled) filterModeField.value = "single";
-      }
-    }
-
-    typeField?.addEventListener("change", toggleChoicesField);
-    filterableField?.addEventListener("change", toggleChoicesField);
-    filterModeField?.addEventListener("change", toggleChoicesField);
-    toggleChoicesField();
-  </script>
+  <script src="{% static 'store/js/field-editor.js' %}?v=1"></script>
 {% endblock %}

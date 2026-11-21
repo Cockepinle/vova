@@ -12,7 +12,7 @@
             <div class="full image-field">
               <span>Фото</span>
               {% if employee and employee.display_image_url %}
-                <img class="current-image-preview" src="{{ employee.display_image_url }}" alt="{{ employee.name }}">
+                <img class="current-image-preview" src="{{ employee.display_image_url }}" alt="{{ employee.name }}" data-current-preview data-media-fallback>
               {% endif %}
               <label class="file-upload fancy-file">
                 {{ field }}
@@ -32,7 +32,7 @@
     </div>
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить сотрудника</button>
-      <a class="ghost-button" href="{% url 'management_employees' %}">Отмена</a>
+      <a class="ghost-button" href="{% if employee %}{% url 'management_employee_detail' employee.pk %}{% else %}{% url 'management_employees' %}{% endif %}{% querystring %}">Отмена</a>
     </div>
   </form>
 {% endblock %}

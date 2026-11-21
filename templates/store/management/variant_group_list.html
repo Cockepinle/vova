@@ -4,27 +4,32 @@
 {% block heading %}Модификации товаров{% endblock %}
 
 {% block content %}
-  <div class="page-actions">
-    <a class="primary-button" href="{% url 'management_variant_group_new' %}">Создать группу</a>
-  </div>
   <section class="mgmt-card">
+    <div class="card-header catalog-config-header">
+      <p class="section-help">Объединяйте товары, которые покупатель выбирает как варианты одного товара, например по цвету или размеру.</p>
+      <a class="primary-button" href="{% url 'management_variant_group_new' %}">Создать группу</a>
+    </div>
     {% if groups %}
-      <div class="table-wrap">
-        <table class="mgmt-table">
-          <thead><tr><th>Название группы</th><th>Параметры</th><th>Товары</th><th>Действия</th></tr></thead>
+      <div class="table-wrap record-table-wrap">
+        <table class="mgmt-table record-table catalog-config-table">
+          <thead><tr><th>Группа</th><th>Параметры вариантов</th><th>Товары</th><th>Действия</th></tr></thead>
           <tbody>
             {% for group in groups %}
               <tr>
-                <td><strong>{{ group.name }}</strong></td>
-                <td>{% for attribute in group.attributes.all %}<span class="variant-chip">{{ attribute.name }}</span>{% empty %}<span class="muted">Не заданы</span>{% endfor %}</td>
-                <td>{{ group.products.count }}</td>
-                <td class="table-actions">
+                <td><a class="record-link" href="{% url 'management_variant_group_edit' group.pk %}"><strong>{{ group.name }}</strong></a></td>
+                <td data-label="Параметры"><div class="catalog-config-tags">
+                  {% for attribute in group.attributes.all %}
+                    <span class="variant-chip">{{ attribute.name }}{% if attribute.unit %}, {{ attribute.unit }}{% endif %}</span>
+                  {% empty %}<span class="muted">Параметры не заданы</span>{% endfor %}
+                </div></td>
+                <td data-label="Товары"><span class="catalog-config-count">{{ group.product_count }}</span></td>
+                <td><div class="catalog-config-actions">
                   <a class="ghost-button" href="{% url 'management_variant_group_edit' group.pk %}">Открыть</a>
-                  <form method="post" action="{% url 'management_variant_group_delete' group.pk %}" onsubmit="return confirm('Удалить группу? Товары и их данные останутся.');">
+                  <form method="post" action="{% url 'management_variant_group_delete' group.pk %}" onsubmit="return confirm('Удалить группу модификаций? Товары будут отвязаны от группы. Их карточки и характеристики сохранятся.');">
                     {% csrf_token %}
-                    <button class="ghost-button danger-button" type="submit">Удалить группу</button>
+                    <button class="ghost-button danger-button" type="submit">Удалить</button>
                   </form>
-                </td>
+                </div></td>
               </tr>
             {% endfor %}
           </tbody>

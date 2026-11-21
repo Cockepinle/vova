@@ -1,0 +1,49 @@
+{% extends "store/management/base.html" %}
+{% load static store_extras %}
+
+{% block title %}{{ employee.name }}{% endblock %}
+{% block heading %}Карточка сотрудника{% endblock %}
+
+{% block content %}
+  {% static 'store/images/no-photo.svg' as placeholder_image %}
+  <div class="record-detail">
+    <section class="mgmt-card record-profile">
+      <img class="record-photo" src="{% firstof employee.display_image_url placeholder_image %}" alt="Фото сотрудника" data-media-fallback>
+      <div>
+        <span class="status status-{{ employee.status }}">{{ employee.get_status_display }}</span>
+        <h2>{{ employee.name }}</h2>
+        <p>{{ employee.role }}</p>
+        <div class="record-actions">
+          <a class="primary-button" href="{% url 'management_employee_edit' employee.pk %}{% querystring %}">Редактировать</a>
+          <a class="ghost-button" href="{% url 'management_employees' %}{% querystring %}">К списку сотрудников</a>
+        </div>
+      </div>
+    </section>
+    <div class="record-columns">
+      {% if employee.text or employee.phone or employee.email %}
+        <section class="mgmt-card">
+          {% if employee.text %}
+            <h2>О сотруднике</h2>
+            <p class="record-text">{{ employee.text }}</p>
+          {% endif %}
+          {% if employee.phone or employee.email %}
+            <h2>Контакты</h2>
+            <dl class="record-fields">
+              {% if employee.phone %}<div><dt>Телефон</dt><dd><a href="tel:{{ employee.phone|phone_href }}">{{ employee.phone }}</a></dd></div>{% endif %}
+              {% if employee.email %}<div><dt>Email</dt><dd><a href="mailto:{{ employee.email }}">{{ employee.email }}</a></dd></div>{% endif %}
+            </dl>
+          {% endif %}
+        </section>
+      {% endif %}
+      <section class="mgmt-card">
+        <h2>Публикация</h2>
+        <dl class="record-fields">
+          <div><dt>Порядок в списке</dt><dd>{{ employee.sort_order }}</dd></div>
+          <div><dt>Создана</dt><dd><time datetime="{{ employee.created_at|date:'c' }}">{{ employee.created_at|date:"d.m.Y H:i" }}</time></dd></div>
+          <div><dt>Обновлена</dt><dd><time datetime="{{ employee.updated_at|date:'c' }}">{{ employee.updated_at|date:"d.m.Y H:i" }}</time></dd></div>
+          {% if employee.image_url %}<div><dt>Сохранённая ссылка на фото</dt><dd><a href="{{ employee.image_url }}" target="_blank" rel="noopener">{{ employee.image_url }}</a></dd></div>{% endif %}
+        </dl>
+      </section>
+    </div>
+  </div>
+{% endblock %}

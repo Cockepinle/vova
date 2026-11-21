@@ -7,25 +7,37 @@
   if (nav) {
     nav.id = 'site-navigation';
     const toggle = document.querySelector('.mobile-menu-toggle');
-    const close = () => { nav.classList.remove('is-expanded'); toggle?.setAttribute('aria-expanded', 'false'); toggle?.classList.remove('is-active'); };
+    const compact = matchMedia('(max-width: 720px)');
+    const close = (restoreFocus = false) => {
+      if (!nav.classList.contains('is-expanded')) return;
+      nav.classList.remove('is-expanded');
+      toggle?.setAttribute('aria-expanded', 'false');
+      toggle?.classList.remove('is-active');
+      if (restoreFocus) toggle?.focus();
+    };
     toggle?.addEventListener('click', () => {
-      const expanded = nav.classList.toggle('is-expanded');
-      toggle.setAttribute('aria-expanded', String(expanded));
-      toggle.classList.toggle('is-active', expanded);
+      if (nav.classList.contains('is-expanded')) return close(true);
+      nav.classList.add('is-expanded');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.classList.add('is-active');
+      nav.querySelector('.mobile-nav-close')?.focus();
     });
-    nav.querySelector('.mobile-nav-close')?.addEventListener('click', close);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    nav.querySelector('.mobile-nav-close')?.addEventListener('click', () => close(true));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(true); });
     document.addEventListener('click', e => { if (!e.target.closest('.site-header, .mobile-actions')) close(); });
+    compact.addEventListener('change', () => close());
   }
   const bar = document.querySelector('.mobile-actions');
   if (bar && window.ResizeObserver) new ResizeObserver(() => {
-    if (bar.offsetHeight) document.documentElement.style.setProperty('--mobile-actions-height', `${bar.offsetHeight - (parseFloat(getComputedStyle(bar).paddingBottom) - 12)}px`);
+    if (bar.offsetHeight) document.documentElement.style.setProperty('--mobile-actions-height', `${bar.offsetHeight}px`);
   }).observe(bar);
   // Observe existing drawers so every entry point shares focus and scroll behaviour.
   const overlays = [...document.querySelectorAll('.product-modal, .cart-drawer, .checkout-drawer, .side-drawer, .cookie-modal, .image-lightbox, .catalog-mobile-category-tree, .catalog-mobile-filter-panel, .catalog-mobile-sort-panel')];
   let stack = [];
   const returnFocus = new Map();
-  const focusable = root => [...root.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')].filter(el => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
+  const focusable = root => [...root.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')].filter(el =>
+    !el.disabled && el.tabIndex >= 0 && el.getClientRects().length && getComputedStyle(el).visibility === 'visible' &&
+    !el.closest('[aria-hidden="true"], [inert], [data-close-catalog-panel].catalog-mobile-panel-backdrop'));
   function sync() {
     const opened = overlays.filter(el => el.classList.contains('is-open'));
     for (const el of opened) if (!stack.includes(el)) {
@@ -42,6 +54,11 @@
     document.body.classList.toggle('overlay-active', opened.length > 0);
   }
   overlays.forEach(el => new MutationObserver(sync).observe(el, {attributes: true, attributeFilter: ['class']}));
+  matchMedia('(min-width: 921px)').addEventListener('change', event => {
+    if (!event.matches) return;
+    document.querySelector('.catalog-mobile-sort-panel.is-open .catalog-panel-close')?.click();
+    document.querySelector('.catalog-mobile-category-tree.is-open .catalog-category-close')?.click();
+  });
   document.addEventListener('keydown', e => {
     const top = stack.at(-1);
     if (!top) return;

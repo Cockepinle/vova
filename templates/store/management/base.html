@@ -1,4 +1,4 @@
-{% load static %}
+{% load static store_extras %}
 <!doctype html>
 <html lang="ru">
   <head>
@@ -7,18 +7,19 @@
     <meta name="robots" content="noindex,nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
-    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=45">
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=49">
   </head>
-  <body data-media-api="{% url 'management_media_api' %}" data-media-upload-api="{% url 'management_media_upload_api' %}">
+  <body data-media-api="{% url 'management_media_api' %}" data-media-upload-api="{% url 'management_media_upload_api' %}" data-missing-image="{% static 'store/images/no-photo.svg' %}">
     <div class="mgmt-shell">
       <aside class="mgmt-sidebar">
         <a class="mgmt-brand" href="{% url 'management_dashboard' %}">
           {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span>{{ site_settings.logo_text|default:site_settings.site_name|default:'Сайт' }}</span>{% endif %}
           <strong>{{ site_settings.site_name|default:'Панель управления' }} CMS</strong>
         </a>
-        <button class="sidebar-collapse" type="button" data-sidebar-toggle aria-expanded="true" aria-label="Свернуть боковую панель">
+        <button class="sidebar-collapse" type="button" data-sidebar-toggle aria-controls="management-navigation" aria-expanded="true" aria-label="Свернуть боковую панель">
           <span aria-hidden="true">‹</span><span class="nav-label">Свернуть меню</span>
         </button>
+        <button class="ghost-button management-menu-toggle" type="button" data-management-menu-toggle aria-controls="management-navigation" aria-expanded="false" hidden>Меню разделов</button>
         <svg class="nav-icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <symbol id="nav-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
           <symbol id="nav-box" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5zm-9 5v9l9 5 9-5V8M12 13v9"/></symbol>
@@ -31,12 +32,12 @@
           <symbol id="nav-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.7 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.7-1l-1.7.6-1.4-2.4L5.3 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.7-1L9 7.3h2.8l.3 1.8a8 8 0 0 1 1.7 1l1.7-.6 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 2z"/></symbol>
           <symbol id="nav-tools" viewBox="0 0 24 24"><path d="m14 7 3 3M5 19l9-9m4-7a5 5 0 0 0-6 6l-7 7a2 2 0 0 0 3 3l7-7a5 5 0 0 0 6-6l-3 3-3-3z"/></symbol>
         </svg>
-        <nav class="mgmt-nav" aria-label="Разделы панели управления">
+        <nav class="mgmt-nav" id="management-navigation" aria-label="Разделы панели управления">
           <a class="nav-link {% if section == 'dashboard' %}active{% endif %}" href="{% url 'management_dashboard' %}" title="Обзор">
             <svg class="nav-icon"><use href="#nav-home"/></svg><span class="nav-label">Обзор</span>
           </a>
           <details class="nav-group" {% if section == 'products' or section == 'categories' or section == 'orders' or section == 'promotions' or section == 'variants' or section == 'customers' %}open{% endif %}>
-            <summary><svg class="nav-icon"><use href="#nav-box"/></svg><span class="nav-label">Каталог</span><span class="nav-chevron">⌄</span></summary>
+            <summary aria-label="Каталог"><svg class="nav-icon" aria-hidden="true"><use href="#nav-box"/></svg><span class="nav-label">Каталог</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
               <a class="nav-link {% if section == 'products' %}active{% endif %}" href="{% url 'management_products' %}" title="Товары"><svg class="nav-icon"><use href="#nav-box"/></svg><span class="nav-label">Товары</span></a>
               <a class="nav-link {% if section == 'categories' %}active{% endif %}" href="{% url 'management_categories' %}" title="Категории"><svg class="nav-icon"><use href="#nav-grid"/></svg><span class="nav-label">Категории</span></a>
@@ -47,7 +48,7 @@
             </div>
           </details>
           <details class="nav-group" {% if section == 'settings' or section == 'pages' or section == 'media' or section == 'employees' or section == 'requests' or section == 'fields' %}open{% endif %}>
-            <summary><svg class="nav-icon"><use href="#nav-page"/></svg><span class="nav-label">Управление сайтом</span><span class="nav-chevron">⌄</span></summary>
+            <summary aria-label="Управление сайтом"><svg class="nav-icon" aria-hidden="true"><use href="#nav-page"/></svg><span class="nav-label">Управление сайтом</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
               <a class="nav-link {% if content_section == 'settings' %}active{% endif %}" href="{% url 'management_settings' %}" title="Основные настройки"><svg class="nav-icon"><use href="#nav-settings"/></svg><span class="nav-label">Основные настройки</span></a>
               <a class="nav-link {% if content_section == 'brand' %}active{% endif %}" href="{% url 'management_settings' %}?tab=brand" title="Логотип и оформление"><svg class="nav-icon"><use href="#nav-image"/></svg><span class="nav-label">Логотип и оформление</span></a>
@@ -62,14 +63,14 @@
             </div>
           </details>
           <details class="nav-group" {% if section == 'payment_methods' or section == 'delivery_methods' %}open{% endif %}>
-            <summary><svg class="nav-icon"><use href="#nav-settings"/></svg><span class="nav-label">Настройки магазина</span><span class="nav-chevron">⌄</span></summary>
+            <summary aria-label="Настройки магазина"><svg class="nav-icon" aria-hidden="true"><use href="#nav-settings"/></svg><span class="nav-label">Настройки магазина</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
               <a class="nav-link {% if section == 'payment_methods' %}active{% endif %}" href="{% url 'management_payment_methods' %}" title="Оплата"><svg class="nav-icon"><use href="#nav-order"/></svg><span class="nav-label">Оплата</span></a>
               <a class="nav-link {% if section == 'delivery_methods' %}active{% endif %}" href="{% url 'management_delivery_methods' %}" title="Доставка"><svg class="nav-icon"><use href="#nav-tools"/></svg><span class="nav-label">Доставка</span></a>
             </div>
           </details>
           <details class="nav-group">
-            <summary><svg class="nav-icon"><use href="#nav-tools"/></svg><span class="nav-label">Инструменты</span><span class="nav-chevron">⌄</span></summary>
+            <summary aria-label="Инструменты"><svg class="nav-icon" aria-hidden="true"><use href="#nav-tools"/></svg><span class="nav-label">Инструменты</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
               <a class="nav-link" href="{% url 'management_product_import' %}" title="Импорт товаров"><svg class="nav-icon"><use href="#nav-tools"/></svg><span class="nav-label">Импорт товаров</span></a>
               <a class="nav-link" href="{% url 'management_product_export' %}" title="Экспорт товаров"><svg class="nav-icon"><use href="#nav-tools"/></svg><span class="nav-label">Экспорт товаров</span></a>
@@ -112,10 +113,17 @@
         <div class="media-picker-upload">
           <label class="media-picker-search"><span>Поиск по названию</span><input type="search" data-media-picker-search></label>
           <label class="file-upload fancy-file">
-            <input type="file" accept="image/*" data-media-picker-upload>
-            <strong>Загрузить с компьютера</strong>
+            {% upload_policy "all" as all_uploads %}{% upload_policy "image" as image_uploads %}{% upload_policy "attachment" as attachment_uploads %}
+            <input type="file" accept="{{ all_uploads.accept }}" data-upload-limit="{{ all_uploads|get_item:'data-upload-limit' }}" data-upload-hint="{{ all_uploads|get_item:'data-upload-hint' }}" data-media-picker-upload>
+            <strong>Выбрать файл на компьютере</strong>
           </label>
         </div>
+        <div data-media-picker-pending hidden>
+          <button class="primary-button" type="button" data-media-picker-send>Загрузить</button>
+        </div>
+        {{ all_uploads|json_script:"upload-policy-all" }}
+        {{ image_uploads|json_script:"upload-policy-image" }}
+        {{ attachment_uploads|json_script:"upload-policy-attachment" }}
         <p class="media-picker-status muted" data-media-picker-status role="status"></p>
         <div class="media-picker-grid" data-media-picker-grid></div>
         <footer class="media-picker-footer">
@@ -124,8 +132,9 @@
         </footer>
       </section>
     </div>
-    <script src="{% static 'store/js/media-picker.js' %}?v=2"></script>
-    <script src="{% static 'store/js/management.js' %}?v=39"></script>
+    <script src="{% static 'store/js/image-upload.js' %}?v=1"></script>
+    <script src="{% static 'store/js/media-picker.js' %}?v=4"></script>
+    <script src="{% static 'store/js/management.js' %}?v=41"></script>
     {% block management_scripts %}{% endblock %}
   </body>
 </html>

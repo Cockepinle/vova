@@ -1,8 +1,10 @@
 from .common import CartItem, CustomerProfile, CustomerRequest, EmailVerificationCode, FavoriteItem, JsonResponse, Order, SiteSettings, User, auth_required_payload, authenticate
-from .common import cart_payload, csrf_exempt, get_favorite_ids, get_object_or_404, get_product, get_store_products, get_store_products_queryset, json, login, logout
+from django.contrib.auth.hashers import make_password
+
+from ..services.accounts import check_account_verification, consume_account_verification
+from .common import cart_payload, get_favorite_ids, get_object_or_404, get_product, get_store_products, get_store_products_queryset, json, login, logout
 from .common import merge_session_cart_to_user, normalize_quantity, notify_manager_safely, require_GET, require_POST, send_account_code, serialize_order, serialize_product, staff_member_required, transaction
 
-@csrf_exempt
 @require_POST
 def create_customer_request(request):
     try:
@@ -44,7 +46,6 @@ def create_customer_request(request):
 
     return JsonResponse({"ok": True, "message": "Запрос на КП сохранён. Мы свяжемся с вами."})
 
-@csrf_exempt
 @require_POST
 def account_login(request):
     try:
@@ -65,7 +66,6 @@ def account_login(request):
 
     return JsonResponse({"ok": True, "user": {"name": user.get_full_name() or user.username, "email": user.email}})
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def repeat_order(request, order_id):
@@ -115,14 +115,13 @@ def account_order_detail(request, order_id):
     )
     return JsonResponse({"order": serialize_order(order, include_items=True)})
 
-@csrf_exempt
 @require_POST
 def account_logout(request):
     logout(request)
     return JsonResponse({"ok": True})
 
-@csrf_exempt
 @require_POST
+@transaction.atomic
 def account_verify(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -131,18 +130,20 @@ def account_verify(request):
 
     email = (payload.get("email") or "").strip().lower()
     code = (payload.get("code") or "").strip()
-    verification = EmailVerificationCode.objects.filter(email=email, code=code, is_used=False).first()
+    verification = check_account_verification(email, code, "registration")
 
     if not verification:
         return JsonResponse({"error": "Неверный код подтверждения"}, status=400)
 
     data = verification.payload
     if User.objects.filter(username=email).exists() or User.objects.filter(email=email).exists():
-        verification.is_used = True
-        verification.save(update_fields=["is_used"])
+        consume_account_verification(verification, "registration")
         return JsonResponse({"error": "Пользователь с таким email уже существует"}, status=400)
 
-    user = User.objects.create_user(username=email, email=email, password=data.get("password", ""))
+    user = User.objects.create_user(username=email, email=email, password=data.get("password"))
+    if password_hash := data.get("password_hash"):
+        user.password = password_hash
+        user.save(update_fields=["password"])
     name = data.get("name", "")
     if name:
         parts = name.split(" ", 1)
@@ -151,14 +152,12 @@ def account_verify(request):
         user.save(update_fields=["first_name", "last_name"])
 
     CustomerProfile.objects.create(user=user, company=data.get("company", ""), phone=data.get("phone", ""))
-    verification.is_used = True
-    verification.save(update_fields=["is_used"])
+    consume_account_verification(verification, "registration")
     login(request, user)
     merge_session_cart_to_user(request, user)
 
     return JsonResponse({"ok": True, "user": {"name": user.get_full_name() or user.username, "email": user.email}})
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def toggle_favorite(request):
@@ -169,8 +168,7 @@ def toggle_favorite(request):
         payload = json.loads(request.body.decode("utf-8") or "{}")
         product_id = str(payload.get("product_id") or "")
         desired = payload.get("is_favorite")
-        move = payload.get("move_from_cart", False)
-        if (desired is not None and type(desired) is not bool) or type(move) is not bool or (move and desired is False):
+        if desired is not None and type(desired) is not bool:
             raise ValueError
     except (ValueError, AttributeError):
         return JsonResponse({"error": "Некорректные данные"}, status=400)
@@ -181,16 +179,12 @@ def toggle_favorite(request):
         return JsonResponse({"error": "Товар не найден"}, status=404)
 
     User.objects.select_for_update().get(pk=request.user.pk)
-    if move:
-        desired = True
     if desired is None:
         desired = not FavoriteItem.objects.filter(user=request.user, product=product).exists()
     if desired:
         FavoriteItem.objects.get_or_create(user=request.user, product=product)
     else:
         FavoriteItem.objects.filter(user=request.user, product=product).delete()
-    if move:
-        CartItem.objects.filter(user=request.user, product=product).delete()
 
     favorites = get_favorite_ids(request)
 
@@ -201,11 +195,9 @@ def toggle_favorite(request):
             "items": [serialize_product(product, request) for product in get_store_products().filter(id__in=favorites)],
             "is_favorite": desired,
             "product_id": str(product.pk),
-            **({"cart": cart_payload(request)} if move else {}),
         }
     )
 
-@csrf_exempt
 @require_POST
 def account_password_reset_request(request):
     try:
@@ -232,8 +224,8 @@ def account_password_reset_request(request):
 
     return JsonResponse({"ok": True, "verification_required": True, "message": message})
 
-@csrf_exempt
 @require_POST
+@transaction.atomic
 def account_password_reset_confirm(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -247,12 +239,7 @@ def account_password_reset_confirm(request):
     if not email or not code or not password:
         return JsonResponse({"error": "Введите email, код и новый пароль"}, status=400)
 
-    verification = EmailVerificationCode.objects.filter(
-        email=email,
-        code=code,
-        is_used=False,
-        payload__type="password_reset",
-    ).first()
+    verification = check_account_verification(email, code, "password_reset")
 
     if not verification:
         return JsonResponse({"error": "Неверный код восстановления"}, status=400)
@@ -264,8 +251,7 @@ def account_password_reset_confirm(request):
 
     user.set_password(password)
     user.save(update_fields=["password"])
-    verification.is_used = True
-    verification.save(update_fields=["is_used"])
+    consume_account_verification(verification, "password_reset")
     login(request, user)
     merge_session_cart_to_user(request, user)
 
@@ -282,7 +268,6 @@ def api_management_orders(request):
 
     return JsonResponse({"orders": [serialize_order(order) for order in orders[:100]]})
 
-@csrf_exempt
 @require_POST
 def account_register(request):
     try:
@@ -311,7 +296,8 @@ def account_register(request):
         code=code,
         payload={
             "email": email,
-            "password": password,
+            "type": "registration",
+            "password_hash": make_password(password),
             "name": name,
             "company": company,
             "phone": phone,

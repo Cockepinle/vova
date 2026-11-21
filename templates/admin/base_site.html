@@ -1,0 +1,7 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block responsive %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'store/css/django-admin-responsive.css' %}?v=1">
+{% endblock %}

@@ -1,4 +1,5 @@
 from pathlib import PurePosixPath
+from uuid import uuid4
 
 from cloudinary.exceptions import Error
 from cloudinary_storage.storage import MediaCloudinaryStorage
@@ -42,6 +43,14 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
             return "raw"
         return "image"
 
+    def get_available_name(self, name, max_length=None):
+        # The upstream backend truncates the entire path, including its extension.
+        path = PurePosixPath(self._normalise_name(name))
+        candidate = str(path.with_name(f"{uuid4().hex}{path.suffix.lower()}"))
+        if max_length and len(self._prepend_prefix(candidate)) > max_length:
+            raise OSError("Cloudinary media path exceeds the length of the file field.")
+        return candidate
+
     def _save(self, name, content):
         name = self._prepend_prefix(self._normalise_name(name))
         try:
@@ -51,7 +60,8 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
         public_id = result["public_id"]
         if self._get_resource_type(name) == "raw":
             return public_id
-        return f"{public_id}{PurePosixPath(name).suffix.lower()}"
+        extension = result.get("format") or PurePosixPath(name).suffix.lstrip(".")
+        return f"{public_id}.{extension}" if extension else public_id
 
     def delete(self, name):
         if self.is_local_name(name):

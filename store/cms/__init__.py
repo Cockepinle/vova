@@ -6,5 +6,5 @@ from .categories import category_bulk_action, category_delete, category_duplicat
 from .orders import order_bulk_action, order_detail, order_export, order_list
 from .customers import customer_detail, customer_list, customer_product_search, request_bulk_action, request_detail, request_list
 from .content import field_delete, field_form, field_list, media_library, media_library_api, media_library_upload_api, media_usage, page_builder, page_builder_restore, page_builder_save, page_content_delete, page_content_form, page_content_list, page_content_reorder, site_media_delete, site_media_replace, site_media_upload, site_settings
-from .management import dashboard, delivery_method_form, delivery_method_list, employee_bulk_action, employee_delete, employee_duplicate, employee_form, employee_list, payment_method_form, payment_method_list, promotion_delete, promotion_form, promotion_list
+from .management import dashboard, delivery_method_form, delivery_method_list, employee_bulk_action, employee_delete, employee_detail, employee_duplicate, employee_form, employee_list, payment_method_form, payment_method_list, promotion_delete, promotion_form, promotion_list
 from .variant_groups import variant_group_delete, variant_group_form, variant_group_list

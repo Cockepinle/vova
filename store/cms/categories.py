@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef
@@ -286,11 +288,17 @@ def category_delete(request, category_id):
     return redirect("management_categories")
 
 @management_required
+@require_POST
+@transaction.atomic
 def category_duplicate(request, category_id):
-    category = get_object_or_404(Category, pk=category_id)
+    category = get_object_or_404(Category.objects.select_for_update(), pk=category_id)
+    name = f"{category.name[:152]} — копия"
+    suffix = uuid4().hex
+    if Category.objects.filter(name=name).exists():
+        name = f"{category.name[:143]} — копия {suffix[:8]}"
     category.pk = None
-    category.name = f"{category.name} — копия"
-    category.slug = ""
+    category.name = name
+    category.slug = f"{category.slug[:142]}-copy-{suffix}"
     category.is_active = False
     category.save()
     log_change(request, category, ADDITION, "Создана копия категории")

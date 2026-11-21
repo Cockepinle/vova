@@ -1,0 +1,6 @@
+<label>
+  <span>{{ input.label }}</span>
+  {{ input }}
+  {% if input.help_text %}<small id="{{ input.auto_id }}_helptext">{{ input.help_text }}</small>{% endif %}
+  {{ input.errors }}
+</label>

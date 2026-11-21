@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models import Count
@@ -7,16 +9,20 @@ from .common import HttpResponse, Paginator, Product, ProductExcelImportForm, Pr
 from .common import get_object_or_404, get_user_model, import_products, log_change, management_required, messages, redirect, render, require_POST, transaction
 from ..pricing import PRICE_LEVELS, price_for_level, quote_for_level
 from ..cms_forms import COEFFICIENT_HELP, parse_individual_price
+from ..uploads import validate_upload
 from .product_gallery import gallery_rows, initial_gallery, parse_gallery, public_gallery, save_gallery
 
 @management_required
+@require_POST
+@transaction.atomic
 def product_duplicate(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
     attributes = list(product.attributes.all())
+    suffix = uuid4().hex
     product.pk = None
-    product.name = f"{product.name} — копия"
-    product.sku = f"{product.sku}-copy"
-    product.slug = ""
+    product.name = f"{product.name[:212]} — копия"
+    product.sku = f"{product.sku[:42]}-copy-{suffix}" if product.sku else None
+    product.slug = f"{product.slug[:202]}-copy-{suffix}"
     product.status = Product.STATUS_DRAFT
     product.save()
     log_change(request, product, ADDITION, "Создана копия товара")
@@ -143,6 +149,12 @@ def product_form(request, product_id=None):
             except ValidationError as error:
                 gallery_error = error.messages[0]
         form = ProductForm(request.POST, request.FILES, instance=product, gallery_editor=has_editor or has_gallery)
+        if not has_gallery:
+            for image in request.FILES.getlist("gallery_images"):
+                try:
+                    validate_upload(image)
+                except ValidationError as error:
+                    form.add_error(None, ValidationError("%(name)s — %(error)s", params={"name": image.name, "error": error.messages[0]}))
         dynamic_form = DynamicProductFieldsForm(request.POST, request.FILES, product=product)
         price_formset = CustomerPriceFormSet(
             request.POST if "prices-TOTAL_FORMS" in request.POST else None,

@@ -66,6 +66,11 @@ function setFavoriteState(productId, isFavorite) {
   document.querySelectorAll(`[data-product-id="${productId}"] .favorite-button`).forEach((button) => {
     button.classList.toggle("is-active", isFavorite);
     if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(isFavorite));
+    if (button.classList.contains("cart-favorite") || button.classList.contains("detail-favorite")) {
+      const label = isFavorite ? "Убрать из избранного" : "Добавить в избранное";
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    }
   });
 
   const modal = document.querySelector(".product-modal");
@@ -93,7 +98,6 @@ let favoriteActionPending = false;
 async function toggleFavorite(productId, button) {
   if (!productId || favoriteActionPending) return;
 
-  const move = button.classList.contains("cart-favorite");
   if (!window.isAuthenticated && typeof window.openAccountDrawer === "function") {
     window.openAccountDrawer("Войдите или зарегистрируйтесь, чтобы добавить товар в избранное.");
     return;
@@ -102,33 +106,23 @@ async function toggleFavorite(productId, button) {
   const updateFavorite = async () => {
     const favorite = await postStoreAction("/favorites/toggle/", {
       product_id: productId,
-      is_favorite: move || !favoriteProductIds.has(String(productId)),
-      move_from_cart: move,
+      is_favorite: !favoriteProductIds.has(String(productId)),
     });
     setFavoriteState(favorite.product_id, favorite.is_favorite);
     updateFavoriteCounts(favorite.count);
     renderFavoriteDrawer(favorite.items);
-    if (favorite.cart) applyCartMutation(favorite.cart);
-    const message = move ? "Товар перемещён в избранное"
-      : favorite.is_favorite ? "Товар добавлен в избранное" : "Товар удалён из избранного";
+    const message = favorite.is_favorite ? "Товар добавлен в избранное" : "Товар удалён из избранного";
     notifyStore(message);
   };
 
   favoriteActionPending = true;
+  const restore = setStoreButtonPending(button);
   try {
-    if (move) {
-      await runCartAction(button, updateFavorite);
-    } else {
-      const restore = setStoreButtonPending(button);
-      try {
-        await updateFavorite();
-      } finally {
-        restore();
-      }
-    }
+    await updateFavorite();
   } catch (error) {
     notifyStore(error.message, true);
   } finally {
+    restore();
     favoriteActionPending = false;
   }
 }

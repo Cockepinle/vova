@@ -6,11 +6,13 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from django.core.files.storage import FileSystemStorage
 from django.db import IntegrityError
+from django.db.models import Count
+from django.utils.encoding import filepath_to_uri
 
-from ..models import Category, Product, ProductImage
-from .common import ADDITION, AttributeDefinition, AttributeDefinitionForm, BuilderRevision, CHANGE, DELETION, PageContent, PageContentForm, ProductAttribute, SiteLinkFormSet, SiteMedia
+from ..models import Category, Employee, Product, ProductAttribute, ProductImage
+from ..uploads import local_media_missing
+from .common import ADDITION, AttributeDefinition, AttributeDefinitionForm, BuilderRevision, CHANGE, DELETION, PageContent, PageContentForm, SiteLinkFormSet, SiteMedia
 from .common import SiteMediaForm, SiteSettings, SiteSettingsForm, delete_unreferenced_file, get_object_or_404, log_change, management_required, messages, redirect, render
 from .common import require_POST, transaction
 from django.http import HttpResponseBadRequest, JsonResponse
@@ -21,7 +23,17 @@ MEDIA_REFERENCE_FIELDS = (
     (SiteSettings, ("logo_image",)), (PageContent, ("hero_image",)),
     (Category, ("image", "image_url")), (Product, ("image", "image_url")),
     (ProductImage, ("image", "image_url")),
+    (Employee, ("image", "image_url")),
+    (ProductAttribute, ("value_file", "value_url")),
 )
+
+
+def media_reference_urls(file):
+    url = file.url
+    storage = file.storage
+    if getattr(storage, "is_local_name", lambda name: True)(file.name):
+        return (url, f"/media/{filepath_to_uri(file.name)}")
+    return (url,)
 
 
 def media_usage(media):
@@ -34,11 +46,11 @@ def media_usage(media):
             usage.extend(f"{obj}: {relation.field.verbose_name}" for obj in related)
     if not media.file:
         return usage
-    media_url = media.file.url
+    media_urls = media_reference_urls(media.file)
     for model, fields in MEDIA_REFERENCE_FIELDS:
         for field in fields:
-            reference = media_url if field.endswith("_url") else media.file.name
-            for obj in model.objects.filter(**{field: reference}):
+            lookup = {f"{field}__in": media_urls} if field.endswith("_url") else {field: media.file.name}
+            for obj in model.objects.filter(**lookup):
                 usage.append(f"{obj}: {model._meta.get_field(field).verbose_name}")
 
     def structure_uses_media(nodes):
@@ -50,7 +62,7 @@ def media_usage(media):
             content = node.get("content", {})
             if isinstance(content, dict) and (
                 str(content.get("media_id", "")) == str(media.pk)
-                or media_url in (content.get("url"), content.get("src"))
+                or content.get("url") in media_urls or content.get("src") in media_urls
             ):
                 return True
             if structure_uses_media(node.get("children")):
@@ -63,7 +75,7 @@ def media_usage(media):
     return usage
 
 
-def _replace_builder_media_urls(structure, media, old_url, new_url):
+def _replace_builder_media_urls(structure, media, old_urls, new_url):
     changed = False
     if not isinstance(structure, list):
         return changed
@@ -73,25 +85,26 @@ def _replace_builder_media_urls(structure, media, old_url, new_url):
         content = node.get("content")
         if isinstance(content, dict) and (
             str(content.get("media_id", "")) == str(media.pk)
-            or old_url in (content.get("url"), content.get("src"))
+            or content.get("url") in old_urls or content.get("src") in old_urls
         ):
             key = "src" if node.get("type") == "banner" and "src" in content else "url"
             content[key] = new_url
             content["media_id"] = media.pk
             content["alt"] = media.alt
             changed = True
-        if _replace_builder_media_urls(node.get("children"), media, old_url, new_url):
+        if _replace_builder_media_urls(node.get("children"), media, old_urls, new_url):
             changed = True
     return changed
 
 
-def update_builder_media_references(media, old_url):
+def update_builder_media_references(media, old_url, *, old_urls=None):
+    old_urls = tuple(old_urls or [old_url])
     new_url = media.file.url
     for page in PageContent.objects.only("pk", "draft_structure", "published_structure"):
         changed_fields = []
         for field in ("draft_structure", "published_structure"):
             structure = getattr(page, field)
-            if _replace_builder_media_urls(structure, media, old_url, new_url):
+            if _replace_builder_media_urls(structure, media, old_urls, new_url):
                 setattr(page, field, structure)
                 changed_fields.append(field)
         if changed_fields:
@@ -144,10 +157,7 @@ def media_library_api(request):
         try:
             if not media.file:
                 continue
-            storage = media.file.storage
-            is_local_name = getattr(storage, "is_local_name", None)
-            local = isinstance(storage, FileSystemStorage) or (is_local_name and is_local_name(media.file.name))
-            if local and not storage.exists(media.file.name):
+            if local_media_missing(media.file):
                 continue
             items.append({
                 "id": media.pk,
@@ -163,16 +173,16 @@ def media_library_api(request):
 @management_required
 @require_POST
 def media_library_upload_api(request):
-    form = SiteMediaForm(request.POST, request.FILES)
+    kind = request.POST.get("kind") or "all"
+    if request.POST.get("images_only") == "1":
+        kind = "image"
+    if kind not in {"image", "attachment", "all"}:
+        return JsonResponse({"error": "Неизвестный тип файлов."}, status=400)
+    form = SiteMediaForm(request.POST, request.FILES, upload_kind=kind)
     if not form.is_valid():
         error = "; ".join(str(error) for errors in form.errors.values() for error in errors)
         return JsonResponse({"error": error or "Проверьте данные файла."}, status=400)
     media = form.save(commit=False)
-    kind = request.POST.get("kind")
-    if (kind == "image" or request.POST.get("images_only") == "1") and not media.is_image:
-        return JsonResponse({"error": "Для выбора изображения загрузите PNG, JPEG, WebP, GIF или ICO."}, status=400)
-    if kind == "attachment" and media.is_image:
-        return JsonResponse({"error": "В этом поле можно выбрать видео или документ. Фотографии добавляются в галерее."}, status=400)
     try:
         media.save()
     except OSError:
@@ -188,7 +198,7 @@ def media_library_upload_api(request):
 
 @management_required
 def field_list(request):
-    fields = AttributeDefinition.objects.order_by("sort_order", "name")
+    fields = AttributeDefinition.objects.annotate(value_count=Count("product_values")).order_by("sort_order", "name")
 
     return render(
         request,
@@ -212,8 +222,8 @@ def site_media_delete(request, media_id):
             file_field = media.file
             log_change(request, media, DELETION, "Неиспользуемый медиафайл удалён")
             media.delete()
-            if file_field and not SiteMedia.objects.filter(file=file_field.name).exists():
-                transaction.on_commit(lambda: file_field.delete(save=False), robust=True)
+            if file_field:
+                transaction.on_commit(lambda: delete_unreferenced_file(file_field.name, file_field.storage), robust=True)
     except IntegrityError:
         messages.error(request, "Файл используется и не может быть удалён.")
     else:
@@ -222,12 +232,13 @@ def site_media_delete(request, media_id):
 
 @management_required
 @require_POST
+@transaction.atomic
 def field_delete(request, field_id):
-    field = get_object_or_404(AttributeDefinition, pk=field_id)
+    field = get_object_or_404(AttributeDefinition.objects.select_for_update(), pk=field_id)
     ProductAttribute.objects.filter(attribute=field).delete()
     log_change(request, field, DELETION, "Поле удалено через CMS")
     field.delete()
-    messages.success(request, "Поле удалено.")
+    messages.success(request, "Поле и его значения удалены. Карточки товаров сохранены.")
     return redirect("management_fields")
 
 @management_required
@@ -240,14 +251,21 @@ def site_settings(request):
         old_logo_name = settings.logo_image.name
         old_logo_storage = settings.logo_image.storage
         if form.is_valid() and link_formset.is_valid():
-            with transaction.atomic():
-                settings = form.save()
-                link_formset.save()
-                if old_logo_name and old_logo_name != settings.logo_image.name:
-                    delete_unreferenced_file(old_logo_name, old_logo_storage, settings.pk)
-            log_change(request, settings, CHANGE, "Настройки сайта обновлены")
-            messages.success(request, "Настройки сайта сохранены.")
-            return redirect(request.path + ("?tab=brand" if request.GET.get("tab") == "brand" else ""))
+            try:
+                with transaction.atomic():
+                    settings = form.save()
+                    link_formset.save()
+                    if old_logo_name and old_logo_name != settings.logo_image.name:
+                        transaction.on_commit(
+                            lambda: delete_unreferenced_file(old_logo_name, old_logo_storage, settings.pk),
+                            robust=True,
+                        )
+            except OSError:
+                form.add_error("logo_image", "Не удалось записать логотип. Повторите загрузку позже.")
+            else:
+                log_change(request, settings, CHANGE, "Настройки сайта обновлены")
+                messages.success(request, "Настройки сайта сохранены.")
+                return redirect(request.path + ("?tab=brand" if request.GET.get("tab") == "brand" else ""))
         messages.error(request, "Проверьте ошибки в форме.")
     else:
         form = SiteSettingsForm(instance=settings)
@@ -267,16 +285,17 @@ def site_settings(request):
 
 @management_required
 @require_POST
+@transaction.atomic
 def site_media_replace(request, media_id):
-    media = get_object_or_404(SiteMedia, pk=media_id)
+    media = get_object_or_404(SiteMedia.objects.select_for_update(), pk=media_id)
     old_name = media.file.name
     old_url = media.file.url if old_name else ""
+    old_urls = media_reference_urls(media.file) if old_name else set()
     storage = media.file.storage
     upload = request.FILES.get("file")
+    form = SiteMediaForm(request.POST, request.FILES, instance=media, auto_id=f"replace_{media_id}_%s")
     if upload and media.is_image and not SiteMedia(file=upload).is_image and media_usage(media):
-        messages.error(request, "Изображение используется на сайте. Для замены выберите другое изображение.")
-        return redirect("management_media")
-    form = SiteMediaForm(request.POST, request.FILES, instance=media)
+        form.add_error("file", "Изображение используется на сайте. Для замены выберите другое изображение.")
     if form.is_valid():
         try:
             with transaction.atomic():
@@ -284,24 +303,34 @@ def site_media_replace(request, media_id):
                 if old_name and old_name != media.file.name:
                     for model, fields in MEDIA_REFERENCE_FIELDS:
                         for field in fields:
-                            old, new = (old_url, media.file.url) if field.endswith("_url") else (old_name, media.file.name)
-                            model.objects.filter(**{field: old}).update(**{field: new})
-                    if not SiteMedia.objects.filter(file=old_name).exists():
-                        transaction.on_commit(lambda: storage.delete(old_name), robust=True)
+                            if field.endswith("_url"):
+                                model.objects.filter(**{f"{field}__in": old_urls}).update(**{field: media.file.url})
+                            else:
+                                model.objects.filter(**{field: old_name}).update(**{field: media.file.name})
+                    transaction.on_commit(lambda: delete_unreferenced_file(old_name, storage), robust=True)
                 if old_url and media.file:
-                    update_builder_media_references(media, old_url)
+                    update_builder_media_references(media, old_url, old_urls=old_urls)
                 log_change(request, media, CHANGE, "Медиафайл и его описание обновлены")
         except OSError:
-            messages.error(request, "Не удалось записать файл. Повторите загрузку позже.")
+            form.add_error("file", "Не удалось записать файл. Повторите загрузку позже.")
         else:
             messages.success(request, "Файл обновлён во всех местах использования.")
-    else:
-        messages.error(request, " ".join(str(error) for errors in form.errors.values() for error in errors))
-    return redirect("management_media")
+            return redirect("management_media")
+    return media_library(request, replacement_form=form)
 
 @management_required
-def media_library(request, form=None):
-    rows = [{"item": media, "usage": media_usage(media)} for media in SiteMedia.objects.all()]
+def media_library(request, form=None, replacement_form=None):
+    rows = []
+    for media in SiteMedia.objects.all():
+        missing = not media.file or local_media_missing(media.file)
+        rows.append({
+            "item": media,
+            "url": media.file.url if not missing else "",
+            "missing": missing,
+            "usage": media_usage(media),
+            "form": replacement_form if replacement_form and replacement_form.instance.pk == media.pk else
+                    SiteMediaForm(instance=media, auto_id=f"replace_{media.pk}_%s"),
+        })
     return render(request, "store/management/media_library.html", {"section": "media", "media": rows, "media_form": form or SiteMediaForm()})
 
 @management_required
@@ -323,10 +352,14 @@ def page_content_form(request, page_id=None):
         form = PageContentForm(request.POST, request.FILES, instance=page)
         if form.is_valid():
             is_new = page is None
-            page = form.save()
-            log_change(request, page, ADDITION if is_new else CHANGE, "Страница сохранена через CMS")
-            messages.success(request, "Страница сохранена.")
-            return redirect(f"{request.path}?tab={tab}" if not is_new else reverse("management_page_edit", args=[page.pk]))
+            try:
+                page = form.save()
+            except OSError:
+                form.add_error("hero_image", "Не удалось записать изображение. Повторите загрузку позже.")
+            else:
+                log_change(request, page, ADDITION if is_new else CHANGE, "Страница сохранена через CMS")
+                messages.success(request, "Страница сохранена.")
+                return redirect(f"{request.path}?tab={tab}" if not is_new else reverse("management_page_edit", args=[page.pk]))
         messages.error(request, "Проверьте ошибки в форме.")
     else:
         form = PageContentForm(instance=page)

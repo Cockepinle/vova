@@ -1,8 +1,22 @@
 from decimal import Decimal
 
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_GET
+
 from .common import ADDITION, AttributeDefinition, CHANGE, Category, Count, CustomerRequest, DELETION, DeliveryMethod, DeliveryMethodForm, Employee
 from .common import EmployeeForm, LogEntry, Order, Paginator, PaymentMethod, PaymentMethodForm, Product, Promotion, PromotionForm, Q, Sum
 from .common import get_object_or_404, log_change, management_required, messages, redirect, render, require_POST
+
+@management_required
+@require_GET
+def employee_detail(request, employee_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+    return render(request, "store/management/employee_detail.html", {
+        "section": "employees",
+        "employee": employee,
+    })
+
 
 @management_required
 def employee_form(request, employee_id=None):
@@ -12,10 +26,18 @@ def employee_form(request, employee_id=None):
         form = EmployeeForm(request.POST, request.FILES, instance=employee)
         if form.is_valid():
             is_new = employee is None
-            employee = form.save()
-            log_change(request, employee, ADDITION if is_new else CHANGE, "Сотрудник сохранён через CMS")
-            messages.success(request, "Сотрудник сохранён.")
-            return redirect("management_employees")
+            try:
+                employee = form.save()
+            except OSError:
+                form.add_error("image", "Не удалось записать фото. Повторите загрузку позже.")
+            else:
+                log_change(request, employee, ADDITION if is_new else CHANGE, "Сотрудник сохранён через CMS")
+                messages.success(request, "Сотрудник сохранён.")
+                if not is_new:
+                    url = reverse("management_employee_detail", args=[employee.pk])
+                    query = request.GET.urlencode()
+                    return redirect(f"{url}?{query}" if query else url)
+                return redirect("management_employees")
         messages.error(request, "Проверьте ошибки в форме.")
     else:
         form = EmployeeForm(instance=employee)
@@ -32,7 +54,7 @@ def employee_form(request, employee_id=None):
 
 @management_required
 def employee_list(request):
-    employees = Employee.objects.order_by("sort_order", "name")
+    employees = Employee.objects.order_by("sort_order", "name", "pk")
     query = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
 
@@ -87,10 +109,11 @@ def payment_method_form(request, method_id=None):
     return render(request, "store/management/payment_method_form.html", {"section": "payment_methods", "method": method, "form": form})
 
 @management_required
+@require_POST
 def employee_duplicate(request, employee_id):
     employee = get_object_or_404(Employee, pk=employee_id)
     employee.pk = None
-    employee.name = f"{employee.name} — копия"
+    employee.name = f"{employee.name[:152]} — копия"
     employee.status = Employee.STATUS_DRAFT
     employee.save()
     log_change(request, employee, ADDITION, "Создана копия сотрудника")
@@ -143,7 +166,7 @@ def employee_bulk_action(request):
 
             if new_status in [Employee.STATUS_PUBLISHED, Employee.STATUS_DRAFT, Employee.STATUS_HIDDEN] and employee.status != new_status:
                 employee.status = new_status
-                employee.save(update_fields=["status"])
+                employee.save(update_fields=["status", "updated_at"])
                 log_change(request, employee, CHANGE, "Статус сотрудника изменён через CMS")
                 updated_count += 1
 
@@ -159,7 +182,7 @@ def employee_bulk_action(request):
         return redirect("management_employees")
 
     if action in [Employee.STATUS_PUBLISHED, Employee.STATUS_DRAFT, Employee.STATUS_HIDDEN]:
-        employees.update(status=action)
+        employees.exclude(status=action).update(status=action, updated_at=timezone.now())
         messages.success(request, "Статусы сотрудников обновлены.")
     elif action == "delete":
         for employee in employees:

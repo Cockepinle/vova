@@ -1,5 +1,9 @@
-<label data-content-image data-fallback-url="{{ fallback }}">
+<label data-content-image data-fallback-url="{{ fallback }}" data-direct-upload="{{ upload.auto_id }}">
   <span>{{ field.label }}</span>{{ field }}{{ field.errors }}
   {{ remove }}
-  {% if upload.errors %}{{ upload.errors }}{% endif %}
+</label>
+<label>
+  <span>{{ upload.label }} — загрузить с компьютера</span>
+  {{ upload }}
+  {{ upload.errors }}
 </label>

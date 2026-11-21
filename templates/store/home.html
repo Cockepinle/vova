@@ -7,8 +7,8 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=37">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=38">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=38">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=49">
     {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
   <body>
@@ -59,8 +59,8 @@
         <div class="category-grid">
           {% for category in categories %}
             <a class="category-card" href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">
-              {% if category.image %}<img src="{{ category.image }}" alt="{{ category.name }}">{% endif %}
-              <span>{{ category.path }}</span>
+              <div class="category-card-media">{% if category.image %}<img src="{{ category.image }}" alt="" loading="lazy" decoding="async">{% endif %}</div>
+              <span title="{{ category.path }}">{{ category.path }}</span>
             </a>
           {% endfor %}
         </div>
@@ -168,11 +168,11 @@
       <img class="image-lightbox-img" src="" alt="">
     </div>
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=41"></script>
-    <script src="{% static 'store/js/account.js' %}?v=6"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=43"></script>
+    <script src="{% static 'store/js/account.js' %}?v=8"></script>
     <script src="{% static 'store/js/home.js' %}?v=41"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=21"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=22"></script>
     {% include "store/partials/mobile_actions.html" %}
-    <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
+    <script src="{% static 'store/js/responsive.js' %}?v=42"></script>
   </body>
 </html>

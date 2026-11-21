@@ -133,16 +133,38 @@ document.querySelector("[data-select-all]")?.addEventListener("change", (event) 
 const managementShell = document.querySelector(".mgmt-shell");
 const sidebarToggle = document.querySelector("[data-sidebar-toggle]");
 if (managementShell && sidebarToggle) {
-  const savedState = localStorage.getItem("management-sidebar-collapsed") === "1";
+  let savedState = false;
+  try { savedState = localStorage.getItem("management-sidebar-collapsed") === "1"; } catch { /* Storage can be blocked. */ }
   managementShell.classList.toggle("sidebar-collapsed", savedState);
   sidebarToggle.setAttribute("aria-expanded", String(!savedState));
   sidebarToggle.setAttribute("aria-label", savedState ? "Развернуть боковую панель" : "Свернуть боковую панель");
   sidebarToggle.addEventListener("click", () => {
     const collapsed = managementShell.classList.toggle("sidebar-collapsed");
-    localStorage.setItem("management-sidebar-collapsed", collapsed ? "1" : "0");
+    try { localStorage.setItem("management-sidebar-collapsed", collapsed ? "1" : "0"); } catch { /* The current toggle still works. */ }
     sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
     sidebarToggle.setAttribute("aria-label", collapsed ? "Развернуть боковую панель" : "Свернуть боковую панель");
   });
+}
+
+const menuToggle = document.querySelector("[data-management-menu-toggle]");
+if (managementShell && menuToggle) {
+  const navigation = document.getElementById(menuToggle.getAttribute("aria-controls"));
+  const compact = matchMedia("(max-width: 900px)");
+  const setOpen = (open, restoreFocus = false) => {
+    navigation.hidden = compact.matches && !open;
+    menuToggle.setAttribute("aria-expanded", String(open));
+    if (restoreFocus) menuToggle.focus();
+  };
+  const sync = () => {
+    menuToggle.hidden = !compact.matches;
+    setOpen(false, compact.matches && navigation.contains(document.activeElement));
+  };
+  compact.addEventListener("change", sync);
+  menuToggle.addEventListener("click", () => setOpen(navigation.hidden));
+  navigation.addEventListener("keydown", event => {
+    if (event.key === "Escape" && compact.matches) setOpen(false, true);
+  });
+  sync();
 }
 
 document.querySelectorAll(".page-editor-tabs").forEach((tabList) => {
@@ -181,7 +203,36 @@ document.querySelectorAll(".page-editor-tabs").forEach((tabList) => {
     const errorTab = tabs.find((tab) => tab.dataset.pageTab === firstError.dataset.pagePanel);
     if (errorTab) activate(errorTab);
   }
+  form?.addEventListener("invalid", event => {
+    if (event.target !== form.querySelector("input:invalid, select:invalid, textarea:invalid")) return;
+    const panel = event.target.closest("[data-page-panel]");
+    if (!panel?.hidden) return;
+    const tab = tabs.find(item => item.dataset.pageTab === panel.dataset.pagePanel);
+    if (tab) activate(tab);
+  }, true);
 });
+
+if (window.ResizeObserver) {
+  document.querySelectorAll(".table-wrap").forEach(wrapper => {
+    if (wrapper.hasAttribute("tabindex")) return;
+    const syncTableScroll = () => {
+      const wide = wrapper.scrollWidth > wrapper.clientWidth + 1;
+      if (wide) {
+        wrapper.tabIndex = 0;
+        wrapper.setAttribute("role", "region");
+        wrapper.setAttribute("aria-label", "Таблица с горизонтальной прокруткой");
+      } else {
+        wrapper.removeAttribute("tabindex");
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      }
+    };
+    const observer = new ResizeObserver(syncTableScroll);
+    observer.observe(wrapper);
+    const table = wrapper.querySelector("table");
+    if (table) observer.observe(table);
+  });
+}
 
 document.querySelectorAll("[data-page-editor]").forEach((form) => {
   let dirty = false;
@@ -306,6 +357,7 @@ if (pageTree) {
       mediaField.value = String(item.id);
       discardFilePreview();
       fileInput.value = "";
+      fileInput.dispatchEvent(new Event("upload-reset"));
       imageUrl.value = "";
       removeInput.value = "";
       showPreview(item.url, item.alt || item.title);
@@ -316,7 +368,7 @@ if (pageTree) {
     library.addEventListener("click", () => window.openManagementMediaPicker(library, {
       kind: "image", multiple: false, onSelect: ([item]) => selectImage(item),
     }));
-    fileInput.addEventListener("change", () => {
+    fileInput.addEventListener("image-upload-ready", () => {
       if (!fileInput.files[0]) return;
       discardFilePreview();
       mediaField.value = "";
@@ -340,6 +392,7 @@ if (pageTree) {
       }
       discardFilePreview();
       fileInput.value = "";
+      fileInput.dispatchEvent(new Event("upload-reset"));
       mediaField.value = "";
       removeInput.value = "";
       showPreview(url);
@@ -349,6 +402,7 @@ if (pageTree) {
       if (!window.confirm("Убрать изображение у этой категории?")) return;
       discardFilePreview();
       fileInput.value = "";
+      fileInput.dispatchEvent(new Event("upload-reset"));
       mediaField.value = "";
       imageUrl.value = "";
       removeInput.value = "1";
@@ -358,12 +412,4 @@ if (pageTree) {
     });
   });
 
-  document.querySelectorAll(".fancy-file input[type='file']").forEach((input) => {
-    input.addEventListener("change", () => {
-      if (!input.files[0]) return;
-      const preview = input.closest(".image-field")?.querySelector("[data-current-preview]");
-      if (!preview) return;
-      preview.innerHTML = `<img class="current-image-preview" src="${URL.createObjectURL(input.files[0])}" alt="Предпросмотр">`;
-    });
-  });
 })();

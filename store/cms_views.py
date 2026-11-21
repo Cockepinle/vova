@@ -22,6 +22,7 @@ from .cms import (
     delivery_method_form,
     delivery_method_list,
     employee_bulk_action,
+    employee_detail,
     employee_delete,
     employee_duplicate,
     employee_form,

@@ -33,7 +33,6 @@ def payment_webhook(request, provider_code):
         return JsonResponse({"ok": False}, status=400)
     return JsonResponse({"ok": True, "payment_id": payment.pk})
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def clear_cart(request):
@@ -42,7 +41,6 @@ def clear_cart(request):
     clear_cart_storage(request)
     return JsonResponse(cart_payload(request))
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def update_cart(request):
@@ -316,7 +314,6 @@ def checkout_order(request):
         }
     )
 
-@csrf_exempt
 @require_POST
 @transaction.atomic
 def add_to_cart(request):

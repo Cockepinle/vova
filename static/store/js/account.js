@@ -68,7 +68,10 @@ function openCookieModal() {
     return;
   }
 
-  const savedSettings = JSON.parse(localStorage.getItem("paklineCookieSettings") || "{}");
+  let savedSettings = {};
+  try { savedSettings = JSON.parse(localStorage.getItem("paklineCookieSettings") || "{}") || {}; } catch { /* The dialog works without storage. */ }
+  const status = modal.querySelector(".cookie-status");
+  if (status) status.hidden = true;
   const analyticsInput = modal.querySelector('input[name="analytics"]');
   const marketingInput = modal.querySelector('input[name="marketing"]');
 
@@ -98,14 +101,20 @@ function closeCookieModal() {
 }
 
 async function postJson(url, data) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    body: JSON.stringify(data),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": document.querySelector('.checkout-panel [name="csrfmiddlewaretoken"]').value,
+      },
+      body: JSON.stringify(data),
+    });
+  } catch {
+    throw new Error("Не удалось связаться с сервером. Проверьте соединение и повторите попытку.");
+  }
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -117,6 +126,17 @@ async function postJson(url, data) {
 
 function formDataToObject(form) {
   return Object.fromEntries(new FormData(form).entries());
+}
+
+function startFormSubmission(form) {
+  if (form.getAttribute("aria-busy") === "true") return null;
+  const button = form.querySelector('button[type="submit"]');
+  form.setAttribute("aria-busy", "true");
+  button.disabled = true;
+  return () => {
+    form.removeAttribute("aria-busy");
+    button.disabled = false;
+  };
 }
 
 function showAccountMessage(text, isError = false) {
@@ -207,12 +227,15 @@ document.addEventListener("submit", async (event) => {
   if (loginForm || registerForm) {
     event.preventDefault();
     const form = loginForm || registerForm;
+    const finish = startFormSubmission(form);
+    if (!finish) return;
     const data = formDataToObject(form);
     const isVerification = registerForm && registerForm.dataset.verification === "1";
     const url = loginForm ? "/account/login/" : isVerification ? "/account/verify/" : "/account/register/";
     const payload = isVerification ? { email: registerForm.dataset.email || data.email, code: data.code } : data;
 
     try {
+      showAccountMessage("Отправляем данные…");
       const response = await postJson(url, payload);
 
       if (response.verification_required && registerForm) {
@@ -224,14 +247,23 @@ document.addEventListener("submit", async (event) => {
       window.location.reload();
     } catch (error) {
       showAccountMessage(error.message, true);
+    } finally {
+      finish();
     }
   }
 
   if (requestForm) {
     event.preventDefault();
     const message = requestForm.querySelector(".request-message");
+    const finish = startFormSubmission(requestForm);
+    if (!finish) return;
 
     try {
+      if (message) {
+        message.textContent = "Отправляем запрос…";
+        message.hidden = false;
+        message.classList.remove("is-error");
+      }
       const payload = await postJson("/requests/create/", formDataToObject(requestForm));
       requestForm.reset();
       if (message) {
@@ -245,17 +277,22 @@ document.addEventListener("submit", async (event) => {
         message.hidden = false;
         message.classList.add("is-error");
       }
+    } finally {
+      finish();
     }
   }
 
   if (resetForm) {
     event.preventDefault();
+    const finish = startFormSubmission(resetForm);
+    if (!finish) return;
     const data = formDataToObject(resetForm);
     const isVerification = resetForm.dataset.verification === "1";
     const url = isVerification ? "/account/password-reset/confirm/" : "/account/password-reset/";
     const payload = isVerification ? { email: resetForm.dataset.email || data.email, code: data.code, password: data.password } : { email: data.email };
 
     try {
+      showAccountMessage("Отправляем данные…");
       const response = await postJson(url, payload);
 
       if (response.verification_required) {
@@ -267,6 +304,8 @@ document.addEventListener("submit", async (event) => {
       window.location.reload();
     } catch (error) {
       showAccountMessage(error.message, true);
+    } finally {
+      finish();
     }
   }
 
@@ -274,7 +313,8 @@ document.addEventListener("submit", async (event) => {
 
   if (cookieForm) {
     event.preventDefault();
-    localStorage.setItem(
+    try {
+      localStorage.setItem(
       "paklineCookieSettings",
       JSON.stringify({
         necessary: true,
@@ -282,7 +322,13 @@ document.addEventListener("submit", async (event) => {
         marketing: cookieForm.elements.marketing.checked,
         updatedAt: new Date().toISOString(),
       })
-    );
+      );
+    } catch {
+      const status = cookieForm.querySelector(".cookie-status");
+      status.textContent = "Браузер не разрешил сохранить настройки cookie.";
+      status.hidden = false;
+      return;
+    }
     closeCookieModal();
   }
 });
@@ -301,7 +347,7 @@ document.addEventListener("click", async (event) => {
     try {
       const payload = await postJson(`/account/orders/${repeatButton.dataset.orderId}/repeat/`, {});
       showAccountMessage(payload.message);
-      document.querySelector(".account-drawer")?.classList.remove("is-open");
+      document.querySelector(".account-drawer .drawer-close")?.click();
       if (typeof window.applyRepeatedOrder === "function") window.applyRepeatedOrder(payload.cart);
     } catch (error) {
       showAccountMessage(error.message, true);

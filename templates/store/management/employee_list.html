@@ -1,8 +1,10 @@
 {% extends "store/management/base.html" %}
+{% load static %}
 
 {% block heading %}Сотрудники{% endblock %}
 
 {% block content %}
+  {% static 'store/images/no-photo.svg' as placeholder_image %}
   <section class="mgmt-card">
     <div class="card-header">
       <form class="toolbar" method="get">
@@ -21,6 +23,7 @@
     <form method="post" action="{% url 'management_employee_bulk' %}">
       {% csrf_token %}
       <div class="bulk-bar">
+        <label class="record-select-all"><input type="checkbox" onclick="this.form.querySelectorAll('[name=ids]').forEach(item => item.checked = this.checked)"> Выбрать всех</label>
         <select name="action">
           <option value="">Массовое действие</option>
           <option value="published">Опубликовать</option>
@@ -32,17 +35,20 @@
         <button class="primary-button" type="submit" name="action" value="save_statuses">Сохранить статусы</button>
       </div>
 
-      <div class="table-wrap">
-        <table class="mgmt-table">
-          <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('[name=ids]').forEach(item => item.checked = this.checked)"></th><th>Сотрудник</th><th>Должность</th><th>Статус</th><th></th></tr></thead>
+      <div class="table-wrap record-table-wrap">
+        <table class="mgmt-table record-table">
+          <thead><tr><th scope="col" aria-label="Выбор"></th><th>Сотрудник</th><th>Должность</th><th>Статус</th><th>Действия</th></tr></thead>
           <tbody>
             {% for employee in page %}
               <tr>
-                <td><input type="checkbox" name="ids" value="{{ employee.id }}"></td>
-                <td class="product-cell">{% if employee.display_image_url %}<img src="{{ employee.display_image_url }}" alt="">{% endif %}<strong>{{ employee.name }}</strong></td>
-                <td>{{ employee.role }}</td>
-                <td>
-                  <select class="status-select" name="status_{{ employee.id }}">
+                <td><input type="checkbox" name="ids" value="{{ employee.id }}" aria-label="Выбрать {{ employee.name }}"></td>
+                <td class="product-cell">
+                  <img src="{% firstof employee.display_image_url placeholder_image %}" alt="" data-media-fallback loading="lazy">
+                  <a class="record-link" href="{% url 'management_employee_detail' employee.id %}{% querystring %}"><strong>{{ employee.name }}</strong></a>
+                </td>
+                <td data-label="Должность">{{ employee.role }}</td>
+                <td data-label="Статус">
+                  <select class="status-select" name="status_{{ employee.id }}" aria-label="Статус сотрудника {{ employee.name }}">
                     {% for value,label in status_choices %}
                       <option value="{{ value }}" {% if employee.status == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
@@ -51,7 +57,7 @@
                 <td class="row-actions">
                   <input type="hidden" name="employee_ids" value="{{ employee.id }}">
                   <a class="primary-button" href="{% url 'management_employee_edit' employee.id %}">Изменить</a>
-                  <a href="{% url 'management_employee_duplicate' employee.id %}">Дублировать</a>
+                  <button type="submit" formaction="{% url 'management_employee_duplicate' employee.id %}">Дублировать</button>
                   <button type="submit" formaction="{% url 'management_employee_delete' employee.id %}" formmethod="post" onclick="return confirm('Удалить сотрудника?')">Удалить</button>
                 </td>
               </tr>
@@ -64,9 +70,9 @@
     </form>
 
     <div class="pagination">
-      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">Назад</a>{% endif %}
+      {% if page.has_previous %}<a href="{% querystring page=page.previous_page_number %}">Назад</a>{% endif %}
       <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">Вперёд</a>{% endif %}
+      {% if page.has_next %}<a href="{% querystring page=page.next_page_number %}">Вперёд</a>{% endif %}
     </div>
   </section>
 {% endblock %}

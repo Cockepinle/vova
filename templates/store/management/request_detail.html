@@ -1,22 +1,80 @@
 {% extends "store/management/base.html" %}
+{% load store_extras %}
+
 {% block heading %}Запрос №{{ customer_request.pk }}{% endblock %}
 {% block content %}
-<section class="mgmt-card">
-  <dl class="form-grid">
-    <div><dt>Дата</dt><dd>{{ customer_request.created_at|date:"d.m.Y H:i" }}</dd></div>
-    <div><dt>Тип</dt><dd>{{ customer_request.get_request_type_display }}</dd></div>
-    <div><dt>Имя</dt><dd>{{ customer_request.name }}</dd></div>
-    <div><dt>Компания</dt><dd>{{ customer_request.company|default:"—" }}</dd></div>
-    <div><dt>Email</dt><dd><a href="mailto:{{ customer_request.email }}">{{ customer_request.email }}</a></dd></div>
-    <div><dt>Телефон</dt><dd>{% if customer_request.phone %}<a href="tel:{{ customer_request.phone }}">{{ customer_request.phone }}</a>{% else %}—{% endif %}</dd></div>
-  </dl>
-  <h2>Обращение</h2><p>{{ customer_request.text|linebreaksbr }}</p>
-  {% if customer_request.attachment %}<p><a href="{{ customer_request.attachment.url }}" target="_blank" rel="noopener">Прикрепленный файл</a></p>{% endif %}
-</section>
-<form class="mgmt-card mgmt-form" method="post">
-  {% csrf_token %}
-  <label><span>Статус</span><select name="status">{% for value,label in status_choices %}<option value="{{ value }}" {% if customer_request.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-  <label class="full"><span>Комментарий администратора</span><textarea name="admin_comment" rows="5">{{ customer_request.admin_comment }}</textarea></label>
-  <div class="form-actions"><button class="primary-button" type="submit">Сохранить запрос</button><a class="ghost-button" href="{% url 'management_requests' %}">Назад</a></div>
-</form>
+  {% url 'management_request_detail' customer_request.pk as detail_url %}
+  <div class="record-detail">
+    <section class="mgmt-card">
+      <span class="status status-{{ customer_request.status }}">{{ customer_request.get_status_display }}</span>
+      <h2>{{ customer_request.get_request_type_display }}</h2>
+      <dl class="record-fields">
+        <div><dt>Создан</dt><dd><time datetime="{{ customer_request.created_at|date:'c' }}">{{ customer_request.created_at|date:"d.m.Y H:i" }}</time></dd></div>
+        <div><dt>Обновлён</dt><dd><time datetime="{{ customer_request.updated_at|date:'c' }}">{{ customer_request.updated_at|date:"d.m.Y H:i" }}</time></dd></div>
+      </dl>
+      <div class="record-actions">
+        {% if not form %}<a class="primary-button" href="{{ detail_url }}{% querystring edit=1 %}">Редактировать запрос</a>{% endif %}
+        <a class="ghost-button" href="{% url 'management_requests' %}{% querystring edit=None %}">К списку запросов</a>
+      </div>
+    </section>
+
+    {% if form %}
+      <form class="record-detail mgmt-form" method="post">
+        {% csrf_token %}
+        {{ form.version }}{{ form.version.errors }}{{ form.non_field_errors }}
+        <div class="record-columns">
+          <section class="mgmt-card">
+            <h2>Клиент</h2>
+            <div class="form-grid">
+              {% for field in form %}
+                {% if field.name == "name" or field.name == "company" or field.name == "email" or field.name == "phone" %}
+                  <label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
+                {% endif %}
+              {% endfor %}
+            </div>
+            {% if customer_request.user %}<p class="muted">Учётная запись: {{ customer_request.user.get_username }} (№{{ customer_request.user_id }})</p>{% endif %}
+          </section>
+          <section class="mgmt-card">
+            <h2>Обращение</h2>
+            <label><span>{{ form.request_type.label }}</span>{{ form.request_type }}{{ form.request_type.errors }}</label>
+            <label><span>Текст обращения</span>{{ form.text }}{{ form.text.errors }}</label>
+            {% if customer_request.attachment %}<p><a href="{{ customer_request.attachment.url }}" target="_blank" rel="noopener">Открыть вложение</a></p>{% endif %}
+          </section>
+        </div>
+        <section class="mgmt-card">
+          <h2>Обработка запроса</h2>
+          <label><span>{{ form.status.label }}</span>{{ form.status }}{{ form.status.errors }}</label>
+          <label><span>{{ form.admin_comment.label }}</span>{{ form.admin_comment }}{{ form.admin_comment.errors }}</label>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Сохранить запрос</button>
+            <a class="ghost-button" href="{{ detail_url }}{% querystring edit=None %}">Отмена</a>
+          </div>
+        </section>
+      </form>
+    {% else %}
+      <div class="record-columns">
+        <section class="mgmt-card">
+          <h2>Клиент</h2>
+          <dl class="record-fields">
+            <div><dt>Имя</dt><dd>{{ customer_request.name }}</dd></div>
+            {% if customer_request.company %}<div><dt>Компания</dt><dd>{{ customer_request.company }}</dd></div>{% endif %}
+            <div><dt>Email</dt><dd><a href="mailto:{{ customer_request.email }}">{{ customer_request.email }}</a></dd></div>
+            {% if customer_request.phone %}<div><dt>Телефон</dt><dd><a href="tel:{{ customer_request.phone|phone_href }}">{{ customer_request.phone }}</a></dd></div>{% endif %}
+            {% if customer_request.user %}<div><dt>Учётная запись</dt><dd>{{ customer_request.user.get_username }} (№{{ customer_request.user_id }})</dd></div>{% endif %}
+          </dl>
+        </section>
+        <section class="mgmt-card">
+          <h2>Обращение</h2>
+          <p class="record-text">{{ customer_request.text }}</p>
+          {% if customer_request.attachment %}<p><a href="{{ customer_request.attachment.url }}" target="_blank" rel="noopener">Открыть вложение</a></p>{% endif %}
+        </section>
+      </div>
+      {% if customer_request.admin_comment %}
+        <section class="mgmt-card">
+          <h2>Комментарий администратора</h2>
+          <p class="record-text">{{ customer_request.admin_comment }}</p>
+        </section>
+      {% endif %}
+    {% endif %}
+  </div>
 {% endblock %}

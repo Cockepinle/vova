@@ -3,8 +3,10 @@ import re
 
 from django import template
 
+from store.uploads import upload_policy
 
 register = template.Library()
+register.simple_tag(upload_policy)
 
 
 @register.filter

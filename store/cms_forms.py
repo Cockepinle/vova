@@ -9,6 +9,8 @@ from django.utils.text import slugify
 from uuid import uuid4
 
 from .models import CustomerPrice, CustomerProfile, AttributeDefinition, Category, DeliveryMethod, Employee, PageContent, PaymentMethod, Product, ProductAttribute, Promotion, SiteMedia, SiteSettings, SiteLink, VariantGroup
+from .models import CustomerRequest
+from .uploads import configure_image_uploads, upload_policy, validate_upload
 
 
 
@@ -154,7 +156,13 @@ def configure_media_fields(fields):
         field.widget.choices = field.choices
 
 
-class ContentValidationMixin:
+class ImageUploadMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        configure_image_uploads(self)
+
+
+class ContentValidationMixin(ImageUploadMixin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         configure_media_fields(self.fields)
@@ -210,7 +218,7 @@ def category_choices(field, excluded=()):
 
 
 class ProductForm(ContentValidationMixin, forms.ModelForm):
-    sku = forms.CharField(label="Артикул", required=False)
+    sku = forms.CharField(label="Артикул", required=False, empty_value=None)
     volume_m3 = forms.DecimalField(label="Объём, м³ (автоматически)", required=False, disabled=True, max_digits=36, decimal_places=15)
     new_variant_group = forms.CharField(label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
     cost_price = PricingDecimalField(label="Базовая цена (себестоимость)", required=False, max_digits=12, decimal_places=2, min_value=0)
@@ -506,7 +514,7 @@ class DeliveryMethodForm(forms.ModelForm):
         widgets = {"provider_config": forms.Textarea(attrs={"rows": 6, "spellcheck": "false"})}
 
 
-class EmployeeForm(forms.ModelForm):
+class EmployeeForm(ImageUploadMixin, forms.ModelForm):
     class Meta:
         model = Employee
         fields = ["name", "role", "text", "image", "image_url", "email", "phone", "status"]
@@ -524,6 +532,32 @@ class EmployeeForm(forms.ModelForm):
             "image": forms.FileInput(attrs={"accept": "image/*"}),
             "phone": forms.TextInput(attrs={"class": "js-phone-mask", "placeholder": "+7 (___) ___-__-__"}),
         }
+
+class CustomerRequestForm(forms.ModelForm):
+    version = forms.CharField(widget=forms.HiddenInput(), error_messages={
+        "required": "Откройте запрос заново перед сохранением.",
+    })
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initial["version"] = self.instance.updated_at.isoformat()
+        self.fields["email"].error_messages["invalid"] = "Введите корректный email."
+        self.fields["status"].error_messages["invalid_choice"] = "Выберите статус из списка."
+        if self.is_bound:
+            self.data = self.data.copy()
+            for name in ("company", "phone", "admin_comment"):
+                self.data.setdefault(self.add_prefix(name), self.initial[name])
+
+    def clean_version(self):
+        version = self.cleaned_data["version"]
+        if version != self.initial["version"]:
+            raise forms.ValidationError("Запрос уже изменён. Откройте актуальную карточку перед сохранением.")
+        return version
+
+    class Meta:
+        model = CustomerRequest
+        fields = ("name", "company", "email", "phone", "request_type", "text", "status", "admin_comment")
+        widgets = {"text": forms.Textarea(attrs={"rows": 8}), "admin_comment": forms.Textarea(attrs={"rows": 5})}
 
 
 class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
@@ -561,6 +595,7 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
 
     class Meta:
         model = SiteSettings
+        widgets = {"logo_image": forms.FileInput()}
         fields = [
             "site_name", "logo_text", "logo_media", "favicon_media",
             *[f"stat_{index}_{part}" for index in range(1, 5) for part in ("value", "label")], "public_url", "seo_description", "og_media", "allow_indexing",
@@ -739,6 +774,7 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
 
     class Meta:
         model = PageContent
+        widgets = {"hero_image": forms.FileInput()}
         fields = ["page", "title", "slug", "parent", "sort_order", "requires_login", *SEO_FIELDS, "noindex", "hero_label", "subtitle", "hero_button_text", "hero_button_url", "hero_image", "hero_image_alt", "hero_media", "mobile_hero_media", "content_title", "b2b_title", "content_subtitle", "content_text", "is_visible"]
         labels = {
             "page": "Страница",
@@ -759,31 +795,22 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
 
 
 class SiteMediaForm(forms.ModelForm):
+    def __init__(self, *args, upload_kind="all", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.upload_kind = upload_kind
+        self.fields["file"].widget.attrs.update(upload_policy(upload_kind))
+
     def clean_file(self):
-        from pathlib import PurePosixPath
         from django.db.models.fields.files import FieldFile
-        from PIL import Image
         value = self.cleaned_data["file"]
-        if isinstance(value, FieldFile):
-            return value
-        if value.size > 20 * 1024 * 1024:
-            raise forms.ValidationError("Размер файла не должен превышать 20 МБ.")
-        extension = PurePosixPath(value.name).suffix.lower()
-        if extension not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico", ".pdf", ".mp4", ".webm"}:
-            raise forms.ValidationError("Загрузите JPG, PNG, WebP, GIF, ICO, PDF, MP4 или WebM.")
-        if extension in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"}:
-            try:
-                Image.open(value).verify()
-            except Exception:
-                raise forms.ValidationError("Файл не является корректным изображением.")
-            finally:
-                value.seek(0)
+        if not isinstance(value, FieldFile):
+            validate_upload(value, self.upload_kind)
         return value
 
     class Meta:
         model = SiteMedia
         fields = ["title", "file", "alt", "description"]
-        widgets = {"file": forms.FileInput(attrs={"accept": "image/*,video/*,application/pdf"})}
+        widgets = {"file": forms.FileInput()}
 
 
 class AttributeDefinitionForm(forms.ModelForm):
@@ -792,11 +819,13 @@ class AttributeDefinitionForm(forms.ModelForm):
         choices=AttributeDefinition.FILTER_TYPE_CHOICES,
         required=False,
         initial=AttributeDefinition.FILTER_SINGLE,
+        help_text="Один вариант, несколько вариантов или числовой диапазон. Для поля типа «Список» режим нескольких вариантов также меняет форму товара.",
     )
 
     choices_text = forms.CharField(
         label="Варианты списка",
         required=False,
+        help_text="Например, «Белый» и «Крафт». Каждый вариант с новой строки. Убранный вариант сохраняется у товаров, где он был выбран, и исчезает из фильтра.",
         widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Каждый вариант с новой строки"}),
     )
 
@@ -811,6 +840,7 @@ class AttributeDefinitionForm(forms.ModelForm):
             "is_required",
             "default_value",
             "is_visible",
+            "show_in_table",
             "is_filterable",
         ]
         labels = {
@@ -821,8 +851,19 @@ class AttributeDefinitionForm(forms.ModelForm):
             "sort_order": "Порядок отображения",
             "is_required": "Обязательное",
             "default_value": "Значение по умолчанию",
-            "is_visible": "Видимое",
+            "is_visible": "Показывать поле",
+            "show_in_table": "Колонка в списке товаров",
             "is_filterable": "Использовать в фильтрах",
+        }
+        help_texts = {
+            "name": "Под этим названием поле видно в форме товара и в списке характеристик.",
+            "unit": "Например, мм или кг. Единица отображается рядом со значением.",
+            "sort_order": "Меньшее число выводит поле раньше. Если числа одинаковые, поля сортируются по названию.",
+            "is_required": "Заполнение требуется при сохранении товара. У флажка «Да/Нет» снятая отметка означает «Нет» и считается ответом.",
+            "default_value": "Подставляется в форму товара, если значение ещё не сохранено. Для списка укажите один вариант из списка.",
+            "is_visible": "Видимое поле доступно для заполнения в карточке товара и может использоваться на витрине. Скрытие сохраняет значения.",
+            "show_in_table": "Добавляет колонку в список «Товары» в CMS, пока поле включено.",
+            "is_filterable": "Чтобы фильтр появился на витрине, включите поле, добавьте его в настройках категории и заполните значения у товаров.",
         }
 
     def __init__(self, *args, **kwargs):
@@ -833,6 +874,12 @@ class AttributeDefinitionForm(forms.ModelForm):
 
     def clean(self):
         data = super().clean()
+        if data.get("sort_order") is None:
+            data["sort_order"] = self.instance.sort_order
+        if "show_in_table" in self.fields and not (
+            self.add_prefix("table_settings") in self.data or self.add_prefix("show_in_table") in self.data
+        ):
+            data["show_in_table"] = self.instance.show_in_table
         data["filter_type"] = data.get("filter_type") or (
             self.instance.filter_type if self.instance.pk else AttributeDefinition.FILTER_SINGLE
         )
@@ -843,6 +890,10 @@ class AttributeDefinitionForm(forms.ModelForm):
         ]
         if data.get("value_type") == AttributeDefinition.TYPE_CHOICE and not choices:
             self.add_error("choices_text", "Для типа «Список» укажите хотя бы один вариант.")
+        if any(len(choice) > 160 for choice in choices):
+            self.add_error("choices_text", "Каждый вариант должен содержать не более 160 символов.")
+        if "show_in_table" in self.fields:
+            self._validate_existing_values(data)
         if data.get("is_filterable") and data.get("filter_type") == AttributeDefinition.FILTER_RANGE:
             if data.get("value_type") not in {
                 AttributeDefinition.TYPE_INTEGER,
@@ -855,6 +906,25 @@ class AttributeDefinitionForm(forms.ModelForm):
                 self.add_error("filter_type", "Несколько вариантов доступны для типа данных «Список».")
         return data
 
+    def _validate_existing_values(self, data):
+        name = data.get("name")
+        if name and not self.instance.slug:
+            slug = slugify(name, allow_unicode=True)
+            if not slug or AttributeDefinition.objects.exclude(pk=self.instance.pk).filter(slug=slug).exists():
+                self.add_error("name", "Укажите название с буквами или цифрами, которое отличается от названий существующих полей.")
+        if not self.instance.pk:
+            return
+        values = self.instance.product_values
+        if data.get("value_type") and data["value_type"] != self.instance.value_type and values.exists():
+            self.add_error("value_type", "У поля есть сохранённые значения. Создайте отдельное поле для другого типа данных.")
+        if (
+            self.instance.value_type == AttributeDefinition.TYPE_CHOICE
+            and self.instance.filter_type == AttributeDefinition.FILTER_MULTIPLE
+            and data.get("filter_type") != AttributeDefinition.FILTER_MULTIPLE
+            and any(len(choices or []) > 1 for choices in values.values_list("value_choices", flat=True).iterator())
+        ):
+            self.add_error("filter_type", "У товаров выбрано несколько значений. Сократите их до одного в карточках товаров, прежде чем менять режим.")
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.choices = list(dict.fromkeys(
@@ -862,8 +932,6 @@ class AttributeDefinitionForm(forms.ModelForm):
             for item in self.cleaned_data.get("choices_text", "").splitlines()
             if item.strip()
         ))
-        instance.show_in_table = True
-
         if commit:
             instance.save()
 
@@ -871,6 +939,9 @@ class AttributeDefinitionForm(forms.ModelForm):
 
 
 class CategoryFilterForm(AttributeDefinitionForm):
+    class Meta(AttributeDefinitionForm.Meta):
+        exclude = ("show_in_table",)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.saved_value_type = self.instance.value_type
@@ -884,21 +955,11 @@ class CategoryFilterForm(AttributeDefinitionForm):
             data["sort_order"] = self.instance.sort_order
         if data.get("name") and not self.instance.slug and not slugify(data["name"], allow_unicode=True):
             self.add_error("name", "В названии фильтра должны быть буквы или цифры.")
-        if any(len(choice.strip()) > 160 for choice in data.get("choices_text", "").splitlines()):
-            self.add_error("choices_text", "Каждый вариант должен содержать не более 160 символов.")
         value_type = data.get("value_type")
         if self.instance.pk and value_type and value_type != self.saved_value_type:
             if self.instance.product_values.exists() or self.instance.variant_groups.exists():
                 self.add_error("value_type", "Этот тип уже используется в товарах или модификациях. Создайте новый фильтр для другого типа данных.")
         return data
-
-    def save(self, commit=True):
-        show_in_table = self.instance.show_in_table
-        instance = super().save(commit=False)
-        instance.show_in_table = show_in_table
-        if commit:
-            instance.save()
-        return instance
 
 
 class ProductChoiceField(forms.ModelMultipleChoiceField):
@@ -929,9 +990,12 @@ class VariantGroupForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        attribute_filter = Q(is_visible=True)
+        if self.instance.pk:
+            attribute_filter |= Q(variant_groups=self.instance)
         self.fields["attributes"].queryset = AttributeDefinition.objects.filter(
-            is_visible=True
-        ).order_by("sort_order", "name")
+            attribute_filter
+        ).distinct().order_by("sort_order", "name")
         product_filter = Q(variant_group__isnull=True)
         if self.instance.pk:
             product_filter |= Q(variant_group=self.instance)
@@ -966,6 +1030,18 @@ class VariantParameterForm(forms.Form):
         if name:
             data["name"] = name
             data["value_type"] = data.get("value_type") or AttributeDefinition.TYPE_TEXT
+            existing = AttributeDefinition.objects.filter(name=name).first()
+            if existing and not existing.is_visible:
+                self.add_error("name", "Поле с таким названием скрыто. Откройте его в разделе «Поля товаров».")
+            if not existing:
+                slug = slugify(name, allow_unicode=True)
+                if not slug or AttributeDefinition.objects.filter(slug=slug).exists():
+                    self.add_error("name", "Укажите название с буквами или цифрами, которое отличается от названий существующих полей.")
+                choices = [item.strip() for item in data.get("choices_text", "").splitlines() if item.strip()]
+                if data["value_type"] == AttributeDefinition.TYPE_CHOICE and not choices:
+                    self.add_error("choices_text", "Для списка укажите хотя бы один вариант.")
+                if any(len(choice) > 160 for choice in choices):
+                    self.add_error("choices_text", "Каждый вариант должен содержать не более 160 символов.")
         elif any(data.get(key) for key in ("unit", "choices_text")):
             raise forms.ValidationError("Укажите название параметра.")
         return data
@@ -1017,9 +1093,7 @@ class DynamicProductFieldsForm(forms.Form):
         if definition.value_type == AttributeDefinition.TYPE_CHOICE:
             if definition.filter_type == AttributeDefinition.FILTER_MULTIPLE:
                 return value.value_choices or ([value.value_choice] if value.value_choice else [])
-            return value.value_choice or (
-                value.value_choices[0] if value.value_choices else ""
-            )
+            return value.display_value()
         if definition.value_type in [AttributeDefinition.TYPE_IMAGE, AttributeDefinition.TYPE_FILE]:
             return value.value_file
         if definition.value_type == AttributeDefinition.TYPE_URL:
@@ -1062,7 +1136,10 @@ class DynamicProductFieldsForm(forms.Form):
             return forms.ChoiceField(choices=[("", "Не выбрано"), *options], **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_IMAGE:
             kwargs["required"] = definition.is_required and not initial
-            return forms.FileField(**kwargs)
+            attrs = upload_policy()
+            if initial and getattr(initial, "url", None):
+                attrs["data-current-image"] = initial.url
+            return forms.FileField(validators=[validate_upload], widget=forms.FileInput(attrs=attrs), **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_FILE:
             kwargs["required"] = definition.is_required and not initial
             return forms.FileField(**kwargs)

@@ -1,6 +1,6 @@
 {% load store_extras %}
     <header class="site-header">
-      <div class="header-inner">
+      <div class="header-inner{% if request.resolver_match.url_name == 'catalog' %} has-mobile-search{% endif %}">
         <a class="brand" href="/">
           {% if site_settings.logo_url %}<img class="brand-image" src="{{ site_settings.logo_url }}" alt="{{ site_settings.logo_alt|default:'Логотип' }}">{% else %}<span class="brand-mark">{{ site_settings.logo_text|default:"PL" }}</span>{% endif %}
           <span class="brand-name">{{ site_settings.site_name|default:"PakLine" }}</span>
@@ -19,6 +19,7 @@
       <button class="mobile-nav-close" type="button" aria-label="Закрыть меню">×</button>
 {% for link in header_links %}<a href="{{ link.url }}" {% if request.path == link.url %}class="active" aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
         <a href="{% url 'promotions' %}" {% if request.resolver_match.url_name == 'promotions' %}class="active" aria-current="page"{% endif %}>Акции</a>
+        {% if site_settings.show_header_cta %}<a class="mobile-nav-cta" href="{{ site_settings.cta_url }}">{{ site_settings.cta_label }}</a>{% endif %}
         {% if site_settings.show_header_contacts %}<span class="mobile-nav-contact"><a href="tel:{{ site_settings.header_phone|default:site_settings.contact_phone|phone_href }}">{{ site_settings.header_phone|default:site_settings.contact_phone }}</a><a href="mailto:{{ site_settings.header_email|default:site_settings.contact_email }}">{{ site_settings.header_email|default:site_settings.contact_email }}</a></span>{% endif %}
         <span class="mobile-theme-control">{% include "store/partials/theme_toggle.html" %}<span>Тема оформления</span></span>
 </nav>

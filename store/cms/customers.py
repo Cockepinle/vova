@@ -1,15 +1,18 @@
 import re
+from copy import copy
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.http import JsonResponse
+from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 
-from ..cms_forms import COEFFICIENT_FIELDS, COEFFICIENT_HELP, CustomerDetailsForm, CustomerIdentityForm, CustomerPricingForm, parse_individual_price
+from ..cms_forms import COEFFICIENT_FIELDS, COEFFICIENT_HELP, CustomerDetailsForm, CustomerIdentityForm, CustomerPricingForm, CustomerRequestForm, parse_individual_price
 from ..pricing import customer_price_level, resolve_product_price
 from ..services.catalog import product_search
-from .common import CustomerPrice, CustomerProfile, CustomerRequest, Paginator, Product, Q, get_object_or_404, get_user_model, management_required, messages, redirect, render, require_POST
+from .common import CHANGE, CustomerPrice, CustomerProfile, CustomerRequest, Paginator, Product, Q, get_object_or_404, get_user_model, log_change, management_required, messages, redirect, render, require_POST
 
 
 @management_required
@@ -196,8 +199,8 @@ def request_bulk_action(request):
         messages.error(request, "Выберите хотя бы одну заявку.")
         return redirect("management_requests")
 
-    if action in [CustomerRequest.STATUS_NEW, CustomerRequest.STATUS_PROCESSING, CustomerRequest.STATUS_DONE]:
-        requests.update(status=action)
+    if action in dict(CustomerRequest.STATUS_CHOICES):
+        requests.exclude(status=action).update(status=action, updated_at=timezone.now())
         messages.success(request, "Статусы заявок обновлены.")
     elif action == "delete":
         requests.delete()
@@ -209,12 +212,16 @@ def request_bulk_action(request):
 
 @management_required
 def request_list(request):
-    requests = CustomerRequest.objects.select_related("user").order_by("-created_at")
+    requests = CustomerRequest.objects.order_by("-created_at", "-pk")
     query = request.GET.get("q", "").strip()
     status = request.GET.get("status", "")
 
     if query:
-        requests = requests.filter(Q(name__icontains=query) | Q(email__icontains=query) | Q(company__icontains=query) | Q(phone__icontains=query) | Q(text__icontains=query))
+        match = Q(name__icontains=query) | Q(email__icontains=query) | Q(company__icontains=query) | Q(phone__icontains=query) | Q(text__icontains=query)
+        identifier = query.removeprefix("#").removeprefix("№").strip()
+        if re.fullmatch(r"[0-9]{1,18}", identifier):
+            match |= Q(pk=int(identifier))
+        requests = requests.filter(match)
     if status:
         requests = requests.filter(status=status)
 
@@ -234,16 +241,31 @@ def request_list(request):
     )
 
 @management_required
+@require_http_methods(["GET", "POST"])
+@never_cache
 def request_detail(request, request_id):
-    customer_request = get_object_or_404(CustomerRequest.objects.select_related("user"), pk=request_id)
+    form = None
     if request.method == "POST":
-        customer_request.status = request.POST.get("status", customer_request.status)
-        customer_request.admin_comment = request.POST.get("admin_comment", "").strip()
-        customer_request.save(update_fields=["status", "admin_comment", "updated_at"])
-        messages.success(request, "Запрос обновлён.")
-        return redirect("management_request_detail", request_id=customer_request.pk)
+        with transaction.atomic():
+            customer_request = get_object_or_404(CustomerRequest.objects.select_for_update(), pk=request_id)
+            form = CustomerRequestForm(request.POST, instance=copy(customer_request))
+            if form.is_valid():
+                changed = [name for name in form.changed_data if name in CustomerRequestForm.Meta.fields]
+                if changed:
+                    form.save(commit=False).save(update_fields=[*changed, "updated_at"])
+                    log_change(request, customer_request, CHANGE, "Запрос обновлён через CMS")
+                messages.success(request, "Запрос сохранён.")
+                url = reverse("management_request_detail", args=[request_id])
+                filters = request.GET.copy()
+                filters.pop("edit", None)
+                return redirect(url + ("?" + filters.urlencode() if filters else ""))
+        messages.error(request, "Проверьте ошибки в форме запроса.")
+    else:
+        customer_request = get_object_or_404(CustomerRequest.objects.select_related("user"), pk=request_id)
+        if request.GET.get("edit") == "1":
+            form = CustomerRequestForm(instance=customer_request)
     return render(request, "store/management/request_detail.html", {
         "section": "requests",
         "customer_request": customer_request,
-        "status_choices": CustomerRequest.STATUS_CHOICES,
+        "form": form,
     })
