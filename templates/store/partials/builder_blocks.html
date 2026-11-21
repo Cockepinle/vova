@@ -1,0 +1,47 @@
+{% for block in blocks %}
+  {% if block.type == "heading" %}
+    {% if block.content.level == "h2" %}
+      <h2 id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">{{ block.content.text|default:"Заголовок" }}</h2>
+    {% else %}
+      <h1 id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">{{ block.content.text|default:"Заголовок" }}</h1>
+    {% endif %}
+  {% elif block.type == "text" %}
+    <p id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">{{ block.content.text|default:"Текст блока" }}</p>
+  {% elif block.type == "button" %}
+    <a id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} class="primary-cta" style="{{ block.style_css }}" href="{{ block.content.url|default:'/catalog/' }}">{{ block.content.text|default:"Кнопка" }}</a>
+  {% elif block.type == "image" %}
+    {% if block.content.url %}
+      <img id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} src="{{ block.content.url }}" alt="{{ block.content.alt|default:'' }}" style="{{ block.style_css }}">
+    {% else %}
+      <div id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} class="builder-placeholder" style="{{ block.style_css }}">Изображение</div>
+    {% endif %}
+  {% elif block.type == "link" and block.content.url %}
+    <a id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}" href="{{ block.content.url }}">{{ block.content.text|default:"Открыть ссылку" }}</a>
+  {% elif block.type == "video" and block.content.url %}
+    <figure id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><video controls preload="metadata" src="{{ block.content.url }}"></video>{% if block.content.text %}<figcaption>{{ block.content.text }}</figcaption>{% endif %}</figure>
+  {% elif block.type == "html" %}
+    <div id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">{{ block.content.html|safe }}</div>
+  {% elif block.type == "divider" %}
+    <hr id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">
+  {% elif block.type == "banner" or block.type == "section" or block.type == "container" or block.type == "columns" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">
+      {% if block.type == "banner" and block.content.src %}<img src="{{ block.content.src }}" alt="{{ block.content.alt|default:'' }}">{% endif %}
+      {% if block.children %}{% include "store/partials/builder_blocks.html" with blocks=block.children %}{% endif %}
+      {% if not block.children %}{{ block.content.text|default:"" }}{% endif %}
+    </section>
+  {% elif block.type == "faq" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Вопросы и ответы</h2></section>
+  {% elif block.type == "advantages" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Наши преимущества</h2></section>
+  {% elif block.type == "form" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Форма обратной связи</h2></section>
+  {% elif block.type == "gallery" or block.type == "slider" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Медиа-блок</h2></section>
+  {% elif block.type == "products" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Подборка товаров</h2></section>
+  {% elif block.type == "category" %}
+    <section id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}"><h2>Категории товаров</h2></section>
+  {% else %}
+    <div id="{{ block.id }}" data-builder-block="{{ block.id }}"{% if block.public_hidden_mobile %} data-hidden-mobile="true"{% endif %}{% if block.public_hidden_tablet %} data-hidden-tablet="true"{% endif %} style="{{ block.style_css }}">{{ block.content.text|default:"Блок" }}</div>
+  {% endif %}
+{% endfor %}

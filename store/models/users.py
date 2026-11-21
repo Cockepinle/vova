@@ -18,8 +18,17 @@ class CustomerProfile(models.Model):
     ]
     user = models.OneToOneField(settings.AUTH_USER_MODEL, verbose_name="Пользователь", related_name="customer_profile", on_delete=models.CASCADE)
     company = models.CharField("Компания", max_length=180, blank=True)
+    contact_person = models.CharField("Контактное лицо", max_length=180, blank=True)
     phone = models.CharField("Телефон", max_length=80, blank=True)
+    inn = models.CharField("ИНН", max_length=30, blank=True)
+    kpp = models.CharField("КПП", max_length=30, blank=True)
+    delivery_addresses = models.JSONField("Адреса доставки", default=list, blank=True)
+    status = models.CharField("Статус клиента", max_length=30, default="active")
+    comment = models.TextField("Комментарий администратора", blank=True)
     price_level = models.CharField("Уровень цен", max_length=20, choices=PRICE_LEVEL_CHOICES, default=PRICE_RETAIL)
+    retail_coefficient = models.DecimalField("Коэффициент розницы", max_digits=10, decimal_places=4, null=True, blank=True)
+    wholesale_coefficient = models.DecimalField("Коэффициент оптовой цены", max_digits=10, decimal_places=4, null=True, blank=True)
+    special_coefficient = models.DecimalField("Коэффициент спеццены", max_digits=10, decimal_places=4, null=True, blank=True)
     created_at = models.DateTimeField("Создан", auto_now_add=True)
 
     class Meta:

@@ -1,0 +1,132 @@
+<nav class="catalog-breadcrumbs" aria-label="Хлебные крошки">
+  <a href="{% url 'catalog' %}">Каталог</a>
+  {% for category in breadcrumbs %}
+    <span aria-hidden="true">/</span>
+    <a href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">{{ category.name }}</a>
+  {% endfor %}
+  <span aria-hidden="true">/</span>
+  <span aria-current="page">{{ detail_product.name }}</span>
+</nav>
+<section class="product-detail-page" data-product-detail data-product-id="{{ detail_product.pk }}">
+  <div class="product-detail-summary">
+    <div class="product-detail-gallery" data-detail-gallery data-image-index="0">
+      <div class="product-detail-gallery-stage">
+        <button class="product-detail-gallery-zoom" type="button" data-detail-gallery-zoom aria-label="Открыть фотографию крупно">
+          <img data-detail-main-image src="{{ detail_gallery_images.0.url }}" alt="{{ detail_gallery_images.0.alt }}" fetchpriority="high">
+        </button>
+        {% if detail_gallery_images|length > 1 %}
+          <button class="detail-gallery-arrow detail-gallery-prev" type="button" data-detail-gallery-step="-1" aria-label="Предыдущее фото">‹</button>
+          <button class="detail-gallery-arrow detail-gallery-next" type="button" data-detail-gallery-step="1" aria-label="Следующее фото">›</button>
+          <span class="product-detail-gallery-counter" data-detail-gallery-counter aria-live="polite">1 / {{ detail_gallery_images|length }}</span>
+        {% endif %}
+      </div>
+      {% if detail_gallery_images|length > 1 %}
+        <div class="product-detail-gallery-thumbnails" role="group" aria-label="Фотографии товара">
+          {% for image in detail_gallery_images %}
+            <button class="product-detail-gallery-thumbnail" type="button" data-detail-gallery-image="{{ image.url }}" data-gallery-alt="{{ image.alt }}" aria-label="Показать фото {{ forloop.counter }}" aria-current="{% if forloop.first %}true{% else %}false{% endif %}">
+              <img src="{{ image.url }}" alt="" loading="lazy">
+            </button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="product-detail-purchase">
+      <p class="product-sku" data-detail-sku>Артикул: {{ detail_product.sku|default:"—" }}</p>
+      <h1>{{ detail_product.h1|default:detail_product.name }}</h1>
+      {% if detail_product.h1 and detail_product.h1 != detail_product.name %}<p class="product-detail-category">{{ detail_product.name }}</p>{% endif %}
+      <p class="product-detail-category" data-detail-category>
+        {% if detail_product.category.parent %}<a href="{% url 'catalog' %}?category={{ detail_product.category.parent.slug }}">{{ detail_product.category.parent.name }}</a> / {% endif %}
+        <a href="{% url 'catalog' %}?category={{ detail_product.category.slug }}">{{ detail_product.category.name }}</a>
+      </p>
+      {% if detail_variants|length > 1 %}
+        <section class="product-variants detail-variant-picker">
+          <h2>Модификации</h2>
+          <div class="product-variant-list" data-detail-variants>
+            {% for variant in detail_variants %}
+              <a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}"
+                 class="product-variant {% if variant.current %}is-current{% endif %} {% if variant.unavailable %}is-unavailable{% endif %}"
+                 {% if variant.current %}aria-current="page"{% endif %}>
+                <span>{{ variant.label }}</span>
+                {% if variant.show_identity %}<small>{{ variant.sku|default:variant.name }}</small>{% endif %}
+                {% if variant.availability != 'in_stock' %}<small>{{ variant.availability_label }}</small>{% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+      <p class="price product-detail-price" data-detail-price>{{ detail_data.price }} ₽ <span>/ {{ detail_product.unit }}</span></p>
+      <p class="product-availability" data-detail-availability>{{ detail_product.get_availability_display }}</p>
+      <div class="detail-buy-actions">
+        <div class="quantity-control" role="group" aria-label="Количество">
+          <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not detail_can_purchase %}disabled{% endif %}>−</button>
+          <input class="quantity-input" type="number" min="{{ detail_data.min_quantity }}" step="{{ detail_data.quantity_step }}" value="{{ detail_cart_quantity|default:detail_data.min_quantity }}"
+                 {% if not detail_can_purchase %}disabled{% endif %} aria-label="Количество товара" aria-describedby="detail-quantity-rules">
+          <button class="quantity-plus" type="button" aria-label="Увеличить количество" {% if not detail_can_purchase %}disabled{% endif %}>+</button>
+        </div>
+        <button class="primary-button product-detail-add" type="button" data-add-detail-product="{{ detail_product.pk }}"
+                {% if not detail_can_purchase %}data-purchase-disabled disabled{% endif %}>{% if detail_is_hidden %}Предпросмотр{% elif not detail_can_purchase %}Нет в наличии{% elif detail_cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
+      </div>
+      <small id="detail-quantity-rules">Минимум {{ detail_data.min_quantity }} {{ detail_product.unit }} · кратность {{ detail_data.quantity_step }} {{ detail_product.unit }}</small>
+    </div>
+  </div>
+  {% if detail_product.description %}
+    <section class="product-detail-section">
+      <h2>Описание</h2>
+      <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
+    </section>
+  {% endif %}
+  {% if detail_specs %}
+    <section class="product-detail-section">
+      <h2>Характеристики</h2>
+      <dl class="product-detail-specs" data-detail-specs>
+        {% for label, value in detail_specs %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+      </dl>
+    </section>
+  {% endif %}
+  {% if detail_data.media %}
+    <div class="product-media" data-detail-media>
+      {% for media in detail_data.media %}
+        {% if media.is_video %}
+          <figure>
+            <video controls preload="metadata" src="{{ media.url }}"></video>
+            <figcaption>{{ media.title }}</figcaption>
+          </figure>
+        {% else %}
+          <a href="{{ media.url }}" target="_blank" rel="noopener">{{ media.title }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if recommended_items %}
+    <section class="product-detail-section product-recommendations">
+      <h2>Рекомендуем к этому товару</h2>
+      <div class="product-detail-recommendation-grid">
+        {% for item in recommended_items %}
+          <article class="product-detail-recommendation">
+            <a href="{{ item.url }}"><img src="{{ item.image }}" alt="{{ item.name }}" loading="lazy" decoding="async"></a>
+            <span class="product-sku">{{ item.sku }}</span>
+            <h3><a href="{{ item.url }}">{{ item.name }}</a></h3>
+            <p class="price">{{ item.price }} ₽ <span>/ {{ item.unit }}</span></p>
+            <a class="ghost-button" href="{{ item.url }}">Подробнее</a>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+  {% if accessory_items %}
+    <section class="product-detail-section">
+      <h2>С этим товаром покупают</h2>
+      <div class="product-detail-recommendation-grid">
+        {% for item in accessory_items %}
+          <article class="product-detail-recommendation">
+            <a href="{{ item.url }}"><img src="{{ item.image }}" alt="{{ item.name }}" loading="lazy" decoding="async"></a>
+            <h3><a href="{{ item.url }}">{{ item.name }}</a></h3>
+            <p class="price">{{ item.price }} ₽ <span>/ {{ item.unit }}</span></p>
+            {% if item.can_purchase and item.min_quantity > 1 %}<small class="product-detail-minimum">Минимум {{ item.min_quantity }} {{ item.unit }}</small>{% endif %}
+            <button class="primary-button" type="button" data-add-detail-product="{{ item.id }}" data-detail-min="{{ item.min_quantity }}" data-detail-step="{{ item.quantity_step }}" {% if not item.can_purchase %}data-purchase-disabled disabled{% endif %}>{% if not item.can_purchase %}Нет в наличии{% elif item.id in cart_quantities %}В корзине{% else %}В корзину{% endif %}</button>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+</section>

@@ -7,13 +7,26 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
-    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=51">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=37">
+    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=53">
     <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=47">
+    <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=2">
+    {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
-  <body>
+  <body data-product-image-fallback="{% static 'store/images/no-photo.svg' %}">
     {% include "store/partials/header.html" %}
 
+    {% if builder_structure %}
+      <div class="builder-public-page">
+        {% include "store/partials/builder_blocks.html" with blocks=builder_structure %}
+      </div>
+    {% endif %}
+
+    {% if detail_product %}
+    <main class="product-layout">
+      {% include "store/partials/product_detail.html" %}
+    </main>
+    {% else %}
     <main class="catalog-layout">
       <aside class="catalog-sidebar" aria-label="Категории каталога">
         <h2>Категории</h2>
@@ -27,6 +40,14 @@
       </aside>
 
       <section class="catalog-content">
+        {% if current_page.hero_url or current_page.mobile_hero_media or current_page.hero_label or current_page.hero_button_text %}
+          <div class="page-hero">
+            {% if current_page.hero_label %}<p class="eyebrow">{{ current_page.hero_label }}</p>{% endif %}
+            {% include "store/partials/hero_media.html" %}
+            {% include "store/partials/page_cta.html" %}
+          </div>
+        {% endif %}
+        {% include "store/partials/page_content_text.html" %}
         <form class="catalog-search catalog-search-desktop" method="get" action="{% url 'catalog' %}" data-catalog-search>
           <label class="search-box">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3m1.3-5.2a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"/></svg>
@@ -174,7 +195,8 @@
 
         <div class="catalog-topline">
           <div>
-            {% if detail_product %}<h1>{{ seo.h1 }}</h1>{% else %}<h1 class="catalog-title-sr-only">{{ seo.h1 }}</h1>{% endif %}
+            <h1 class="catalog-title-sr-only">{{ seo.h1 }}</h1>
+            {% if current_page.subtitle and not search_query and not active_category %}<p>{{ current_page.subtitle }}</p>{% endif %}
             {% if search_query %}<p>По запросу «{{ search_query }}»</p>{% endif %}
           </div>
           <form class="catalog-sort-form" method="get">
@@ -201,67 +223,12 @@
           </form>
         </div>
 
-        <div class="catalog-grid{% if detail_product %} catalog-detail-grid{% endif %}">
-          {% for product in products %}
-            {% with cart_quantity=cart_quantities|get_item:product.id %}
-            <article class="catalog-card {% if cart_quantity %}is-in-cart{% endif %}" data-product-id="{{ product.id }}" {% if detail_product and detail_product.id == product.id %}data-product-detail-card{% endif %} data-product='{{ product|to_json }}'>
-              <div class="open-product" role="button" tabindex="0" aria-label="Открыть карточку {{ product.name }}">
-                <div class="catalog-card-image">
-                  <div class="catalog-card-badges">{% for badge in product.badges %}<span class="hit-badge">{{ badge }}</span>{% endfor %}</div>
-                  <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-                  </button>
-                  <img src="{{ product.image }}" alt="{{ product.name }}">
-                </div>
-                <div class="catalog-card-info">
-                  <span class="product-sku">{{ product.sku }}</span>
-                  <h2>{{ product.name }}</h2>
-                  <span class="product-availability">{{ product.availability_label }}{% if product.stock_quantity %} · {{ product.stock_quantity }} {{ product.unit }}{% endif %}</span>
-                  <p class="product-card-description">{{ product.description }}</p>
-                </div>
-              </div>
-              <div class="catalog-card-buy">
-                <div class="product-buy-row">
-                  <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
-                  <div class="quantity-control" aria-label="Количество">
-                    <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                    <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="1" value="{{ cart_quantity|default:product.min_quantity }}" aria-label="Количество товара">
-                    <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
-                  </div>
-                </div>
-                <button class="add-to-cart" type="button" {% if not product.can_purchase %}disabled{% endif %}>{% if not product.can_purchase %}Нет в наличии{% elif cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
-              </div>
-            </article>
-            {% endwith %}
-          {% empty %}
-            <div class="catalog-empty">
-              <h2>{% if search_query %}Ничего не найдено{% else %}В разделе пока нет товаров{% endif %}</h2>
-              <p>{% if search_query %}По запросу «{{ search_query }}» ничего не найдено.{% else %}В этом разделе пока нет карточек.{% endif %}</p>
-            </div>
-          {% endfor %}
+        <div class="catalog-grid" aria-busy="false">
+          {% include "store/partials/catalog_cards.html" %}
         </div>
-        {% if detail_product %}<section class="product-detail-copy" data-product-detail data-product-id="{{ detail_product.pk }}">
-          {% if detail_variants|length > 1 %}
-            <div class="product-variants">
-              <h2>Выберите вариант</h2>
-              <div class="product-variant-list" data-detail-variants>
-                {% for variant in detail_variants %}<a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}" class="product-variant {% if variant.current %}is-current{% endif %} {% if variant.unavailable %}is-unavailable{% endif %}" {% if variant.current %}aria-current="page"{% endif %}><span>{{ variant.label }}</span>{% if variant.unavailable %}<small>Нет в наличии</small>{% elif variant.availability == 'preorder' %}<small>Под заказ</small>{% endif %}</a>{% endfor %}
-              </div>
-            </div>
-          {% endif %}
-          <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
-          <dl class="product-detail-specs" data-detail-specs>
-            {% for label, value in detail_specs %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
-          </dl>
-          <div class="product-media" data-detail-media>
-            {% for media in detail_product.media.all %}
-              {% if media.is_video %}<figure><video controls preload="metadata" src="{{ media.file.url }}"></video><figcaption>{{ media.title }}</figcaption></figure>
-              {% elif not media.is_image %}<a href="{{ media.file.url }}" target="_blank" rel="noopener">{{ media.title }}</a>{% endif %}
-            {% endfor %}
-          </div>
-          <a href="{% url 'catalog' %}">Все товары</a></section>{% endif %}
       </section>
     </main>
+    {% endif %}
 
     <div class="product-modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
@@ -305,9 +272,11 @@
         </section>
       </article>
     </div>
-    <div class="image-lightbox" aria-hidden="true">
+    <div class="image-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр фотографий" aria-hidden="true">
       <button class="image-lightbox-close" type="button" aria-label="Закрыть фото">×</button>
-      <img class="image-lightbox-img" src="" alt="">
+      <img class="image-lightbox-img" alt="">
+      <button class="detail-gallery-arrow detail-gallery-prev" type="button" data-lightbox-step="-1" aria-label="Предыдущее фото" hidden>‹</button>
+      <button class="detail-gallery-arrow detail-gallery-next" type="button" data-lightbox-step="1" aria-label="Следующее фото" hidden>›</button>
     </div>
 
     {% include "store/partials/footer.html" %}
@@ -318,10 +287,10 @@
       window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
       window.initialProductToOpen = "{{ open_product_id|escapejs }}";
     </script>
-    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=41"></script>
     <script src="{% static 'store/js/account.js' %}?v=6"></script>
-    <script src="{% static 'store/js/catalog.js' %}?v=48"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
+    <script src="{% static 'store/js/catalog.js' %}?v=52"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=21"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
   </body>

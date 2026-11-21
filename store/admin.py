@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.http import HttpResponse
+from django.urls import reverse
 
 from .models import AdminLoginAttempt, CustomerPrice, DeliveryMethod, ExternalIdentity, OrderStatusHistory, SiteMedia, AttributeDefinition, CartItem, Category, CustomerProfile, CustomerRequest, EmailVerificationCode, Employee, FavoriteItem, Order, OrderItem, PageContent, Payment, PaymentMethod, Product, ProductAttribute, ProductImage, Promotion, SiteSettings, VariantGroup
 from .order_export import get_order_exporter
@@ -110,9 +111,12 @@ class ProductAdmin(admin.ModelAdmin):
     list_editable = ["stock_quantity", "status", "is_hit", "is_new", "is_special", "availability"]
     prepopulated_fields = {"slug": ["name"]}
     search_fields = ["name", "sku", "description", "keywords"]
-    autocomplete_fields = ["category", "variant_group"]
+    autocomplete_fields = ["category", "variant_group", "recommended_products", "accessory_products"]
     inlines = [ProductImageInline, ProductAttributeInline, CustomerPriceInline]
     readonly_fields = ["volume_m3", "retail_price_display", "wholesale_price_display", "special_price_display"]
+
+    def view_on_site(self, obj):
+        return reverse("product_detail", args=[obj.slug]) + "?preview=1"
 
     @admin.display(description="Розница")
     def retail_price_display(self, obj):
@@ -157,6 +161,7 @@ class ProductAdmin(admin.ModelAdmin):
                     "cost_price", "price", "retail_coefficient", "retail_price_display", "wholesale_coefficient", "wholesale_price_display", "special_coefficient", "special_price_display", "old_price", "vat_rate",
                     "unit",
                     "min_quantity",
+                    "quantity_step",
                     "stock_quantity",
                     "is_hit",
                     "is_new", "is_special",
@@ -165,6 +170,7 @@ class ProductAdmin(admin.ModelAdmin):
                 ]
             },
         ),
+        ("Связанные товары", {"fields": ["recommended_products", "accessory_products"]}),
     ]
 
     fieldsets += [

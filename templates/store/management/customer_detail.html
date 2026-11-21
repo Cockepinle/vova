@@ -1,0 +1,94 @@
+{% extends "store/management/base.html" %}
+{% load static %}
+{% block heading %}Карточка клиента{% endblock %}
+{% block content %}
+<div class="customer-detail">
+  <header class="mgmt-card card-header customer-detail-header">
+    <div>
+      <h2>{{ profile.company|default:customer.get_full_name|default:customer.username }}</h2>
+      {% if customer.email %}<p class="muted">{{ customer.email }}</p>{% endif %}
+    </div>
+    <a class="ghost-button" href="{% url 'management_customers' %}">К списку покупателей</a>
+  </header>
+  <form class="mgmt-form-grid" method="post">
+    {% csrf_token %}
+    {{ identity_form.non_field_errors }}{{ details_form.non_field_errors }}{{ pricing_form.non_field_errors }}
+    <section class="mgmt-card form-section">
+      <h2>Контакты и реквизиты</h2>
+      <div class="form-grid">
+        {% for field in identity_form %}<label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}
+        {% for field in details_form %}
+          <label {% if field.name == 'delivery_addresses' or field.name == 'comment' %}class="full"{% endif %}>
+            <span>{{ field.label }}</span>{{ field }}{{ field.errors }}
+          </label>
+        {% endfor %}
+        <datalist id="customer-statuses"><option value="active" label="Активен"><option value="inactive" label="Неактивен"></datalist>
+      </div>
+    </section>
+    <section class="mgmt-card form-section" data-customer-pricing>
+      <h2>Уровень цен</h2>
+      <div class="form-grid">
+        {% for field in pricing_form %}
+          <label {% if field.name != 'price_level' %}data-customer-coefficient="{{ field.name }}"{% endif %}>
+            <span>{{ field.label }}</span>{{ field }}{{ field.errors }}
+          </label>
+        {% endfor %}
+      </div>
+      <p class="section-help">Коэффициент клиента заменяет коэффициент товара для выбранного уровня. Пустое поле использует коэффициент товара. {{ coefficient_help }}</p>
+    </section>
+    <section class="mgmt-card form-section" data-customer-products data-product-search-url="{% url 'management_customer_product_search' customer.pk %}">
+      <h2>Индивидуальные цены</h2>
+      <p class="section-help">Индивидуальная цена имеет приоритет. Чтобы вернуть цену уровня, очистите сумму и сохраните карточку.</p>
+      <label class="customer-product-search">
+        <span>Добавить товар</span>
+        <input type="search" data-product-search placeholder="Название или артикул" autocomplete="off" aria-controls="customer-product-results">
+      </label>
+      <p class="muted" role="status" data-product-status></p>
+      <div class="customer-product-results" id="customer-product-results" data-product-results></div>
+      <p class="muted" data-product-empty {% if product_price_rows %}hidden{% endif %}>Индивидуальных цен пока нет.</p>
+      <div class="customer-product-rows" data-product-price-rows>
+        {% for row in product_price_rows %}
+          <article class="customer-product-row" data-product-id="{{ row.id }}">
+            <div><strong data-product-name>{{ row.name }}</strong><small data-product-sku>{{ row.sku }}</small>{% if row.status_label %}<small>{{ row.status_label }}</small>{% endif %}</div>
+            <div class="customer-product-level"><span>Цена по сохранённому уровню</span><strong data-product-level>{{ row.level_price }} ₽</strong></div>
+            <label><span>Индивидуальная цена, ₽</span><input name="individual_price_{{ row.id }}" inputmode="decimal" value="{{ row.value|stringformat:'s' }}" {% if row.error %}aria-invalid="true" aria-describedby="customer-price-error-{{ row.id }}"{% endif %}>
+              {% if row.error %}<small class="errorlist" id="customer-price-error-{{ row.id }}">{{ row.error }}</small>{% endif %}
+            </label>
+            <button type="button" class="ghost-button danger-button" data-product-remove>Убрать цену</button>
+          </article>
+        {% endfor %}
+      </div>
+      <template data-product-price-template>
+        <article class="customer-product-row" data-product-id="">
+          <div><strong data-product-name></strong><small data-product-sku></small></div>
+          <div class="customer-product-level"><span>Цена по сохранённому уровню</span><strong data-product-level></strong></div>
+          <label><span>Индивидуальная цена, ₽</span><input inputmode="decimal"></label>
+          <button type="button" class="ghost-button danger-button" data-product-remove>Убрать цену</button>
+        </article>
+      </template>
+    </section>
+    <div class="form-actions"><button class="primary-button" type="submit">Сохранить клиента</button></div>
+  </form>
+  <section class="mgmt-card form-section" id="customer-orders">
+    <h2>История заказов</h2>
+    {% if orders %}
+      <div class="table-wrap">
+        <table class="mgmt-table">
+          <thead><tr><th>Номер</th><th>Дата</th><th>Сумма заказа</th><th>Статус</th></tr></thead>
+          <tbody>{% for order in orders %}
+            <tr><td><a href="{% url 'management_order_detail' order.pk %}">{{ order.number }}</a></td><td>{{ order.created_at|date:"d.m.Y H:i" }}</td><td>{{ order.total }} ₽</td><td>{{ order.get_status_display }}</td></tr>
+          {% endfor %}</tbody>
+        </table>
+      </div>
+      {% if orders.has_other_pages %}
+        <nav class="pagination" aria-label="Страницы заказов">
+          {% if orders.has_previous %}<a href="?orders={{ orders.previous_page_number }}#customer-orders">Назад</a>{% endif %}
+          <span>Страница {{ orders.number }} из {{ orders.paginator.num_pages }}</span>
+          {% if orders.has_next %}<a href="?orders={{ orders.next_page_number }}#customer-orders">Далее</a>{% endif %}
+        </nav>
+      {% endif %}
+    {% else %}<p class="muted">Заказов пока нет.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block management_scripts %}<script src="{% static 'store/js/customer-pricing.js' %}?v=1"></script>{% endblock %}

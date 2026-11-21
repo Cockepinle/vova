@@ -1,0 +1,5 @@
+<label data-content-image data-fallback-url="{{ fallback }}">
+  <span>{{ field.label }}</span>{{ field }}{{ field.errors }}
+  {{ remove }}
+  {% if upload.errors %}{{ upload.errors }}{% endif %}
+</label>

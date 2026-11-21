@@ -1,7 +1,28 @@
+from django.views.decorators.cache import never_cache
+
 from .common import CartItem, DeliveryMethod, JsonResponse, Order, Payment, PaymentMethod, PaymentProviderError, User, auth_required_payload, cart_payload
-from .common import clear_cart_storage, create_order_payment, csrf_exempt, current_checkout_order, get_checkout_initial, get_product, get_session_cart, json, locked_checkout_snapshot, normalize_quantity
+from .common import clear_cart_storage, create_order_payment, csrf_exempt, current_checkout_order, get_checkout_initial, get_product, get_session_cart, is_valid_quantity, json, locked_checkout_snapshot, normalize_quantity
 from .common import notify_manager_safely, process_webhook, refresh_delivery_handoff, replace_order_snapshot, require_GET, require_POST, reverse, save_session_cart, set_order_delivery, transaction
 from .common import uuid4
+
+MAX_CART_QUANTITY = 2_147_483_647
+
+
+def cart_quantity(payload, *, default=None, minimum=0):
+    value = payload.get("quantity", default)
+    if type(value) is str and value.isascii() and value.isdecimal() and len(value) <= 10:
+        value = int(value)
+    if type(value) is not int or not minimum <= value <= MAX_CART_QUANTITY:
+        raise ValueError
+    return value
+
+
+def cart_product_id(payload):
+    value = str(payload.get("product_id", ""))
+    if not value.isascii() or not value.isdecimal() or len(value) > 19 or not 0 < int(value) <= 2**63 - 1:
+        raise ValueError
+    return str(int(value))
+
 
 @csrf_exempt
 @require_POST
@@ -14,21 +35,30 @@ def payment_webhook(request, provider_code):
 
 @csrf_exempt
 @require_POST
+@transaction.atomic
 def clear_cart(request):
+    if request.user.is_authenticated:
+        User.objects.select_for_update().get(pk=request.user.pk)
     clear_cart_storage(request)
     return JsonResponse(cart_payload(request))
 
 @csrf_exempt
 @require_POST
+@transaction.atomic
 def update_cart(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Некорректные данные"}, status=400)
-
-    product_id = str(payload.get("product_id") or "")
-    quantity = int(payload.get("quantity") or 0)
-    product = get_product(product_id)
+        quantity = cart_quantity(payload)
+        if "product_ids" in payload:
+            if quantity or not isinstance(payload["product_ids"], list) or not payload["product_ids"]:
+                raise ValueError
+            product_ids = {cart_product_id({"product_id": pk}) for pk in payload["product_ids"]}
+        else:
+            product_id = cart_product_id(payload)
+            product_ids = {product_id}
+    except (ValueError, AttributeError):
+        return JsonResponse({"error": "Укажите товар и целое количество"}, status=400)
+    product = get_product(product_id, with_details=False) if quantity else None
 
     if quantity > 0 and not product:
         return JsonResponse({"error": "Товар не найден"}, status=404)
@@ -37,17 +67,21 @@ def update_cart(request):
         if product.availability == product.AVAILABILITY_OUT_OF_STOCK:
             return JsonResponse({"error": "Товар временно отсутствует"}, status=409)
         quantity = normalize_quantity(product, quantity)
+        if quantity > MAX_CART_QUANTITY:
+            return JsonResponse({"error": "Количество слишком велико"}, status=400)
 
     if request.user.is_authenticated:
+        User.objects.select_for_update().get(pk=request.user.pk)
         if quantity <= 0:
-            CartItem.objects.filter(user=request.user, product_id=product_id).delete()
+            CartItem.objects.filter(user=request.user, product_id__in=product_ids).delete()
         else:
             CartItem.objects.update_or_create(user=request.user, product=product, defaults={"quantity": quantity})
     else:
         cart = get_session_cart(request)
 
         if quantity <= 0:
-            cart.pop(product_id, None)
+            for selected_id in product_ids:
+                cart.pop(selected_id, None)
         else:
             cart[product_id] = quantity
 
@@ -80,6 +114,21 @@ def start_checkout(request):
     if not delivery_method:
         return JsonResponse({"error": "Выберите способ доставки"}, status=400)
     snapshot = locked_checkout_snapshot(request)
+    if snapshot["invalid_quantities"]:
+        return JsonResponse(
+            {"error": "Недопустимое количество для товара: " + ", ".join(snapshot["invalid_quantities"])},
+            status=409,
+        )
+    invalid_quantities = [
+        product.name
+        for product, item in snapshot["rows"]
+        if not is_valid_quantity(product, item["quantity"])
+    ]
+    if invalid_quantities:
+        return JsonResponse(
+            {"error": "Недопустимое количество для товара: " + ", ".join(invalid_quantities)},
+            status=409,
+        )
     if snapshot["unavailable_products"]:
         names = ", ".join(snapshot["unavailable_products"])
         return JsonResponse(
@@ -173,6 +222,16 @@ def checkout_order(request):
             })
 
     snapshot = locked_checkout_snapshot(request)
+    invalid_quantities = [
+        product.name
+        for product, item in snapshot["rows"]
+        if not is_valid_quantity(product, item["quantity"])
+    ]
+    if invalid_quantities:
+        return JsonResponse(
+            {"error": "Недопустимое количество для товара: " + ", ".join(invalid_quantities)},
+            status=409,
+        )
     if snapshot["unavailable_products"]:
         names = ", ".join(snapshot["unavailable_products"])
         return JsonResponse(
@@ -259,15 +318,15 @@ def checkout_order(request):
 
 @csrf_exempt
 @require_POST
+@transaction.atomic
 def add_to_cart(request):
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Некорректные данные"}, status=400)
-
-    product_id = str(payload.get("product_id") or "")
-    quantity = int(payload.get("quantity") or 1)
-    product = get_product(product_id)
+        product_id = cart_product_id(payload)
+        quantity = cart_quantity(payload, default=1, minimum=1)
+    except (ValueError, AttributeError):
+        return JsonResponse({"error": "Укажите товар и целое количество"}, status=400)
+    product = get_product(product_id, with_details=False)
 
     if not product:
         return JsonResponse({"error": "Товар не найден"}, status=404)
@@ -278,16 +337,27 @@ def add_to_cart(request):
     quantity = normalize_quantity(product, quantity)
 
     if request.user.is_authenticated:
-        item, _ = CartItem.objects.get_or_create(user=request.user, product=product, defaults={"quantity": 0})
-        item.quantity = item.quantity + quantity
-        item.save(update_fields=["quantity", "updated_at"])
+        User.objects.select_for_update().get(pk=request.user.pk)
+        existing = CartItem.objects.filter(user=request.user, product=product).values_list("quantity", flat=True).first()
+        if existing and payload.get("if_absent") is True:
+            return JsonResponse({**cart_payload(request), "already_in_cart": True})
+        total = normalize_quantity(product, (existing or 0) + quantity)
+        if total > MAX_CART_QUANTITY:
+            return JsonResponse({"error": "Количество слишком велико"}, status=400)
+        CartItem.objects.update_or_create(user=request.user, product=product, defaults={"quantity": total})
     else:
         cart = get_session_cart(request)
-        cart[product_id] = int(cart.get(product_id, 0)) + quantity
+        if cart.get(product_id) and payload.get("if_absent") is True:
+            return JsonResponse({**cart_payload(request), "already_in_cart": True})
+        total = normalize_quantity(product, int(cart.get(product_id, 0)) + quantity)
+        if total > MAX_CART_QUANTITY:
+            return JsonResponse({"error": "Количество слишком велико"}, status=400)
+        cart[product_id] = total
         save_session_cart(request, cart)
 
     return JsonResponse(cart_payload(request))
 
 @require_GET
+@never_cache
 def api_cart(request):
     return JsonResponse(cart_payload(request))

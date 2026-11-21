@@ -1,0 +1,10 @@
+.builder-placeholder{min-height:180px;background:#f3f4f6;display:grid;place-items:center;color:#9ca3af}
+.builder-public-page{width:min(1120px,100%);margin:0 auto;padding:24px;box-sizing:border-box}
+.builder-public-page [data-builder-block]{box-sizing:border-box}
+.builder-public-page img{display:block;max-width:100%;height:auto;object-fit:cover}
+.builder-public-page h1,.builder-public-page h2,.builder-public-page h3,.builder-public-page p{overflow-wrap:anywhere}
+.builder-public-page .primary-cta{display:inline-flex;align-items:center;text-decoration:none}
+@media(max-width:767px){.builder-public-page [data-hidden-mobile=true]{display:none!important}}
+@media(min-width:768px) and (max-width:1023px){.builder-public-page [data-hidden-tablet=true]{display:none!important}}
+@media(max-width:600px){.builder-public-page{padding:16px}}
+.builder-public-page video { display: block; width: auto; max-width: 100%; }

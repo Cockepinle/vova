@@ -45,7 +45,11 @@ def metadata(request, settings, pages):
         slug = match.kwargs.get('slug') if match and match.url_name == 'product_detail' else None
         product_id = request.GET.get('product', '')
         if slug:
-            product = Product.objects.filter(slug=slug, status='published', category_id__in=Category.visible_ids()).first()
+            product = getattr(request, '_product_page', None)
+            if product is None:
+                product = Product.objects.filter(slug=slug, status='published', category_id__in=Category.visible_ids()).first()
+            if getattr(request, '_product_preview', False):
+                noindex = True
         elif product_id.isdigit():
             product = Product.objects.filter(pk=product_id, status='published', category_id__in=Category.visible_ids()).first()
         if product:

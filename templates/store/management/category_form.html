@@ -3,7 +3,8 @@
 {% block heading %}{% if category %}Редактировать категорию{% elif form.parent.value %}Новая подкатегория{% else %}Новая категория{% endif %}{% endblock %}
 
 {% block content %}
-  <form class="mgmt-form-grid" method="post" enctype="multipart/form-data">
+  <form class="mgmt-form-grid" data-category-settings method="post" enctype="multipart/form-data"
+        action="{% if category %}{% url 'management_category_edit' category.pk %}{% else %}{% url 'management_category_new' %}{% endif %}">
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for group_title, fields in form.groups %}
@@ -12,35 +13,158 @@
         {% if group_title == "Категория и вложенность" %}<p class="section-help">Для подкатегории выберите родительскую категорию. Уровней вложенности может быть несколько.</p>{% endif %}
         {% if group_title == "SEO категории" %}<p class="section-help">Эти поля управляют адресом, заголовком и описанием страницы в поиске. Пустые поля заполняются данными категории автоматически.</p>{% endif %}
         <div class="form-grid">
-        {% for field in fields %}
-          {% if field.name == "image" %}
-            <div class="full image-field">
-              <span>Изображение</span>
-              {% if category and category.display_image_url %}
-                <img class="current-image-preview" src="{{ category.display_image_url }}" alt="{{ category.name }}">
-              {% endif %}
-              <label class="file-upload fancy-file">
-                {{ field }}
-                <strong>Выбрать файл</strong>
-                <small class="file-name">Файл не выбран</small>
-              </label>
-              {{ field.errors }}
-            </div>
-          {% else %}
-            <label class="{% if field.name == 'description' or field.name == 'filter_attributes' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">
+          {% for field in fields %}
+            <label class="{% if field.name == 'description' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">
               <span>{{ field.label }}</span>
               {{ field }}
               {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
             </label>
-          {% endif %}
-        {% endfor %}
+          {% endfor %}
         </div>
       </section>
     {% endfor %}
+
+    <section class="mgmt-card form-section category-image-card">
+      <h2>Изображение категории</h2>
+      <div class="category-image-editor" data-category-image>
+        <div class="category-image-preview" data-category-image-preview>
+          {% if category_image_preview_url %}
+            <img class="current-image-preview" src="{{ category_image_preview_url }}" alt="{{ category.name|default:'Изображение категории' }}">
+          {% else %}
+            <span>Изображение не выбрано</span>
+          {% endif %}
+        </div>
+        <div class="category-image-controls">
+          {{ form.image_media }}
+          {{ form.remove_image }}
+          <div class="image-actions">
+            <details class="category-image-sources" {% if form.image.errors or form.image_media.errors or form.image_url.errors %}open{% endif %}>
+              <summary class="ghost-button" data-category-image-change>{% if category_image_preview_url %}Изменить{% else %}Выбрать изображение{% endif %}</summary>
+              <div class="category-image-options">
+                <label class="file-upload fancy-file">
+                  {{ form.image }}
+                  <strong>Загрузить с компьютера</strong>
+                </label>
+                <button class="ghost-button" type="button" data-category-image-library>Выбрать из медиатеки</button>
+                <label class="category-image-url">
+                  <span>Ссылка на изображение</span>
+                  {{ form.image_url }}
+                </label>
+              </div>
+            </details>
+            <button class="ghost-button danger-button" type="button" data-category-image-remove {% if not category_image_preview_url %}hidden{% endif %}>Удалить</button>
+          </div>
+          <p class="section-help" data-category-image-status role="status">Изменения изображения применятся после сохранения категории.</p>
+          {{ form.image.errors }}
+          {{ form.image_media.errors }}
+          {{ form.image_url.errors }}
+        </div>
+      </div>
+    </section>
+
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить категорию</button>
       <a class="ghost-button" href="{% url 'management_categories' %}">Отмена</a>
     </div>
   </form>
+
+  <section class="mgmt-card form-section category-filters" data-category-filters>
+    <header class="section-heading">
+      <div>
+        <h2>Фильтры категории{% if category %} <span class="filter-count">{{ attached_filter_rows|length }} / 5</span>{% endif %}</h2>
+        {% if category %}<p class="section-help">Фильтры сохраняются отдельно от настроек категории.</p>{% endif %}
+      </div>
+    </header>
+
+    {% if not category %}
+      <p class="section-help">Сохраните категорию, чтобы создать или привязать фильтры.</p>
+    {% else %}
+      {% if filter_limit_reached %}<p class="section-help">Достигнут лимит в пять фильтров. Чтобы добавить другой, отвяжите один из текущих.</p>{% endif %}
+      <div class="filter-toolbar">
+        {% if not filter_limit_reached or create_filter_form.errors %}
+          <details class="filter-create" {% if create_filter_form.errors %}open{% endif %}>
+            <summary class="primary-button">Создать фильтр</summary>
+            <form method="post" action="{% url 'management_category_filter_create' category.pk %}" class="filter-edit-form">
+              {% csrf_token %}
+              {% include "store/management/category_filter_fields.html" with filter_form=create_filter_form only %}
+              <button class="primary-button" type="submit">Создать и привязать</button>
+            </form>
+          </details>
+        {% endif %}
+        <details class="filter-library" data-filter-library>
+          <summary class="ghost-button">Привязать существующий фильтр</summary>
+          {% if available_filters %}
+            <label class="filter-library-search">
+              <span>Поиск по названию</span>
+              <input type="search" data-filter-search placeholder="Например, цвет">
+            </label>
+            <p class="section-help" data-filter-no-results hidden>Подходящие фильтры не найдены.</p>
+            <div class="filter-library-list">
+              {% for field in available_filters %}
+                <article class="filter-library-item" data-filter-name="{{ field.name|lower }}">
+                  <div>
+                    <strong>{{ field.name }}</strong>
+                    <small>{{ field.get_value_type_display }} · {{ field.get_filter_type_display }}{% if not field.is_visible %} · Скрыт{% endif %}</small>
+                  </div>
+                  <form method="post" action="{% url 'management_category_filter_attach' category.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="field_id" value="{{ field.pk }}">
+                    <button class="ghost-button" type="submit" {% if filter_limit_reached %}disabled{% endif %} aria-label="Привязать фильтр «{{ field.name }}»">Привязать</button>
+                  </form>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="section-help">Других доступных фильтров пока нет.</p>
+          {% endif %}
+        </details>
+      </div>
+
+      {% if attached_filter_rows %}
+        <div class="category-filter-list">
+          {% for row in attached_filter_rows %}
+            <article class="category-filter-card" aria-labelledby="category-filter-title-{{ row.field.pk }}">
+              <div class="category-filter-summary">
+                <div>
+                  <h3 id="category-filter-title-{{ row.field.pk }}">{{ row.field.name }}</h3>
+                  <p>{{ row.field.get_value_type_display }} · {{ row.field.get_filter_type_display }} · Порядок {{ row.field.sort_order }}</p>
+                  {% if not row.field.is_visible or not row.field.is_filterable %}<p>Скрыт на витрине</p>{% endif %}
+                  {% if row.field.choices %}
+                    <p class="filter-choice-summary">{{ row.field.choices|join:", " }}</p>
+                  {% endif %}
+                  {% if row.category_count > 1 %}<p>Общий фильтр · категорий {{ row.category_count }}</p>{% endif %}
+                </div>
+                <div class="filter-actions">
+                  <form method="post" action="{% url 'management_category_filter_unlink' category.pk row.field.pk %}">
+                    {% csrf_token %}
+                    <button class="ghost-button" type="submit">Отвязать от категории</button>
+                  </form>
+                  {% if row.can_delete %}
+                    <form method="post" action="{% url 'management_category_filter_delete' category.pk row.field.pk %}" data-filter-confirm="Удалить фильтр безвозвратно?">
+                      {% csrf_token %}
+                      <button class="ghost-button danger-button" type="submit">Удалить фильтр</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+              {% if not row.can_delete %}<p class="section-help">Фильтр используется в других категориях, товарах или модификациях. Здесь его можно отвязать.</p>{% endif %}
+              <details class="filter-edit-details" {% if row.edit_form.errors %}open{% endif %}>
+                <summary class="ghost-button">Редактировать</summary>
+                <form method="post" action="{% url 'management_category_filter_edit' category.pk row.field.pk %}" class="filter-edit-form"
+                      {% if row.category_count > 1 %}data-filter-confirm="Сохранить изменения для всех категорий, использующих этот фильтр?"{% endif %}>
+                  {% csrf_token %}
+                  {% if row.category_count > 1 %}<p class="section-help">Параметры изменятся во всех связанных категориях.</p>{% endif %}
+                  {% include "store/management/category_filter_fields.html" with filter_form=row.edit_form only %}
+                  <button class="primary-button" type="submit">Сохранить параметры</button>
+                </form>
+              </details>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="section-help">К категории пока не привязаны фильтры.</p>
+      {% endif %}
+    {% endif %}
+  </section>
 {% endblock %}

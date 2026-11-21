@@ -6,15 +6,16 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=36">
     <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=32">
     <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=46">
+    {% if builder_structure and builder_design.document_blocks or builder_structure and request.GET.preview_builder == '1' and request.user.is_staff %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
   <body>
     {% include "store/partials/header.html" %}
 
     <main class="contacts-page document-page">
-      <p class="eyebrow">Документы</p>
+      <p class="eyebrow">{{ current_page.hero_label|default:"Документы" }}</p>
       <h1>{{ seo.h1 }}</h1>
       {% include "store/partials/hero_media.html" %}
       {% include "store/partials/page_cta.html" %}
@@ -30,8 +31,11 @@
             </ul>
           </article>
         {% endfor %}
+        {% if current_page.content_title %}<h2>{{ current_page.content_title }}</h2>{% endif %}
+        {% if current_page.content_subtitle %}<h3>{{ current_page.content_subtitle }}</h3>{% endif %}
         {% if current_page.content_text %}<div class="document-note">{{ current_page.content_text|linebreaksbr }}</div>{% endif %}
       </section>
+      {% if builder_structure and builder_design.document_blocks or builder_structure and request.GET.preview_builder == '1' and request.user.is_staff %}<div class="builder-public-page">{% include "store/partials/builder_blocks.html" with blocks=builder_structure %}</div>{% endif %}
     </main>
 
     {% include "store/partials/footer.html" %}
@@ -39,9 +43,9 @@
     {% include "store/partials/user_drawers.html" %}
     {% include "store/partials/cookie_modal.html" %}
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=41"></script>
     <script src="{% static 'store/js/account.js' %}?v=6"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=21"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
   </body>

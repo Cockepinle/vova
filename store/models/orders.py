@@ -226,6 +226,16 @@ class CustomerRequest(models.Model):
         (STATUS_PROCESSING, "В работе"),
         (STATUS_DONE, "Закрыта"),
     ]
+    TYPE_QUOTE = "quote"
+    TYPE_CALLBACK = "callback"
+    TYPE_SUPPORT = "support"
+    TYPE_OTHER = "other"
+    TYPE_CHOICES = [
+        (TYPE_QUOTE, "Запрос КП"),
+        (TYPE_CALLBACK, "Обратный звонок"),
+        (TYPE_SUPPORT, "Вопрос / поддержка"),
+        (TYPE_OTHER, "Другое"),
+    ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Пользователь", related_name="requests", on_delete=models.SET_NULL, null=True, blank=True)
     name = models.CharField("Имя", max_length=160)
@@ -233,8 +243,12 @@ class CustomerRequest(models.Model):
     email = models.EmailField("Email")
     phone = models.CharField("Телефон", max_length=80, blank=True)
     text = models.TextField("Что нужно")
+    request_type = models.CharField("Тип запроса", max_length=20, choices=TYPE_CHOICES, default=TYPE_QUOTE)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW)
+    attachment = models.FileField("Прикрепленный файл", upload_to="requests/", blank=True)
+    admin_comment = models.TextField("Комментарий администратора", blank=True)
     created_at = models.DateTimeField("Создана", auto_now_add=True)
+    updated_at = models.DateTimeField("Обновлена", auto_now=True)
 
     class Meta:
         verbose_name = "Заявка"

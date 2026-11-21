@@ -96,9 +96,17 @@ class Category(models.Model):
     @property
     def display_image_url(self):
         if self.image_media_id:
-            return self.image_media.file.url
+            try:
+                if self.image_media.file and self.image_media.file.storage.exists(self.image_media.file.name):
+                    return self.image_media.file.url
+            except (OSError, ValueError):
+                pass
         if self.image:
-            return self.image.url
+            try:
+                if self.image.storage.exists(self.image.name):
+                    return self.image.url
+            except (OSError, ValueError):
+                pass
 
         return self.image_url
 
@@ -182,6 +190,21 @@ class Product(models.Model):
     old_price = models.DecimalField("Старая цена", max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField("Единица измерения", max_length=40, default="шт")
     min_quantity = models.PositiveIntegerField("Минимальное количество", default=1)
+    quantity_step = models.PositiveIntegerField("Кратность заказа", default=1)
+    recommended_products = models.ManyToManyField(
+        "self",
+        verbose_name="Рекомендуемые товары",
+        blank=True,
+        symmetrical=False,
+        related_name="recommended_for",
+    )
+    accessory_products = models.ManyToManyField(
+        "self",
+        verbose_name="Сопутствующие товары",
+        blank=True,
+        symmetrical=False,
+        related_name="accessory_for",
+    )
     stock_quantity = models.PositiveIntegerField("Количество на складе", default=0)
     image = models.ImageField("Главное изображение", upload_to="products/", blank=True)
     image_url = models.URLField("Ссылка на главное изображение", blank=True)
@@ -221,17 +244,17 @@ class Product(models.Model):
             or bool(price_inputs.intersection(update_fields))
         )
         if should_recalculate_retail and self.cost_price is not None and self.retail_coefficient is not None:
-            from ..pricing import as_money
-            self.price = as_money(self.cost_price * self.retail_coefficient)
+            from ..pricing import calculate_unit_price
+            self.price = calculate_unit_price(self.cost_price, self.retail_coefficient)
             if update_fields is not None:
                 kwargs["update_fields"] = set(update_fields) | {"price"}
         super().save(*args, **kwargs)
 
     @property
     def display_image_url(self):
-        primary = self.images.select_related("media").filter(is_primary=True).first()
-        if primary and primary.display_url:
-            return primary.display_url
+        for image in self.images.all():
+            if image.is_primary and (not image.media_id or image.media.is_image) and image.display_url:
+                return image.display_url
         if self.image:
             return self.image.url
 

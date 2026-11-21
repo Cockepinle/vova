@@ -1,12 +1,45 @@
 {% extends "store/management/base.html" %}
 {% block heading %}Покупатели и уровни цен{% endblock %}
 {% block content %}
-<form class="mgmt-card" method="post">{% csrf_token %}
-  <div class="card-header"><p class="muted">Индивидуальная цена товара имеет приоритет. Если её нет, применяется выбранный здесь уровень.</p><button class="primary-button" type="submit">Сохранить уровни</button></div>
-  <div class="table-wrap"><table class="mgmt-table"><thead><tr><th>Покупатель</th><th>Компания</th><th>Уровень цен</th></tr></thead><tbody>
-  {% for row in customers %}<tr><td data-label="Покупатель"><strong>{{ row.user.get_full_name|default:row.user.username }}</strong><small>{{ row.user.email }}</small></td><td data-label="Компания">{{ row.profile.company|default:"—" }}</td><td data-label="Уровень цен"><select name="price_level_{{ row.user.id }}">{% for value,label in price_levels %}<option value="{{ value }}" {% if row.price_level == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td></tr>
-  {% empty %}<tr><td colspan="3">Покупателей пока нет.</td></tr>{% endfor %}
-  </tbody></table></div>
-  <div class="form-actions"><button class="primary-button" type="submit">Сохранить уровни</button></div>
-</form>
+<section class="mgmt-card customers-index">
+  <form method="get" class="customer-list-filters">
+    <label><span>Поиск покупателей</span><input type="search" name="q" value="{{ query }}" placeholder="Имя, организация, телефон или email"></label>
+    <label><span>Уровень цен</span><select name="level"><option value="">Все уровни</option>{% for value, label in price_levels %}<option value="{{ value }}" {% if level_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="ghost-button" type="submit">Найти</button>
+    {% if query or level_filter %}<a class="ghost-button" href="{% url 'management_customers' %}">Сбросить</a>{% endif %}
+  </form>
+  <form method="post">
+    {% csrf_token %}
+    <div class="table-wrap">
+      <table class="mgmt-table customer-table">
+        <thead><tr><th>Покупатель</th><th>Организация</th><th>Статус</th><th>Уровень цен</th><th>Карточка</th></tr></thead>
+        <tbody>
+          {% for row in customers %}
+            <tr>
+              <td><a class="customer-name" href="{% url 'management_customer_detail' row.user.pk %}">{{ row.user.get_full_name|default:row.user.username }}</a>{% if row.user.email %}<small>{{ row.user.email }}</small>{% endif %}</td>
+              <td>{{ row.profile.company|default:"—" }}</td>
+              <td>{% if row.profile.status == "active" or not row.profile %}Активен{% elif row.profile.status == "inactive" %}Неактивен{% else %}{{ row.profile.status|default:"—" }}{% endif %}</td>
+              <td>
+                <select aria-label="Уровень цен для {{ row.user.get_full_name|default:row.user.username }}" name="price_level_{{ row.user.pk }}">
+                  {% for value, label in price_levels %}<option value="{{ value }}" {% if row.price_level == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </td>
+              <td><a class="ghost-button" href="{% url 'management_customer_detail' row.user.pk %}">Открыть</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">{% if query or level_filter %}Покупатели по этим условиям не найдены.{% else %}Покупателей пока нет.{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if customers %}<div class="form-actions"><button class="primary-button" type="submit">Сохранить уровни цен</button></div>{% endif %}
+  </form>
+  {% if page.has_other_pages %}
+    <nav class="pagination" aria-label="Страницы списка покупателей">
+      {% if page.has_previous %}<a href="{% querystring page=page.previous_page_number %}">Назад</a>{% endif %}
+      <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a href="{% querystring page=page.next_page_number %}">Далее</a>{% endif %}
+    </nav>
+  {% endif %}
+</section>
 {% endblock %}

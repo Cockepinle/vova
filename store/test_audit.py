@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.core.files.base import ContentFile
 from .cms_forms import SiteSettingsForm
 from .models import Category, Employee, Order, Product, SiteMedia, SiteSettings
-from .views import normalize_quantity
+from .views import is_valid_quantity, normalize_quantity
 
 
 class FormStructure(HTMLParser):
@@ -104,6 +104,19 @@ class SiteAuditTests(TestCase):
         self.assertEqual(normalize_quantity(product, 50), 51)
         self.assertEqual(normalize_quantity(product, 51), 51)
         self.assertEqual(normalize_quantity(product, 52), 52)
+
+    def test_quantity_step_is_independent_and_validated_on_server(self):
+        product = Product.objects.create(
+            category=self.category,
+            name='Кратность 5',
+            price=50,
+            min_quantity=5,
+            quantity_step=5,
+        )
+        self.assertTrue(is_valid_quantity(product, 5))
+        self.assertTrue(is_valid_quantity(product, 10))
+        self.assertTrue(is_valid_quantity(product, 15))
+        self.assertFalse(is_valid_quantity(product, 7))
 
     def test_product_create_and_edit(self):
         self.client.force_login(self.staff)

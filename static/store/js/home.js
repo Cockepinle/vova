@@ -36,12 +36,13 @@ modalMainImage?.addEventListener("click", (event) => {
   event.stopImmediatePropagation();
 }, true);
 
-function changeQuantity(control, delta) {
+function changeQuantity(control, delta, button) {
   const value = control.querySelector(".quantity-input");
   const minimum = Math.max(1, Number(value.getAttribute("min") || 1));
-  const current = Number(value.value) || minimum;
-  value.value = String(Math.max(minimum, current + delta));
-  syncCardQuantity(control);
+  const step = Math.max(1, Number(value.getAttribute("step") || 1));
+  const current = normalizeQuantityValue(value.value, minimum, step);
+  value.value = String(Math.max(minimum, current + (delta > 0 ? step : -step)));
+  syncCardQuantity(control, button);
 }
 
 function getProductFromCard(card) {
@@ -57,14 +58,14 @@ function addToCart(productId, quantity, button) {
   window.addProductToCart(productId, quantity, button);
 }
 
-function syncCardQuantity(control) {
+function syncCardQuantity(control, button = control.querySelector(".quantity-plus")) {
   const modalInfo = control.closest(".modal-info");
   const input = control.querySelector(".quantity-input");
   const minimum = Math.max(1, Number(input ? input.getAttribute("min") : 1));
-  const value = Number(input ? input.value : minimum) || minimum;
+  const value = normalizeQuantityValue(input?.value, minimum, input?.step);
 
   if (modalInfo && typeof window.getProductCartQuantity === "function" && window.getProductCartQuantity(modal.dataset.productId) > 0) {
-    window.setProductCartQuantity(modal.dataset.productId, Math.max(minimum, value));
+    window.setProductCartQuantity(modal.dataset.productId, Math.max(minimum, value), button, input);
     return;
   }
 
@@ -74,7 +75,7 @@ function syncCardQuantity(control) {
     return;
   }
 
-  window.setProductCartQuantity(card.dataset.productId, Math.max(minimum, value));
+  window.setProductCartQuantity(card.dataset.productId, Math.max(minimum, value), button, input);
 }
 
 function setModalImage(index) {
@@ -119,7 +120,7 @@ function openProductModal(product) {
   const cartQuantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
   const modalInput = modal.querySelector(".modal-controls .quantity-input");
   modalInput.min = String(Math.max(1, Number(product.min_quantity) || 1));
-  modalInput.step = "1";
+  modalInput.step = String(Math.max(1, Number(product.quantity_step) || 1));
   const minimum = Math.max(1, Number(modalInput ? modalInput.getAttribute("min") : product.min_quantity || 1));
 
   modalInput.value = String(Math.max(minimum, cartQuantity || Number(cardInput ? cardInput.value : minimum) || minimum));
@@ -191,17 +192,17 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  if (minus && !minus.closest(".cart-drawer")) {
+  if (minus && !minus.closest(".cart-drawer, .favorite-quantity")) {
     event.preventDefault();
     event.stopPropagation();
-    changeQuantity(minus.closest(".quantity-control"), -1);
+    changeQuantity(minus.closest(".quantity-control"), -1, minus);
     return;
   }
 
-  if (plus && !plus.closest(".cart-drawer")) {
+  if (plus && !plus.closest(".cart-drawer, .favorite-quantity")) {
     event.preventDefault();
     event.stopPropagation();
-    changeQuantity(plus.closest(".quantity-control"), 1);
+    changeQuantity(plus.closest(".quantity-control"), 1, plus);
     return;
   }
 
@@ -212,9 +213,8 @@ document.addEventListener("click", (event) => {
     const card = addButton.closest(".product-card");
     const productId = modalInfo ? modal.dataset.productId : card.dataset.productId;
     const quantityInput = addButton.closest(".product-info, .modal-controls").querySelector(".quantity-input");
-    const quantityValue = quantityInput ? quantityInput.value : "1";
-    const minimum = Math.max(1, Number(quantityInput ? quantityInput.getAttribute("min") : 1));
-    const quantity = Math.max(minimum, Number(quantityValue) || minimum);
+    const quantity = normalizeQuantityValue(quantityInput?.value, quantityInput?.min, quantityInput?.step);
+    if (quantityInput) quantityInput.value = String(quantity);
     addToCart(productId, quantity, addButton);
     return;
   }
@@ -251,8 +251,7 @@ document.addEventListener("change", (event) => {
     return;
   }
 
-  const minimum = Math.max(1, Number(quantityInput.getAttribute("min") || 1));
-  quantityInput.value = String(Math.max(minimum, Number(quantityInput.value) || minimum));
+  quantityInput.value = String(normalizeQuantityValue(quantityInput.value, quantityInput.min, quantityInput.step));
   syncCardQuantity(quantityInput.closest(".quantity-control"));
 });
 

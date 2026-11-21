@@ -24,6 +24,7 @@ def create_customer_request(request):
         email=email,
         phone=(payload.get("phone") or "").strip(),
         text=text,
+        request_type=(payload.get("request_type") or CustomerRequest.TYPE_QUOTE),
     )
     notify_manager_safely(
         "Новый запрос на КП",
@@ -159,28 +160,37 @@ def account_verify(request):
 
 @csrf_exempt
 @require_POST
+@transaction.atomic
 def toggle_favorite(request):
     if not request.user.is_authenticated:
         return auth_required_payload()
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
+        product_id = str(payload.get("product_id") or "")
+        desired = payload.get("is_favorite")
+        move = payload.get("move_from_cart", False)
+        if (desired is not None and type(desired) is not bool) or type(move) is not bool or (move and desired is False):
+            raise ValueError
+    except (ValueError, AttributeError):
         return JsonResponse({"error": "Некорректные данные"}, status=400)
 
-    product_id = str(payload.get("product_id") or "")
-    product = get_product(product_id)
+    product = get_product(product_id, with_details=False)
 
     if not product:
         return JsonResponse({"error": "Товар не найден"}, status=404)
 
-    favorite, created = FavoriteItem.objects.get_or_create(user=request.user, product=product)
-
-    if created:
-        is_favorite = True
+    User.objects.select_for_update().get(pk=request.user.pk)
+    if move:
+        desired = True
+    if desired is None:
+        desired = not FavoriteItem.objects.filter(user=request.user, product=product).exists()
+    if desired:
+        FavoriteItem.objects.get_or_create(user=request.user, product=product)
     else:
-        favorite.delete()
-        is_favorite = False
+        FavoriteItem.objects.filter(user=request.user, product=product).delete()
+    if move:
+        CartItem.objects.filter(user=request.user, product=product).delete()
 
     favorites = get_favorite_ids(request)
 
@@ -189,8 +199,9 @@ def toggle_favorite(request):
             "ids": favorites,
             "count": len(favorites),
             "items": [serialize_product(product, request) for product in get_store_products().filter(id__in=favorites)],
-            "is_favorite": is_favorite,
-            "product_id": product_id,
+            "is_favorite": desired,
+            "product_id": str(product.pk),
+            **({"cart": cart_payload(request)} if move else {}),
         }
     )
 

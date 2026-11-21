@@ -1,3 +1,4 @@
+from collections import Counter
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.conf import settings
 from django.db import connection
@@ -89,9 +90,12 @@ def product_specs(product):
 
     return specs
 
-def get_product(product_id):
+def get_product(product_id, *, with_details=True):
     try:
-        product = get_store_products_queryset().get(pk=product_id)
+        products = get_store_products_queryset()
+        if not with_details:
+            products = products.prefetch_related(None).select_related(None)
+        product = products.get(pk=product_id)
         return product
     except (Product.DoesNotExist, ValueError, TypeError):
         return None
@@ -172,17 +176,22 @@ def category_filter_context(category, products, request):
         selected = request.GET.getlist(parameter)
         values = []
         seen = set()
-        rows = ProductAttribute.objects.filter(
-            product__in=products,
-            attribute=attribute,
-        ).select_related("attribute")
         option_rows = ProductAttribute.objects.filter(
             product__in=category_products,
             attribute=attribute,
         ).select_related("attribute")
+        is_choice = attribute.value_type == AttributeDefinition.TYPE_CHOICE
+        configured_choices = {str(value): index for index, value in enumerate(attribute.choices)} if is_choice else {}
+        matching_ids = []
+        selected_values = set(selected)
         for row in option_rows:
-            if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
+            if is_choice:
                 raw_values = row.value_choices or ([row.value_choice] if row.value_choice else [])
+                raw_values = [str(value) for value in raw_values]
+                if configured_choices:
+                    raw_values = [value for value in raw_values if value in configured_choices]
+                if selected_values.intersection(raw_values):
+                    matching_ids.append(row.product_id)
                 row_values = [(value, value) for value in raw_values]
             else:
                 display = row.display_value()
@@ -199,18 +208,11 @@ def category_filter_context(category, products, request):
                         "label": f"{display}{(' ' + attribute.unit) if attribute.unit else ''}",
                         "selected": raw in selected,
                     })
+        if configured_choices:
+            values.sort(key=lambda value: configured_choices[value["value"]])
         if selected:
             valid_selected = [value for value in selected if value in seen]
-            if attribute.filter_type == AttributeDefinition.FILTER_MULTIPLE:
-                matching_ids = [
-                    row.product_id
-                    for row in rows
-                    if set(valid_selected).intersection(
-                        str(value) for value in (
-                            row.value_choices or ([row.value_choice] if row.value_choice else [])
-                        )
-                    )
-                ]
+            if is_choice and valid_selected:
                 products = products.filter(pk__in=matching_ids)
             elif valid_selected:
                 choice_query = Q()
@@ -297,11 +299,24 @@ def get_store_products_queryset():
         .order_by("name")
     )
 
-def product_variants(product):
+def product_variants(product, request=None):
     if not product.variant_group_id:
         return []
     parameters = list(product.variant_group.attributes.all())
-    variants = get_store_products_queryset().filter(variant_group_id=product.variant_group_id)
+    cache = getattr(request, "_catalog_variant_groups", None)
+    if cache is None:
+        cache = {}
+        if request is not None:
+            request._catalog_variant_groups = cache
+    group_id = product.variant_group_id
+    if group_id not in cache:
+        cache[group_id] = list(
+            get_store_products_queryset().filter(variant_group_id=group_id)
+            .select_related(None).prefetch_related(None).prefetch_related("attributes__attribute")
+        )
+    variants = cache[group_id]
+    if all(variant.pk != product.pk for variant in variants):
+        variants = [product, *variants]
     result = []
     for variant in variants:
         values = {value.attribute_id: value for value in variant.attributes.all()}
@@ -315,14 +330,18 @@ def product_variants(product):
         result.append({
             "id": str(variant.pk),
             "name": variant.name,
+            "sku": variant.sku or "",
             "label": " · ".join(labels) or variant.name,
-            "url": reverse("product_detail", args=[variant.slug]),
+            "url": reverse("product_detail", args=[variant.slug]) + ("?preview=1" if variant is product else ""),
             "data_url": reverse("api_product_detail", args=[variant.pk]),
             "current": variant.pk == product.pk,
             "availability": variant.availability,
             "availability_label": variant.get_availability_display(),
             "unavailable": variant.availability == Product.AVAILABILITY_OUT_OF_STOCK,
         })
+    label_counts = Counter(item["label"] for item in result)
+    for item in result:
+        item["show_identity"] = label_counts[item["label"]] > 1
     return result
 
 def safe_site_settings():
@@ -410,6 +429,7 @@ def serialize_product(product, request=None):
     media.extend(item.media for item in product_links if item.media_id and not item.media.is_image)
     media = list({item.pk: item for item in media}.values())
     thumbs.extend(item.file.url for item in media if item.file and item.is_image)
+    thumbs = list(dict.fromkeys(thumbs))
     main_image = main_image or (thumbs[0] if thumbs else static("store/images/no-photo.svg"))
 
     return {
@@ -440,11 +460,12 @@ def serialize_product(product, request=None):
         "description": product.description,
         "price": format_price(resolve_product_price(product, request.user if request else None, customer_prices(request))),
         "unit": product.unit,
-        "min_quantity": product.min_quantity,
+        "min_quantity": max(1, product.min_quantity),
+        "quantity_step": max(1, product.quantity_step),
         "image": main_image,
         "thumbs": thumbs,
         "specs": product_specs(product),
-        "variants": product_variants(product),
+        "variants": product_variants(product, request),
     }
 
 def format_price(value):

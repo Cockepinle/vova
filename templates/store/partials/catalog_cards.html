@@ -1,0 +1,8 @@
+{% for product in products %}
+  {% include "store/partials/catalog_card.html" %}
+{% empty %}
+  <div class="catalog-empty">
+    <h2>{% if search_query %}Ничего не найдено{% else %}В разделе пока нет товаров{% endif %}</h2>
+    <p>{% if search_query %}По запросу «{{ search_query }}» ничего не найдено.{% else %}В этом разделе пока нет карточек.{% endif %}</p>
+  </div>
+{% endfor %}

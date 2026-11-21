@@ -7,12 +7,19 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=35">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=37">
     <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=38">
+    {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
   <body>
     {% include "store/partials/header.html" %}
 
+    {% if builder_structure %}
+      <main class="builder-public-page">
+        {% include "store/partials/builder_blocks.html" with blocks=builder_structure %}
+      </main>
+    {% endif %}
+    {% if not builder_structure or builder_design.append_to_page %}
     <section class="hero">
       {% include "store/partials/hero_media.html" %}
       <div class="hero-overlay"></div>
@@ -31,6 +38,7 @@
         </div>
       </div>
     </section>
+    {% endif %}
 
     <section class="stats-band" aria-label="Показатели компании">
       {% for stat in stats %}
@@ -42,6 +50,7 @@
     </section>
 
     <main>
+      {% include "store/partials/page_content_text.html" %}
       <section class="categories-section" id="catalog">
         <div class="section-header">
           <h2>Категории коробок</h2>
@@ -81,7 +90,7 @@
                     <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
                     <div class="quantity-control" aria-label="Количество">
                       <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                      <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="1" value="{{ cart_quantity|default:product.min_quantity }}" aria-label="Количество товара">
+                      <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.quantity_step|default:1 }}" value="{{ cart_quantity|default:product.min_quantity }}" aria-label="Количество товара">
                       <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
                     </div>
                   </div>
@@ -141,7 +150,7 @@
             <div class="modal-controls">
               <div class="quantity-control" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="1" value="{{ product.min_quantity }}" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.quantity_step|default:1 }}" value="{{ product.min_quantity }}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="add-to-cart modal-add" type="button">В корзину</button>
@@ -159,10 +168,10 @@
       <img class="image-lightbox-img" src="" alt="">
     </div>
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=38"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=41"></script>
     <script src="{% static 'store/js/account.js' %}?v=6"></script>
-    <script src="{% static 'store/js/home.js' %}?v=36"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=18"></script>
+    <script src="{% static 'store/js/home.js' %}?v=41"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=21"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=41"></script>
   </body>

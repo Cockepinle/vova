@@ -1,0 +1,7 @@
+{% if current_page.content_title or current_page.content_subtitle or current_page.content_text %}
+  <section class="managed-page-copy">
+    {% if current_page.content_title %}<h2>{{ current_page.content_title }}</h2>{% endif %}
+    {% if current_page.content_subtitle %}<h3>{{ current_page.content_subtitle }}</h3>{% endif %}
+    {% if current_page.content_text %}<div class="document-note">{{ current_page.content_text|linebreaksbr }}</div>{% endif %}
+  </section>
+{% endif %}

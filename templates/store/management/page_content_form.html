@@ -1,111 +1,37 @@
 {% extends "store/management/base.html" %}
-
-{% block title %}{% if page_content %}{{ page_content.title|default:page_content.get_page_display }}{% else %}Новая страница{% endif %}{% endblock %}
-{% block heading %}{% if page_content %}{{ page_content.title|default:page_content.get_page_display }}{% else %}Новая страница{% endif %}{% endblock %}
-
+{% block title %}{{ page_content|default:"Новая страница" }}{% endblock %}
+{% block heading %}{{ page_content|default:"Новая страница" }}{% endblock %}
 {% block content %}
-<form class="mgmt-card mgmt-form page-editor" method="post" enctype="multipart/form-data" data-page-editor>
+<form class="mgmt-card mgmt-form page-editor site-editor-card" method="post" enctype="multipart/form-data" data-page-editor>
   {% csrf_token %}
-  <div class="page-editor-header">
-    <p class="section-help">Данные вкладок сохраняются одной кнопкой. Переключение вкладок не очищает введённые значения.</p>
-    <div class="form-actions">
-      {% if preview_url %}<a class="ghost-button" href="{{ preview_url }}" target="_blank" rel="noopener noreferrer">Предпросмотр</a>{% endif %}
-      <a class="ghost-button" href="{% url 'management_pages' %}">К списку страниц</a>
-      <button class="primary-button" type="submit">Сохранить</button>
-    </div>
+  <div class="form-actions page-editor-header">
+    <a class="ghost-button" href="{% url 'management_pages' %}?section={{ content_section }}">К списку страниц</a>
+    {% if page_content %}<a class="ghost-button" href="{% url 'management_page_blocks' page_content.pk %}">Информационные блоки</a>{% endif %}
+    {% if preview_url %}<a class="ghost-button" href="{{ preview_url }}" target="_blank" rel="noopener">Открыть страницу ↗</a>{% endif %}
   </div>
-
+  {% if page_content.published_structure and not page_content.published_design.append_to_page and page_content.page != "privacy" and page_content.page != "offer" %}
+    <p class="section-help">На этой странице есть опубликованные информационные блоки. Если текст, баннер или изображение находится в таком блоке, откройте его в разделе «Информационные блоки».</p>
+  {% endif %}
   <div class="page-editor-tabs" role="tablist" aria-label="Настройки страницы">
-    <button type="button" class="page-editor-tab active" role="tab" id="tab-content" aria-selected="true" aria-controls="panel-content" data-page-tab="content">Содержимое</button>
-    <button type="button" class="page-editor-tab" role="tab" id="tab-blocks" aria-selected="false" aria-controls="panel-blocks" data-page-tab="blocks">Общие блоки</button>
-    <button type="button" class="page-editor-tab" role="tab" id="tab-properties" aria-selected="false" aria-controls="panel-properties" data-page-tab="properties">Свойства</button>
-    <button type="button" class="page-editor-tab" role="tab" id="tab-seo" aria-selected="false" aria-controls="panel-seo" data-page-tab="seo">SEO-параметры</button>
-    <button type="button" class="page-editor-tab" role="tab" id="tab-access" aria-selected="false" aria-controls="panel-access" data-page-tab="access">Доступ к странице</button>
+    {% for key, label, fields in tabs %}
+      <button type="button" class="page-editor-tab{% if key == active_tab %} active{% endif %}" role="tab" id="tab-{{ key }}" aria-selected="{% if key == active_tab %}true{% else %}false{% endif %}" aria-controls="panel-{{ key }}" data-page-tab="{{ key }}">{{ label }}</button>
+    {% endfor %}
   </div>
   {{ form.non_field_errors }}
-
-  <section class="page-editor-panel active" id="panel-content" role="tabpanel" aria-labelledby="tab-content" data-page-panel="content">
-    <div class="settings-section">
-      <h2>Содержимое страницы</h2>
-      <p class="section-help">Пустые поля используют готовые значения для системных разделов. Для произвольной страницы заполните заголовок и текст.</p>
-      {% if form.instance.hero_url %}<div class="media-previews"><img src="{{ form.instance.hero_url }}" alt="Главное изображение">{% if form.instance.mobile_hero_media %}<img src="{{ form.instance.mobile_hero_media.file.url }}" alt="Мобильное изображение">{% endif %}</div>{% endif %}
+  {% for key, label, fields in tabs %}
+    <section class="settings-section page-editor-panel{% if key == active_tab %} active{% endif %}" id="panel-{{ key }}" role="tabpanel" aria-labelledby="tab-{{ key }}" data-page-panel="{{ key }}" {% if key != active_tab %}hidden{% endif %}>
       <div class="form-grid">
-        {% for field in form %}
-          {% if field.name == "title" or field.name == "h1" or field.name == "hero_label" or field.name == "subtitle" or field.name == "hero_button_text" or field.name == "hero_button_url" or field.name == "hero_image" or field.name == "hero_image_alt" or field.name == "hero_media" or field.name == "mobile_hero_media" or field.name == "content_title" or field.name == "content_subtitle" or field.name == "content_text" or field.name == "b2b_title" %}
-            <label class="{% if field.name == 'subtitle' or field.name == 'content_text' %}full{% endif %}">
-              <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
-            </label>
+        {% for field in fields %}
+          {% if field.is_hidden %}{{ field }}{{ field.errors }}
+          {% elif field.name == "hero_media" %}
+            {% include "store/management/content_image_field.html" with fallback=form.instance.hero_url remove=form.remove_hero upload=form.hero_image %}
+          {% else %}
+            <label data-page-field="{{ field.name }}" class="{% if field.name == 'content_text' or field.name == 'subtitle' %}full{% endif %}"><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
           {% endif %}
         {% endfor %}
       </div>
-      <p class="section-help">Изображение из медиатеки имеет приоритет над прямой загрузкой. <a href="{% url 'management_media' %}">Открыть медиатеку</a>.</p>
-    </div>
-  </section>
-
-  <section class="page-editor-panel" id="panel-blocks" role="tabpanel" aria-labelledby="tab-blocks" data-page-panel="blocks" hidden>
-    <div class="settings-section">
-      <h2>Общие элементы сайта</h2>
-      <p class="section-help">В проекте общие ссылки управляются через настройки сайта, а изображения и файлы — через медиатеку. Отдельной модели общих контентных блоков сейчас нет, поэтому здесь не показываются фиктивные переключатели.</p>
-      <div class="page-editor-links">
-        <a class="ghost-button" href="{% url 'management_settings' %}">Открыть меню и ссылки сайта</a>
-        <a class="ghost-button" href="{% url 'management_media' %}">Открыть медиатеку</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="page-editor-panel" id="panel-properties" role="tabpanel" aria-labelledby="tab-properties" data-page-panel="properties" hidden>
-    <div class="settings-section">
-      <h2>Тип, адрес и положение</h2>
-      <div class="form-grid">
-        {% for field in form %}
-          {% if field.name == "page_type" or field.name == "page" or field.name == "slug" or field.name == "parent" or field.name == "sort_order" %}
-            <label data-page-field="{{ field.name }}">
-              <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
-            </label>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-
-  <section class="page-editor-panel" id="panel-seo" role="tabpanel" aria-labelledby="tab-seo" data-page-panel="seo" hidden>
-    <div class="settings-section">
-      <h2>Поисковая выдача и Open Graph</h2>
-      <div class="form-grid">
-        {% for field in form %}
-          {% if field.name == "seo_title" or field.name == "meta_description" or field.name == "canonical" or field.name == "og_title" or field.name == "og_description" or field.name == "og_media" %}
-            <label class="{% if field.name == 'meta_description' or field.name == 'og_description' %}full{% endif %}">
-              <span>{{ field.label }}</span>{{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
-            </label>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-
-  <section class="page-editor-panel" id="panel-access" role="tabpanel" aria-labelledby="tab-access" data-page-panel="access" hidden>
-    <div class="settings-section">
-      <h2>Публикация и доступ</h2>
-      <p class="section-help">Для системных страниц настройка видимости управляет использованием их CMS-текстов. Произвольная страница скрывается от посетителей, если публикация отключена.</p>
-      <div class="form-grid">
-        {% for field in form %}
-          {% if field.name == "is_visible" or field.name == "requires_login" or field.name == "noindex" %}
-            <label>
-              <span>{{ field.label }}</span>{{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
-            </label>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </div>
-  </section>
-
-  <div class="form-actions page-editor-footer">
-    <a class="ghost-button" href="{% url 'management_pages' %}">К списку страниц</a>
-    <button class="primary-button" type="submit">Сохранить</button>
-  </div>
+    </section>
+  {% endfor %}
+  <div class="form-actions page-editor-footer"><button class="primary-button" type="submit">Сохранить страницу</button></div>
 </form>
 {% endblock %}

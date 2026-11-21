@@ -7,9 +7,9 @@
     <meta name="robots" content="noindex,nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
-    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=39">
+    <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=45">
   </head>
-  <body>
+  <body data-media-api="{% url 'management_media_api' %}" data-media-upload-api="{% url 'management_media_upload_api' %}">
     <div class="mgmt-shell">
       <aside class="mgmt-sidebar">
         <a class="mgmt-brand" href="{% url 'management_dashboard' %}">
@@ -46,20 +46,24 @@
               <a class="nav-link {% if section == 'customers' %}active{% endif %}" href="{% url 'management_customers' %}" title="Покупатели"><svg class="nav-icon"><use href="#nav-users"/></svg><span class="nav-label">Покупатели</span></a>
             </div>
           </details>
-          <details class="nav-group" {% if section == 'pages' or section == 'media' or section == 'employees' or section == 'requests' or section == 'fields' %}open{% endif %}>
+          <details class="nav-group" {% if section == 'settings' or section == 'pages' or section == 'media' or section == 'employees' or section == 'requests' or section == 'fields' %}open{% endif %}>
             <summary><svg class="nav-icon"><use href="#nav-page"/></svg><span class="nav-label">Управление сайтом</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
-              <a class="nav-link {% if section == 'pages' %}active{% endif %}" href="{% url 'management_pages' %}" title="Страницы"><svg class="nav-icon"><use href="#nav-page"/></svg><span class="nav-label">Страницы</span></a>
+              <a class="nav-link {% if content_section == 'settings' %}active{% endif %}" href="{% url 'management_settings' %}" title="Основные настройки"><svg class="nav-icon"><use href="#nav-settings"/></svg><span class="nav-label">Основные настройки</span></a>
+              <a class="nav-link {% if content_section == 'brand' %}active{% endif %}" href="{% url 'management_settings' %}?tab=brand" title="Логотип и оформление"><svg class="nav-icon"><use href="#nav-image"/></svg><span class="nav-label">Логотип и оформление</span></a>
+              <a class="nav-link {% if content_section == 'banners' %}active{% endif %}" href="{% url 'management_pages' %}?section=banners" title="Баннеры"><svg class="nav-icon"><use href="#nav-image"/></svg><span class="nav-label">Баннеры</span></a>
+              <a class="nav-link {% if content_section == 'texts' %}active{% endif %}" href="{% url 'management_pages' %}" title="Тексты страниц"><svg class="nav-icon"><use href="#nav-page"/></svg><span class="nav-label">Тексты страниц</span></a>
+              <a class="nav-link {% if content_section == 'images' %}active{% endif %}" href="{% url 'management_pages' %}?section=images" title="Изображения страниц"><svg class="nav-icon"><use href="#nav-image"/></svg><span class="nav-label">Изображения страниц</span></a>
+              <a class="nav-link {% if content_section == 'blocks' %}active{% endif %}" href="{% url 'management_pages' %}?section=blocks" title="Информационные блоки"><svg class="nav-icon"><use href="#nav-grid"/></svg><span class="nav-label">Информационные блоки</span></a>
               <a class="nav-link {% if section == 'media' %}active{% endif %}" href="{% url 'management_media' %}" title="Медиатека"><svg class="nav-icon"><use href="#nav-image"/></svg><span class="nav-label">Медиатека</span></a>
               <a class="nav-link {% if section == 'employees' %}active{% endif %}" href="{% url 'management_employees' %}" title="Сотрудники"><svg class="nav-icon"><use href="#nav-users"/></svg><span class="nav-label">Сотрудники</span></a>
               <a class="nav-link {% if section == 'requests' %}active{% endif %}" href="{% url 'management_requests' %}" title="Запросы на КП"><svg class="nav-icon"><use href="#nav-page"/></svg><span class="nav-label">Запросы на КП</span></a>
               <a class="nav-link {% if section == 'fields' %}active{% endif %}" href="{% url 'management_fields' %}" title="Поля товаров"><svg class="nav-icon"><use href="#nav-grid"/></svg><span class="nav-label">Поля товаров</span></a>
             </div>
           </details>
-          <details class="nav-group" {% if section == 'settings' or section == 'payment_methods' or section == 'delivery_methods' %}open{% endif %}>
+          <details class="nav-group" {% if section == 'payment_methods' or section == 'delivery_methods' %}open{% endif %}>
             <summary><svg class="nav-icon"><use href="#nav-settings"/></svg><span class="nav-label">Настройки магазина</span><span class="nav-chevron">⌄</span></summary>
             <div class="nav-group-items">
-              <a class="nav-link {% if section == 'settings' %}active{% endif %}" href="{% url 'management_settings' %}" title="Настройки сайта"><svg class="nav-icon"><use href="#nav-settings"/></svg><span class="nav-label">Настройки сайта</span></a>
               <a class="nav-link {% if section == 'payment_methods' %}active{% endif %}" href="{% url 'management_payment_methods' %}" title="Оплата"><svg class="nav-icon"><use href="#nav-order"/></svg><span class="nav-label">Оплата</span></a>
               <a class="nav-link {% if section == 'delivery_methods' %}active{% endif %}" href="{% url 'management_delivery_methods' %}" title="Доставка"><svg class="nav-icon"><use href="#nav-tools"/></svg><span class="nav-label">Доставка</span></a>
             </div>
@@ -98,6 +102,30 @@
         {% block content %}{% endblock %}
       </main>
     </div>
-    <script src="{% static 'store/js/management.js' %}?v=35"></script>
+    <div class="media-picker" data-media-picker hidden>
+      <div class="media-picker-backdrop" data-media-picker-close></div>
+      <section class="media-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="media-picker-title">
+        <header class="media-picker-header">
+          <h2 id="media-picker-title">Медиатека</h2>
+          <button class="ghost-button" type="button" data-media-picker-close>Закрыть</button>
+        </header>
+        <div class="media-picker-upload">
+          <label class="media-picker-search"><span>Поиск по названию</span><input type="search" data-media-picker-search></label>
+          <label class="file-upload fancy-file">
+            <input type="file" accept="image/*" data-media-picker-upload>
+            <strong>Загрузить с компьютера</strong>
+          </label>
+        </div>
+        <p class="media-picker-status muted" data-media-picker-status role="status"></p>
+        <div class="media-picker-grid" data-media-picker-grid></div>
+        <footer class="media-picker-footer">
+          <span data-media-picker-selection role="status" hidden></span>
+          <button class="primary-button" type="button" data-media-picker-apply hidden>Применить выбор</button>
+        </footer>
+      </section>
+    </div>
+    <script src="{% static 'store/js/media-picker.js' %}?v=2"></script>
+    <script src="{% static 'store/js/management.js' %}?v=39"></script>
+    {% block management_scripts %}{% endblock %}
   </body>
 </html>

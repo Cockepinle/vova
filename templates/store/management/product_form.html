@@ -1,4 +1,5 @@
 {% extends "store/management/base.html" %}
+{% load static %}
 
 {% block heading %}{% if product %}Редактировать товар{% else %}Новый товар{% endif %}{% endblock %}
 
@@ -7,25 +8,15 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for group_title, fields in form.groups %}
+      {% if group_title == "Цены" %}
+      {% include "store/management/product_pricing.html" %}
+      {% else %}
       <section class="mgmt-card form-section">
         <h2>{{ group_title }}</h2>
         {% if group_title == "SEO страницы товара" %}<p class="section-help">SEO влияет на заголовок и описание страницы в поиске. Все поля можно оставить пустыми — сайт подставит название и описание.</p>{% endif %}
         <div class="form-grid">
         {% for field in fields %}
-          {% if field.name == "image" %}
-            <div class="full image-field">
-              <span>Главное изображение</span>
-              {% if product and product.display_image_url %}
-                <img class="current-image-preview" src="{{ product.display_image_url }}" alt="{{ product.name }}">
-              {% endif %}
-              <label class="file-upload fancy-file">
-                {{ field }}
-                <strong>Выбрать файл</strong>
-                <small class="file-name">Файл не выбран</small>
-              </label>
-              {{ field.errors }}
-            </div>
-          {% elif field.name == "variant_group" %}
+          {% if field.name == "variant_group" %}
             <label>
               <span>{{ field.label }}</span>
               {{ field }}
@@ -44,6 +35,7 @@
         {% endfor %}
         </div>
       </section>
+      {% endif %}
     {% endfor %}
 
     <section class="mgmt-card">
@@ -81,7 +73,7 @@
           {% for row in customer_price_rows %}
             <div class="customer-price-row">
               <label class="customer-price-customer"><input class="js-customer-price-toggle" type="checkbox" name="price_customers" value="{{ row.user.id }}" {% if row.selected %}checked{% endif %}><span><strong>{{ row.user.get_full_name|default:row.user.username }}</strong><small>{{ row.user.email|default:row.user.username }} · уровень: {{ row.level_label }}</small></span></label>
-              <label><span>Индивидуальная цена</span><input type="number" min="0" step="0.01" name="customer_price_{{ row.user.id }}" value="{% if row.price != None %}{{ row.price|stringformat:'s' }}{% endif %}" {% if not row.selected %}disabled{% endif %}></label>
+              <label><span>Индивидуальная цена</span><input inputmode="decimal" name="customer_price_{{ row.user.id }}" value="{% if row.price != None %}{{ row.price|stringformat:'s' }}{% endif %}" {% if not row.selected %}disabled{% endif %}></label>
             </div>
           {% empty %}<p class="muted">Нет активных покупателей. Сначала добавьте покупателя.</p>{% endfor %}
         </div>
@@ -89,58 +81,55 @@
       {% else %}<p class="muted">Сначала сохраните товар, затем здесь появится список покупателей.</p>{% endif %}
     </section>
 
-    <section class="mgmt-card">
+    <section class="mgmt-card product-gallery-editor" data-product-gallery>
       <div class="card-header">
-        <h2>Фотографии товара</h2>
+        <div>
+          <h2>Фотографии товара</h2>
+          <p class="muted">Перетащите фотографии или меняйте порядок кнопками со стрелками.</p>
+        </div>
+        <button class="primary-button" type="button" data-gallery-pick>Добавить фотографии</button>
       </div>
-      {% if product and product.images.exists %}
-        <div class="image-actions">
-          <label><input class="js-select-gallery" type="checkbox"> Выбрать все</label>
-          <button class="ghost-button danger-button" type="submit">Удалить выбранные</button>
-        </div>
-        <div class="image-grid">
-          {% for image in product.images.all %}
-            <div class="image-tile">
-              {% if image.display_url %}
-                {% if image.media_id and image.media.is_video %}<video controls preload="metadata" src="{{ image.display_url }}"></video>{% elif image.media_id and not image.media.is_image %}<a href="{{ image.display_url }}" target="_blank" rel="noopener">Открыть файл</a>{% else %}<img src="{{ image.display_url }}" alt="{{ image.alt }}">{% endif %}
-              {% endif %}
-              <label><span>Alt-текст</span><input name="image_alt_{{ image.id }}" value="{{ image.alt }}" maxlength="180"></label>
-              <label><span>Порядок</span><input name="image_order_{{ image.id }}" type="number" min="0" value="{{ image.sort_order }}"></label>
-              {% if not image.media_id or image.media.is_image %}<label class="primary-image-check"><input type="radio" name="primary_image" value="{{ image.id }}" {% if image.is_primary %}checked{% endif %}> Главное изображение</label>{% endif %}
-              <label class="delete-image-check" aria-label="Выбрать фото для удаления">
-                <input type="checkbox" name="delete_images" value="{{ image.id }}">
-                <span></span>
-              </label>
+      {% if gallery_error %}<p class="mgmt-message error">{{ gallery_error }}</p>{% endif %}
+      <input type="hidden" name="gallery_manifest" data-gallery-manifest disabled>
+      <input type="hidden" name="gallery_revision" value="{{ gallery_revision }}">
+      {{ product_gallery|json_script:"product-gallery-items" }}
+      <div class="product-gallery-grid" data-gallery-grid></div>
+      <p class="muted" data-gallery-empty>У товара пока нет фотографий.</p>
+      <details class="product-gallery-url">
+        <summary class="ghost-button">Добавить по ссылке</summary>
+        <label><span>Адрес фотографии</span><input type="text" inputmode="url" data-gallery-url placeholder="https://example.ru/photo.jpg"></label>
+        <button type="button" class="ghost-button" data-gallery-add-url>Добавить</button>
+      </details>
+      <p class="muted" data-gallery-status role="status"></p>
+      <noscript><p class="muted">Для управления фотографиями включите JavaScript.</p></noscript>
+      <template data-gallery-tile>
+        <article class="product-gallery-tile" draggable="true">
+          <a class="product-gallery-photo" data-gallery-open target="_blank" rel="noopener" aria-label="Открыть фотографию крупно">
+            <img alt="" loading="lazy"><span aria-hidden="true">Крупно ↗</span>
+          </a>
+          <span class="product-gallery-primary" data-gallery-badge hidden>Главная</span>
+          <div class="product-gallery-actions">
+            <button type="button" class="ghost-button" data-gallery-primary>Сделать главной</button>
+            <div class="product-gallery-order">
+              <button type="button" class="ghost-button" data-gallery-step="-1" aria-label="Сдвинуть фотографию раньше" title="Сдвинуть раньше">←</button>
+              <button type="button" class="ghost-button" data-gallery-step="1" aria-label="Сдвинуть фотографию позже" title="Сдвинуть позже">→</button>
+              <button type="button" class="ghost-button danger-button" data-gallery-remove>Убрать из товара</button>
             </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="muted">Дополнительных фотографий пока нет.</p>
-      {% endif %}
-      <label class="file-upload fancy-file">
-        <span>Загрузить новые изображения в медиатеку</span>
-        <input type="file" name="gallery_images" accept="image/*" multiple>
-        <strong>Выбрать файлы</strong>
-        <small class="file-name">Файлы не выбраны</small>
-      </label>
-      <label class="image-url-upload">
-        <span>Выбрать файлы из общей медиатеки</span>
-        <select name="gallery_media" multiple size="8">
-          {% for media in media_library %}<option value="{{ media.id }}">{{ media.title }} · {{ media.get_media_type_display }}</option>{% endfor %}
-        </select>
-        <small>Можно выбрать несколько файлов. Повторно загружать их не нужно.</small>
-      </label>
-      <label class="image-url-upload">
-        <span>Или добавить изображения по внешней ссылке</span>
-        <textarea name="gallery_image_urls" rows="3" placeholder="https://site.ru/photo-1.jpg&#10;https://site.ru/photo-2.jpg"></textarea>
-        <small>Каждая ссылка — с новой строки.</small>
-      </label>
+          </div>
+          <label class="product-gallery-alt"><span>Alt-текст</span><input data-gallery-alt maxlength="180"></label>
+        </article>
+      </template>
     </section>
 
-    <p class="full"><a class="ghost-button" href="{% url 'management_media' %}" target="_blank" rel="noopener">Загрузить видео или документ в медиатеку</a></p>
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить</button>
+      {% if preview_slug %}<a class="ghost-button" href="{% url 'product_detail' preview_slug %}?preview=1" target="_blank" rel="noopener">Предпросмотр на сайте</a>{% endif %}
       <a class="ghost-button" href="{% url 'management_products' %}">Отмена</a>
     </div>
   </form>
+{% endblock %}
+
+{% block management_scripts %}
+  <script src="{% static 'store/js/product-gallery.js' %}?v=1"></script>
+  <script src="{% static 'store/js/product-pricing.js' %}?v=1"></script>
 {% endblock %}

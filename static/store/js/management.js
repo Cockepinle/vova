@@ -76,6 +76,32 @@ document.querySelectorAll('.mgmt-table').forEach(table => {
 document.querySelectorAll('.toolbar input, .toolbar select, .bulk-bar select').forEach(input => {
   if (!input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.placeholder || input.options?.[0]?.text || 'Фильтр');
 });
+document.querySelectorAll("[data-filter-library]").forEach((library) => {
+  const search = library.querySelector("[data-filter-search]");
+  const empty = library.querySelector("[data-filter-no-results]");
+  const items = [...library.querySelectorAll("[data-filter-name]")];
+  search?.addEventListener("input", () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    items.forEach(item => { item.hidden = !item.dataset.filterName.includes(query); });
+    empty.hidden = items.some(item => !item.hidden);
+  });
+});
+
+const categorySettings = document.querySelector("[data-category-settings]");
+if (categorySettings) {
+  const snapshot = () => JSON.stringify([...new FormData(categorySettings)].map(([name, value]) => [
+    name, value instanceof File ? [value.name, value.size, value.lastModified] : value,
+  ]));
+  const savedSettings = snapshot();
+  document.querySelector("[data-category-filters]")?.addEventListener("submit", event => {
+    if (snapshot() !== savedSettings && !window.confirm("Изменения категории ещё не сохранены. Продолжить работу с фильтрами?")) {
+      event.preventDefault();
+      return;
+    }
+    const message = event.target.dataset.filterConfirm;
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+}
 
 document.querySelector('[data-add-link]')?.addEventListener('click', () => {
   const total = document.querySelector('#id_links-TOTAL_FORMS');
@@ -148,6 +174,8 @@ document.querySelectorAll(".page-editor-tabs").forEach((tabList) => {
       activate(tabs[next]);
     });
   });
+  const activeTab = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+  if (activeTab) activate(activeTab);
   const firstError = panels.find((panel) => panel.querySelector(".errorlist"));
   if (firstError) {
     const errorTab = tabs.find((tab) => tab.dataset.pageTab === firstError.dataset.pagePanel);
@@ -183,38 +211,6 @@ document.querySelectorAll("[data-page-editor]").forEach((form) => {
 const pageTree = document.querySelector("[data-page-tree]");
 if (pageTree) {
   const search = document.querySelector("[data-page-search]");
-  const status = pageTree.querySelector("[data-page-tree-status]");
-  let draggedNode = null;
-  const directNodes = (list) => [...list.children].filter((child) => child.matches(".page-tree-node"));
-  const setStatus = (message, isError = false) => {
-    status.textContent = message;
-    status.classList.toggle("is-error", isError);
-  };
-  const saveTree = async () => {
-    const items = [...pageTree.querySelectorAll(".page-tree-node")].map((node) => {
-      const list = node.parentElement;
-      const siblings = directNodes(list);
-      return {
-        id: Number(node.dataset.pageId),
-        parent_id: list.dataset.parentId ? Number(list.dataset.parentId) : null,
-        order: siblings.indexOf(node),
-      };
-    });
-    try {
-      const response = await fetch(pageTree.dataset.reorderUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": document.cookie.split("; ").find((cookie) => cookie.startsWith("csrftoken="))?.split("=")[1] || "",
-        },
-        body: JSON.stringify({ items }),
-      });
-      if (!response.ok) throw new Error(await response.text() || "Не удалось сохранить порядок страниц.");
-      setStatus("Порядок и вложенность сохранены.");
-    } catch (error) {
-      setStatus(error.message || "Не удалось сохранить порядок страниц.", true);
-    }
-  };
   const applyFilter = () => {
     const query = (search?.value || "").trim().toLocaleLowerCase();
     const nodes = [...pageTree.querySelectorAll(".page-tree-node")];
@@ -222,7 +218,7 @@ if (pageTree) {
       nodes.forEach((node) => { node.hidden = false; });
       return;
     }
-    const matches = new Set(nodes.filter((node) => node.textContent.toLocaleLowerCase().includes(query)));
+    const matches = new Set(nodes.filter((node) => node.querySelector(":scope > .page-tree-row .page-tree-main")?.textContent.toLocaleLowerCase().includes(query)));
     nodes.forEach((node) => {
       let child = node;
       while (child) {
@@ -263,75 +259,111 @@ if (pageTree) {
     button.textContent = expand ? "Свернуть дерево" : "Развернуть дерево";
   });
 
-  pageTree.querySelectorAll(".page-tree-grip").forEach((grip) => {
-    grip.addEventListener("dragstart", (event) => {
-      if (search?.value.trim()) {
-        event.preventDefault();
-        setStatus("Очистите поиск перед изменением порядка.", true);
+  applyFilter();
+}
+
+(() => {
+  document.querySelectorAll("[data-category-image]").forEach(component => {
+    const mediaField = component.querySelector('[name="image_media"]');
+    const fileInput = component.querySelector('input[type="file"]');
+    const imageUrl = component.querySelector('[name="image_url"]');
+    const preview = component.querySelector("[data-category-image-preview]");
+    const status = component.querySelector("[data-category-image-status]");
+    const removeButton = component.querySelector("[data-category-image-remove]");
+    const removeInput = component.querySelector('[name="remove_image"]');
+    const sources = component.querySelector(".category-image-sources");
+    const summary = component.querySelector("[data-category-image-change]");
+    const library = component.querySelector("[data-category-image-library]");
+    const original = preview.querySelector("img")?.cloneNode();
+    let objectUrl = null;
+
+    const showPreview = (url, alt = "Изображение категории") => {
+      const image = document.createElement(url ? "img" : "span");
+      if (url) {
+        image.className = "current-image-preview";
+        image.src = url;
+        image.alt = alt;
+        image.addEventListener("error", () => {
+          if (image.parentNode !== preview) return;
+          showPreview("");
+          removeButton.hidden = false;
+          status.textContent = "Не удалось показать миниатюру. Проверьте изображение или выберите другое.";
+        }, {once: true});
+      } else {
+        image.textContent = "Изображение не выбрано";
+      }
+      preview.replaceChildren(image);
+      removeButton.hidden = !url;
+      summary.textContent = url ? "Изменить" : "Выбрать изображение";
+    };
+
+    const discardFilePreview = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = null;
+    };
+
+    function selectImage(item) {
+      mediaField.value = String(item.id);
+      discardFilePreview();
+      fileInput.value = "";
+      imageUrl.value = "";
+      removeInput.value = "";
+      showPreview(item.url, item.alt || item.title);
+      status.textContent = "Изображение из медиатеки выбрано. Сохраните категорию.";
+      sources.open = false;
+      summary.focus();
+    }
+    library.addEventListener("click", () => window.openManagementMediaPicker(library, {
+      kind: "image", multiple: false, onSelect: ([item]) => selectImage(item),
+    }));
+    fileInput.addEventListener("change", () => {
+      if (!fileInput.files[0]) return;
+      discardFilePreview();
+      mediaField.value = "";
+      imageUrl.value = "";
+      removeInput.value = "";
+      objectUrl = URL.createObjectURL(fileInput.files[0]);
+      showPreview(objectUrl, "Предпросмотр загруженного изображения");
+      status.textContent = "Файл выбран. Сохраните категорию.";
+      sources.open = false;
+      summary.focus();
+    });
+    imageUrl.addEventListener("change", () => {
+      const url = imageUrl.value.trim();
+      if (!/^https?:\/\//i.test(url)) {
+        if (url) status.textContent = "Введите полный адрес изображения, начиная с http:// или https://.";
+        else if (!fileInput.files.length && !mediaField.value) {
+          if (removeInput.value !== "1" && original) showPreview(original.src, original.alt);
+          else showPreview("");
+        }
         return;
       }
-      draggedNode = grip.closest(".page-tree-node");
-      draggedNode?.classList.add("dragging");
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", draggedNode?.dataset.pageId || "");
+      discardFilePreview();
+      fileInput.value = "";
+      mediaField.value = "";
+      removeInput.value = "";
+      showPreview(url);
+      status.textContent = "Ссылка указана. Сохраните категорию.";
     });
-    grip.addEventListener("dragend", () => {
-      draggedNode?.classList.remove("dragging");
-      pageTree.querySelectorAll(".drop-before,.drop-after,.drop-inside").forEach((node) => {
-        node.classList.remove("drop-before", "drop-after", "drop-inside");
-      });
+    removeButton.addEventListener("click", () => {
+      if (!window.confirm("Убрать изображение у этой категории?")) return;
+      discardFilePreview();
+      fileInput.value = "";
+      mediaField.value = "";
+      imageUrl.value = "";
+      removeInput.value = "1";
+      showPreview("");
+      status.textContent = "Изображение будет убрано после сохранения категории.";
+      summary.focus();
     });
   });
-  pageTree.addEventListener("dragover", (event) => {
-    if (!draggedNode) return;
-    const row = event.target.closest(".page-tree-row");
-    const list = event.target.closest(".page-tree-list");
-    if (!row && !list) return;
-    event.preventDefault();
-    if (row) {
-      const target = row.closest(".page-tree-node");
-      if (!target || target === draggedNode || draggedNode.contains(target)) return;
-      target.classList.remove("drop-before", "drop-after", "drop-inside");
-      const fraction = (event.clientY - row.getBoundingClientRect().top) / row.offsetHeight;
-      target.classList.add(fraction < .25 ? "drop-before" : fraction > .75 ? "drop-after" : "drop-inside");
-    }
-  });
-  pageTree.addEventListener("drop", async (event) => {
-    if (!draggedNode) return;
-    const row = event.target.closest(".page-tree-row");
-    const targetList = event.target.closest(".page-tree-list");
-    event.preventDefault();
-    if (row) {
-      const target = row.closest(".page-tree-node");
-      if (!target || target === draggedNode || draggedNode.contains(target)) return;
-      const fraction = (event.clientY - row.getBoundingClientRect().top) / row.offsetHeight;
-      if (fraction < .25 || fraction > .75) {
-        const siblings = target.parentElement;
-        siblings.insertBefore(draggedNode, fraction < .25 ? target : target.nextSibling);
-      } else {
-        let children = target.querySelector(":scope > .page-tree-list");
-        if (!children) {
-          children = document.createElement("ul");
-          children.className = "page-tree-list";
-          children.dataset.parentId = target.dataset.pageId;
-          target.append(children);
-          const toggle = target.querySelector(":scope > .page-tree-row [data-tree-toggle]");
-          if (toggle) {
-            toggle.hidden = false;
-            toggle.disabled = false;
-          }
-        }
-        children.hidden = false;
-        children.append(draggedNode);
-      }
-    } else if (targetList && !draggedNode.contains(targetList)) {
-      targetList.append(draggedNode);
-    }
-    draggedNode.classList.remove("dragging");
-    pageTree.querySelectorAll(".drop-before,.drop-after,.drop-inside").forEach((node) => {
-      node.classList.remove("drop-before", "drop-after", "drop-inside");
+
+  document.querySelectorAll(".fancy-file input[type='file']").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.files[0]) return;
+      const preview = input.closest(".image-field")?.querySelector("[data-current-preview]");
+      if (!preview) return;
+      preview.innerHTML = `<img class="current-image-preview" src="${URL.createObjectURL(input.files[0])}" alt="Предпросмотр">`;
     });
-    draggedNode = null;
-    await saveTree();
   });
-}
+})();

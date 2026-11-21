@@ -1,9 +1,13 @@
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Count
 
-from .common import ADDITION, AttributeDefinition, CHANGE, Category, CustomerPrice, CustomerPriceFormSet, CustomerProfile, DELETION, Decimal, DynamicProductFieldsForm
-from .common import HttpResponse, InvalidOperation, Paginator, Product, ProductExcelImportForm, ProductForm, ProductImage, Q, SiteMedia, export_products
+from .common import ADDITION, AttributeDefinition, CHANGE, Category, CustomerPrice, CustomerPriceFormSet, CustomerProfile, DELETION, DynamicProductFieldsForm
+from .common import HttpResponse, Paginator, Product, ProductExcelImportForm, ProductForm, ProductImage, Q, SiteMedia, export_products
 from .common import get_object_or_404, get_user_model, import_products, log_change, management_required, messages, redirect, render, require_POST, transaction
-from ..pricing import price_for_level
+from ..pricing import PRICE_LEVELS, price_for_level, quote_for_level
+from ..cms_forms import COEFFICIENT_HELP, parse_individual_price
+from .product_gallery import gallery_rows, initial_gallery, parse_gallery, public_gallery, save_gallery
 
 @management_required
 def product_duplicate(request, product_id):
@@ -93,8 +97,11 @@ def product_excel_export(request):
     return response
 
 @management_required
+@transaction.atomic
 def product_form(request, product_id=None):
-    product = get_object_or_404(Product, pk=product_id) if product_id else None
+    products = Product.objects.select_for_update() if request.method == "POST" else Product.objects.all()
+    product = get_object_or_404(products, pk=product_id) if product_id else None
+    preview_slug = product.slug if product else ""
 
     if request.method == "POST" and "save_customer_prices" in request.POST:
         if not product:
@@ -102,76 +109,69 @@ def product_form(request, product_id=None):
             return redirect("management_product_new")
         customers = get_user_model().objects.filter(is_staff=False, is_active=True)
         selected_ids = {int(value) for value in request.POST.getlist("price_customers") if value.isdigit()}
-        errors = []
-        for customer in customers:
-            if customer.pk not in selected_ids:
-                CustomerPrice.objects.filter(product=product, user=customer).delete()
-                continue
-            raw_price = request.POST.get(f"customer_price_{customer.pk}", "").strip().replace(",", ".")
+        errors, prices = [], {}
+        for customer in customers.filter(pk__in=selected_ids):
             try:
-                price = Decimal(raw_price)
-                if price < 0:
-                    raise ValueError
-            except (InvalidOperation, ValueError):
+                prices[customer.pk] = parse_individual_price(request.POST.get(f"customer_price_{customer.pk}", ""))
+            except ValidationError:
                 errors.append(customer.email or customer.username)
-                continue
-            CustomerPrice.objects.update_or_create(product=product, user=customer, defaults={"price": price})
         if errors:
-            messages.error(request, "Не сохранены цены для покупателей: " + ", ".join(errors))
+            messages.error(request, "Укажите цены с точностью до копеек для покупателей: " + ", ".join(errors))
         else:
+            CustomerPrice.objects.filter(product=product, user__in=customers).exclude(user_id__in=prices).delete()
+            for user_id, price in prices.items():
+                CustomerPrice.objects.update_or_create(product=product, user_id=user_id, defaults={"price": price})
             messages.success(request, "Индивидуальные цены сохранены. Можно продолжать редактирование товара.")
         return redirect("management_product_edit", product_id=product.pk)
 
+    current_gallery = gallery_rows(product)
+    gallery = initial_gallery(current_gallery)
+    gallery_revision = product.updated_at.isoformat() if product else ""
+    gallery_error = ""
     if request.method == "POST":
-        form = ProductForm(request.POST, request.FILES, instance=product)
+        has_gallery = "gallery_manifest" in request.POST
+        has_editor = "gallery_revision" in request.POST
+        existing_media_photos = []
+        if product and has_editor and not has_gallery:
+            existing_media_photos = [media.pk for media in product.media.filter(media_type=SiteMedia.TYPE_IMAGE) if media.is_image]
+        if has_gallery:
+            try:
+                if request.POST.get("gallery_revision") != gallery_revision:
+                    raise ValidationError("Галерея уже изменилась. Обновите страницу перед сохранением.")
+                rows, primary = parse_gallery(request.POST["gallery_manifest"], current_gallery)
+                gallery = public_gallery(rows, primary)
+            except ValidationError as error:
+                gallery_error = error.messages[0]
+        form = ProductForm(request.POST, request.FILES, instance=product, gallery_editor=has_editor or has_gallery)
         dynamic_form = DynamicProductFieldsForm(request.POST, request.FILES, product=product)
-
-        price_formset = CustomerPriceFormSet(request.POST if "prices-TOTAL_FORMS" in request.POST else None, instance=form.instance, prefix="prices")
-        if form.is_valid() and dynamic_form.is_valid() and (not price_formset.is_bound or price_formset.is_valid()):
+        price_formset = CustomerPriceFormSet(
+            request.POST if "prices-TOTAL_FORMS" in request.POST else None,
+            instance=form.instance, prefix="prices",
+        )
+        if form.is_valid() and dynamic_form.is_valid() and (not price_formset.is_bound or price_formset.is_valid()) and not gallery_error:
             is_new = product is None
-            product = form.save()
-            dynamic_form.save(product)
-            if price_formset.is_bound:
-                price_formset.instance = product
-                price_formset.save()
-            ProductImage.objects.filter(product=product, id__in=request.POST.getlist("delete_images")).delete()
-            primary_id = request.POST.get("primary_image")
-            if primary_id:
-                product.images.update(is_primary=False)
-            for product_image in product.images.select_related("media"):
-                product_image.alt = request.POST.get(f"image_alt_{product_image.pk}", product_image.alt).strip()
-                try:
-                    product_image.sort_order = max(0, int(request.POST.get(f"image_order_{product_image.pk}", product_image.sort_order)))
-                except (TypeError, ValueError):
-                    pass
-                if primary_id:
-                    product_image.is_primary = str(product_image.pk) == primary_id
-                product_image.save(update_fields=["alt", "sort_order", "is_primary"])
-            next_order = product.images.count()
-
-            for image in request.FILES.getlist("gallery_images"):
-                media = SiteMedia.objects.create(title=image.name.rsplit(".", 1)[0], file=image, alt=product.name)
-                ProductImage.objects.create(product=product, media=media, alt=product.name, sort_order=next_order, is_primary=not product.display_image_url)
-                next_order += 1
-
-            for media in SiteMedia.objects.filter(pk__in=request.POST.getlist("gallery_media")):
-                if not ProductImage.objects.filter(product=product, media=media).exists():
-                    ProductImage.objects.create(product=product, media=media, alt=media.alt, sort_order=next_order, is_primary=media.is_image and not product.display_image_url)
-                    next_order += 1
-
-            for image_url in request.POST.get("gallery_image_urls", "").splitlines():
-                image_url = image_url.strip()
-
-                if image_url:
-                    ProductImage.objects.create(product=product, image_url=image_url, alt=product.name, sort_order=next_order, is_primary=not product.display_image_url)
-                    next_order += 1
-
-            log_change(request, product, ADDITION if is_new else CHANGE, "Сохранено через CMS")
-            messages.success(request, "Товар сохранён.")
-            return redirect("management_product_edit", product_id=product.pk)
+            try:
+                with transaction.atomic():
+                    saved = form.save()
+                    dynamic_form.save(saved)
+                    if price_formset.is_bound:
+                        price_formset.instance = saved
+                        price_formset.save()
+                    if has_gallery:
+                        save_gallery(saved, current_gallery, rows, primary)
+                    else:
+                        if existing_media_photos:
+                            saved.media.add(*existing_media_photos)
+                        save_legacy_gallery(saved, request.POST, request.FILES)
+                    log_change(request, saved, ADDITION if is_new else CHANGE, "Сохранено через CMS")
+            except (IntegrityError, ValidationError, OSError):
+                form.add_error(None, "Не удалось сохранить товар. Проверьте, что выбранные файлы и связи доступны.")
+            else:
+                messages.success(request, "Товар сохранён.")
+                return redirect("management_product_edit", product_id=saved.pk)
         messages.error(request, "Проверьте ошибки в форме.")
     else:
-        form = ProductForm(instance=product)
+        form = ProductForm(instance=product, gallery_editor=True)
         dynamic_form = DynamicProductFieldsForm(product=product)
         price_formset = CustomerPriceFormSet(instance=form.instance, prefix="prices")
 
@@ -179,11 +179,21 @@ def product_form(request, product_id=None):
     customer_price_rows = []
     if product:
         for user in get_user_model().objects.filter(is_staff=False, is_active=True).select_related("customer_profile").order_by("email", "username"):
-            try:
-                level_label = user.customer_profile.get_price_level_display()
-            except CustomerProfile.DoesNotExist:
-                level_label = dict(CustomerProfile.PRICE_LEVEL_CHOICES)[CustomerProfile.PRICE_RETAIL]
-            customer_price_rows.append({"user": user, "price": saved_prices.get(user.pk), "selected": user.pk in saved_prices, "level_label": level_label})
+            profile = getattr(user, "customer_profile", None)
+            level = profile.price_level if profile and profile.price_level in PRICE_LEVELS else CustomerProfile.PRICE_RETAIL
+            customer_price_rows.append({
+                "user": user, "price": saved_prices.get(user.pk), "selected": user.pk in saved_prices,
+                "level": level, "level_label": PRICE_LEVELS[level],
+                "coefficient": getattr(profile, f"{level}_coefficient", None),
+            })
+
+    price_rows = [
+        {
+            "level": level, "label": label, "field": form[f"{level}_coefficient"],
+            "quote": quote_for_level(form.instance, level) if form.instance.price is not None else None,
+        }
+        for level, label in CustomerProfile.PRICE_LEVEL_CHOICES
+    ]
 
     return render(
         request,
@@ -194,10 +204,49 @@ def product_form(request, product_id=None):
             "form": form,
             "dynamic_form": dynamic_form,
             "price_formset": price_formset,
-            "media_library": SiteMedia.objects.all(),
+            "product_gallery": gallery,
+            "gallery_revision": gallery_revision,
+            "gallery_error": gallery_error,
             "customer_price_rows": customer_price_rows,
+            "price_rows": price_rows,
+            "coefficient_help": COEFFICIENT_HELP,
+            "preview_slug": preview_slug,
         },
     )
+
+
+def save_legacy_gallery(product, data, files):
+    ProductImage.objects.filter(product=product, id__in=data.getlist("delete_images")).delete()
+    primary_id = data.get("primary_image")
+    if primary_id:
+        product.images.update(is_primary=False)
+    for product_image in product.images.select_related("media"):
+        product_image.alt = data.get(f"image_alt_{product_image.pk}", product_image.alt).strip()
+        try:
+            product_image.sort_order = max(0, int(data.get(f"image_order_{product_image.pk}", product_image.sort_order)))
+        except (TypeError, ValueError):
+            pass
+        if primary_id:
+            product_image.is_primary = str(product_image.pk) == primary_id
+        product_image.save(update_fields=["alt", "sort_order", "is_primary"])
+    next_order = product.images.count()
+
+    for image in files.getlist("gallery_images"):
+        media = SiteMedia.objects.create(title=image.name.rsplit(".", 1)[0], file=image, alt=product.name)
+        ProductImage.objects.create(product=product, media=media, alt=product.name, sort_order=next_order, is_primary=not product.display_image_url)
+        next_order += 1
+
+    for media in SiteMedia.objects.filter(pk__in=data.getlist("gallery_media")):
+        if not ProductImage.objects.filter(product=product, media=media).exists():
+            ProductImage.objects.create(product=product, media=media, alt=media.alt, sort_order=next_order, is_primary=media.is_image and not product.display_image_url)
+            next_order += 1
+
+    for image_url in data.get("gallery_image_urls", "").splitlines():
+        image_url = image_url.strip()
+
+        if image_url:
+            ProductImage.objects.create(product=product, image_url=image_url, alt=product.name, sort_order=next_order, is_primary=not product.display_image_url)
+            next_order += 1
 
 @management_required
 @require_POST

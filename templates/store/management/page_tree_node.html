@@ -1,10 +1,12 @@
-<li class="page-tree-node" data-page-id="{{ node.pk }}" draggable="true">
+<li class="page-tree-node">
   <div class="page-tree-row">
-    <button class="page-tree-toggle" type="button" data-tree-toggle aria-label="Свернуть вложенные страницы" {% if not node.tree_children %}hidden disabled{% endif %}>⌄</button>
-    <button class="page-tree-grip" type="button" draggable="true" aria-label="Перетащить страницу" title="Перетащите, чтобы изменить порядок">⠿</button>
+    <button class="page-tree-toggle" type="button" data-tree-toggle aria-expanded="true" aria-label="Свернуть вложенные страницы" {% if not node.tree_children %}hidden disabled{% endif %}>⌄</button>
     <span class="page-tree-icon" aria-hidden="true">{% if node.page == "home" %}⌂{% else %}▤{% endif %}</span>
+    {% url 'management_page_edit' node.pk as edit_url %}
+    {% url 'management_page_blocks' node.pk as blocks_url %}
+    {% if content_section == "blocks" %}{% firstof blocks_url as target_url %}{% else %}{% firstof edit_url as target_url %}{% endif %}
     <div class="page-tree-main">
-      <a class="page-tree-title" href="{% url 'management_page_edit' node.pk %}">{{ node.display_name }}</a>
+      <a class="page-tree-title" href="{{ target_url }}{% if content_section != "blocks" %}?tab={{ content_section }}{% endif %}">{{ node.display_name }}</a>
       <span class="page-tree-url">{{ node.tree_url|default:"URL не задан" }}</span>
     </div>
     <div class="page-tree-badges">
@@ -14,7 +16,7 @@
     </div>
     <div class="page-tree-actions">
       {% if node.tree_url %}<a href="{{ node.tree_url }}{% if node.is_custom and not node.is_visible %}?preview=1{% endif %}" target="_blank" rel="noopener noreferrer" aria-label="Предпросмотр: {{ node.display_name }}">Предпросмотр</a>{% endif %}
-      <a href="{% url 'management_page_edit' node.pk %}">Изменить</a>
+      <a href="{{ target_url }}{% if content_section != "blocks" %}?tab={{ content_section }}{% endif %}">Изменить</a>
       {% if node.is_custom %}
         <form method="post" action="{% url 'management_page_delete' node.pk %}">
           {% csrf_token %}
@@ -24,7 +26,7 @@
     </div>
   </div>
   {% if node.tree_children %}
-    <ul class="page-tree-list" data-parent-id="{{ node.pk }}">
+    <ul class="page-tree-list">
       {% for page in node.tree_children %}
         {% include "store/management/page_tree_node.html" with node=page %}
       {% endfor %}

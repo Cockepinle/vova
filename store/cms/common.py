@@ -30,7 +30,7 @@ from ..cms_forms import (
     SiteMediaForm,
     SiteLinkFormSet,
 )
-from ..models import AdminLoginAttempt, AttributeDefinition, Category, CustomerPrice, CustomerProfile, CustomerRequest, DeliveryMethod, Employee, Order, PageContent, PaymentMethod, Product, ProductAttribute, ProductImage, Promotion, SiteMedia, SiteSettings, VariantGroup
+from ..models import AdminLoginAttempt, AttributeDefinition, BuilderRevision, Category, CustomerPrice, CustomerProfile, CustomerRequest, DeliveryMethod, Employee, Order, PageContent, PaymentMethod, Product, ProductAttribute, ProductImage, Promotion, SiteMedia, SiteSettings, VariantGroup
 from ..excel import export_products, import_products
 from ..order_export import get_order_exporter
 from ..payments import apply_provider_result

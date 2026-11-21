@@ -12,15 +12,6 @@ function updateFavoriteCounts(count) {
   });
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function renderFavoriteDrawer(items) {
   const container = document.querySelector(".favorite-items");
 
@@ -50,7 +41,7 @@ function renderFavoriteDrawer(items) {
             <div class="favorite-actions">
               <div class="quantity-control favorite-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="${escapeHtml(product.min_quantity || 1)}" step="1" value="${escapeHtml(product.min_quantity || 1)}" aria-label="Количество товара">
+                <input class="quantity-input" type="number" min="${escapeHtml(product.min_quantity || 1)}" step="${escapeHtml(product.quantity_step || 1)}" value="${escapeHtml(product.min_quantity || 1)}" aria-label="Количество товара">
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="favorite-add-cart" type="button">В корзину</button>
@@ -74,6 +65,7 @@ function setFavoriteState(productId, isFavorite) {
 
   document.querySelectorAll(`[data-product-id="${productId}"] .favorite-button`).forEach((button) => {
     button.classList.toggle("is-active", isFavorite);
+    if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(isFavorite));
   });
 
   const modal = document.querySelector(".product-modal");
@@ -96,43 +88,49 @@ function getFavoriteProductId(button) {
   return card ? card.dataset.productId : "";
 }
 
-async function toggleFavorite(productId, button) {
-  if (!productId) {
-    return;
-  }
+let favoriteActionPending = false;
 
+async function toggleFavorite(productId, button) {
+  if (!productId || favoriteActionPending) return;
+
+  const move = button.classList.contains("cart-favorite");
   if (!window.isAuthenticated && typeof window.openAccountDrawer === "function") {
     window.openAccountDrawer("Войдите или зарегистрируйтесь, чтобы добавить товар в избранное.");
     return;
   }
 
-  button.disabled = true;
-
-  const response = await fetch("/favorites/toggle/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    body: JSON.stringify({
+  const updateFavorite = async () => {
+    const favorite = await postStoreAction("/favorites/toggle/", {
       product_id: productId,
-    }),
-  });
+      is_favorite: move || !favoriteProductIds.has(String(productId)),
+      move_from_cart: move,
+    });
+    setFavoriteState(favorite.product_id, favorite.is_favorite);
+    updateFavoriteCounts(favorite.count);
+    renderFavoriteDrawer(favorite.items);
+    if (favorite.cart) applyCartMutation(favorite.cart);
+    const message = move ? "Товар перемещён в избранное"
+      : favorite.is_favorite ? "Товар добавлен в избранное" : "Товар удалён из избранного";
+    notifyStore(message);
+  };
 
-  button.disabled = false;
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (error.auth_required && typeof window.openAccountDrawer === "function") {
-      window.openAccountDrawer(error.error);
+  favoriteActionPending = true;
+  try {
+    if (move) {
+      await runCartAction(button, updateFavorite);
+    } else {
+      const restore = setStoreButtonPending(button);
+      try {
+        await updateFavorite();
+      } finally {
+        restore();
+      }
     }
-    return;
+  } catch (error) {
+    notifyStore(error.message, true);
+  } finally {
+    favoriteActionPending = false;
   }
-
-  const favorite = await response.json();
-  setFavoriteState(favorite.product_id, favorite.is_favorite);
-  updateFavoriteCounts(favorite.count);
-  renderFavoriteDrawer(favorite.items);
 }
 
 window.isProductFavorite = (productId) => favoriteProductIds.has(String(productId));
@@ -184,16 +182,20 @@ document.addEventListener("click", (event) => {
     const control = quantityButton.closest(".favorite-quantity");
     const input = control.querySelector(".quantity-input");
     const minimum = Math.max(1, Number(input.getAttribute("min") || 1));
-    const delta = quantityButton.classList.contains("quantity-plus") ? 1 : -1;
-    input.value = String(Math.max(minimum, Number(input.value || minimum) + delta));
+    const step = Math.max(1, Number(input.getAttribute("step") || 1));
+    const current = normalizeQuantityValue(input.value, minimum, step);
+    const next = quantityButton.classList.contains("quantity-plus")
+      ? current + step
+      : Math.max(minimum, current - step);
+    input.value = String(next);
     return;
   }
 
   if (favoriteAddCart) {
     const item = favoriteAddCart.closest("[data-product-id]");
     const input = item.querySelector(".favorite-quantity .quantity-input");
-    const minimum = Math.max(1, Number(input ? input.getAttribute("min") : 1));
-    const quantity = Math.max(minimum, Number(input ? input.value : minimum) || minimum);
+    const quantity = normalizeQuantityValue(input?.value, input?.min, input?.step);
+    if (input) input.value = String(quantity);
 
     if (typeof window.addProductToCart === "function") {
       window.addProductToCart(item.dataset.productId, quantity, favoriteAddCart);

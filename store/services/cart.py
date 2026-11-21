@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 from ..models import CartItem, Category, DeliveryMethod, PaymentMethod, Product
-from .catalog import decimal_value, format_price, get_product, money, serialize_product
+from .catalog import decimal_value, format_price, get_product, get_store_products_queryset, money, serialize_product
 
 def save_session_cart(request, cart):
     request.session["cart"] = {str(product_id): int(quantity) for product_id, quantity in cart.items() if int(quantity) > 0}
@@ -8,13 +8,26 @@ def save_session_cart(request, cart):
 
 def normalize_quantity(product, quantity):
     minimum = max(1, int(getattr(product, "min_quantity", 1) or 1))
+    step = max(1, int(getattr(product, "quantity_step", 1) or 1))
 
     try:
         quantity = int(quantity)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         quantity = minimum
 
-    return max(minimum, quantity)
+    quantity = max(minimum, quantity)
+    return minimum + ((quantity - minimum + step - 1) // step) * step
+
+def is_valid_quantity(product, quantity):
+    minimum = max(1, int(getattr(product, "min_quantity", 1) or 1))
+    step = max(1, int(getattr(product, "quantity_step", 1) or 1))
+    try:
+        parsed = int(quantity)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if isinstance(quantity, bool) or (not isinstance(quantity, str) and parsed != quantity):
+        return False
+    return parsed >= minimum and (parsed - minimum) % step == 0
 
 def serialize_cart_item(product, quantity, request=None):
     product_data = serialize_product(product, request)
@@ -55,33 +68,27 @@ def clear_user_cart(user):
     CartItem.objects.filter(user=user).delete()
 
 def get_cart_context(request):
-    cart_items = get_cart_items(request)
-    cart_quantities = {item["id"]: item["quantity"] for item in cart_items}
-    cart_total = sum(money(item["line_total"]) for item in cart_items)
-    cart_weight = cart_metric_total(cart_items, "line_weight_kg")
-    cart_volume = cart_metric_total(cart_items, "line_volume_m3")
-
+    cart = cart_payload(request)
     return {
-        "cart_items": cart_items,
-        "cart_quantities": cart_quantities,
-        "cart_count": sum(item["quantity"] for item in cart_items),
-        "cart_total": format_price(cart_total),
-        "cart_weight_kg": decimal_value(cart_weight),
-        "cart_volume_m3": decimal_value(cart_volume),
+        "cart_items": cart["items"],
+        "cart_quantities": {item["id"]: item["quantity"] for item in cart["items"]},
+        "cart_count": cart["count"],
+        "cart_total": cart["total"],
+        "cart_weight_kg": cart["total_weight_kg"],
+        "cart_volume_m3": cart["total_volume_m3"],
         "checkout_initial": get_checkout_initial(request),
         "payment_methods": PaymentMethod.objects.all(),
         "delivery_methods": DeliveryMethod.objects.all(),
     }
 
 def cart_payload(request):
-    cart_context = get_cart_context(request)
-
+    items = get_cart_items(request)
     return {
-        "items": cart_context["cart_items"],
-        "count": cart_context["cart_count"],
-        "total": cart_context["cart_total"],
-        "total_weight_kg": cart_context["cart_weight_kg"],
-        "total_volume_m3": cart_context["cart_volume_m3"],
+        "items": items,
+        "count": sum(item["quantity"] for item in items),
+        "total": format_price(sum(money(item["line_total"]) for item in items)),
+        "total_weight_kg": decimal_value(cart_metric_total(items, "line_weight_kg")),
+        "total_volume_m3": decimal_value(cart_metric_total(items, "line_volume_m3")),
     }
 
 def locked_checkout_snapshot(request):
@@ -94,9 +101,13 @@ def locked_checkout_snapshot(request):
     )
     rows = []
     unavailable_products = []
+    invalid_quantities = []
     for row in cart_rows:
         if row.product.availability == Product.AVAILABILITY_OUT_OF_STOCK:
             unavailable_products.append(row.product.name)
+            continue
+        if not is_valid_quantity(row.product, row.quantity):
+            invalid_quantities.append(row.product.name)
             continue
         quantity = normalize_quantity(row.product, row.quantity)
         if row.quantity != quantity:
@@ -107,6 +118,7 @@ def locked_checkout_snapshot(request):
     return {
         "rows": rows,
         "unavailable_products": unavailable_products,
+        "invalid_quantities": invalid_quantities,
         "total": money(sum((money(item["line_total"]) for item in items), Decimal("0"))),
         "weight": cart_metric_total(items, "line_weight_kg"),
         "volume": cart_metric_total(items, "line_volume_m3"),
@@ -138,7 +150,7 @@ def merge_session_cart_to_user(request, user):
             continue
 
         item, _ = CartItem.objects.get_or_create(user=user, product=product, defaults={"quantity": 0})
-        item.quantity += normalize_quantity(product, quantity)
+        item.quantity = normalize_quantity(product, item.quantity + normalize_quantity(product, quantity))
         item.save(update_fields=["quantity", "updated_at"])
 
     request.session["cart"] = {}
@@ -160,8 +172,8 @@ def get_cart_items(request):
     if request.user.is_authenticated:
         cart_items = (
             CartItem.objects.filter(user=request.user, product__status=Product.STATUS_PUBLISHED, product__category_id__in=Category.visible_ids())
-            .select_related("product__category")
-            .prefetch_related("product__images", "product__media", "product__attributes__attribute")
+            .select_related("product__category", "product__variant_group")
+            .prefetch_related("product__images__media", "product__media", "product__attributes__attribute", "product__variant_group__attributes")
         )
 
         for item in cart_items:
@@ -174,9 +186,16 @@ def get_cart_items(request):
         return items
 
     session_cart = get_session_cart(request)
+    if not session_cart:
+        return items
+    product_ids = {
+        pk: int(pk) for pk in session_cart
+        if str(pk).isascii() and str(pk).isdecimal() and len(str(pk)) <= 19 and int(pk) < 2**63
+    }
+    products = get_store_products_queryset().in_bulk(product_ids.values())
     normalized_session_cart = dict(session_cart)
     for product_id, quantity in session_cart.items():
-        product = get_product(product_id)
+        product = products.get(product_ids.get(product_id))
 
         if product:
             normalized_quantity = normalize_quantity(product, quantity)

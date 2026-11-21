@@ -37,8 +37,8 @@
             {% for request_item in page %}
               <tr>
                 <td><input type="checkbox" name="ids" value="{{ request_item.id }}"></td>
-                <td>{{ request_item.created_at|date:"d.m.Y H:i" }}</td>
-                <td><strong>{{ request_item.name }}</strong><br>{{ request_item.company }}</td>
+                <td><a href="{% url 'management_request_detail' request_item.id %}">{{ request_item.created_at|date:"d.m.Y H:i" }}</a></td>
+                <td><a href="{% url 'management_request_detail' request_item.id %}"><strong>{{ request_item.name }}</strong></a><br>{{ request_item.company|default:"—" }}</td>
                 <td>
                   <a href="mailto:{{ request_item.email }}">{{ request_item.email }}</a>
                   {% if request_item.phone %}<br><a href="tel:{{ request_item.phone }}">{{ request_item.phone }}</a>{% endif %}

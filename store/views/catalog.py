@@ -1,9 +1,14 @@
 from urllib.parse import urlencode
 
+from django.template.loader import render_to_string
+from django.views.decorators.cache import never_cache
+
 from .common import ADVANTAGES, Category, Employee, JsonResponse, PageContent, Product, Promotion, SiteSettings, apply_common_context, category_filter_context, get_home_stats
-from .common import customer_prices, format_price, get_object_or_404, get_store_categories, get_store_products, product_image_url, product_search, product_specs, product_variants, render, require_GET, reverse, safe_site_setting, safe_site_settings, serialize_product
+from .common import customer_prices, format_price, get_object_or_404, get_store_categories, get_store_products, get_store_products_queryset, product_image_url, product_search, render, require_GET, reverse, safe_site_setting, safe_site_settings, serialize_product
 from .common import settings, sort_products
 from ..pricing import resolve_product_price
+from ..services.accounts import get_favorite_ids
+from ..services.cart import get_cart_context
 
 @require_GET
 def api_categories(request):
@@ -165,7 +170,11 @@ def home(request):
 
 def custom_page(request, slug):
     page = get_object_or_404(PageContent, is_custom=True, slug=slug)
-    preview = request.GET.get("preview") == "1" and request.user.is_authenticated and request.user.is_staff
+    preview = (
+        request.GET.get("preview") == "1"
+        and request.user.is_authenticated
+        and request.user.is_staff
+    )
     if not page.is_visible and not preview:
         from django.http import Http404
         raise Http404
@@ -180,6 +189,10 @@ def custom_page(request, slug):
     }
     apply_common_context(request, context)
     context["current_page"] = page
+    if preview:
+        draft = request.GET.get("preview_builder") == "1"
+        context["builder_structure"] = page.draft_structure if draft else page.published_structure
+        context["builder_design"] = page.draft_design if draft else page.published_design
     from ..seo import metadata
     context["seo"] = metadata(request, SiteSettings.get_solo(), {"custom_page": page})
     return render(request, "store/custom_page.html", context)
@@ -198,6 +211,7 @@ def team(request):
         context,
     )
 
+@never_cache
 def catalog(request, slug=None):
     search_query = " ".join(request.GET.get("q", "").split())
     requested_category = request.GET.get("category")
@@ -215,8 +229,20 @@ def catalog(request, slug=None):
     categories = get_store_categories()
 
     detail_product = None
+    detail_is_hidden = False
     if slug:
-        detail_product = get_object_or_404(products, slug=slug)
+        preview = request.GET.get("preview") == "1" and request.user.is_authenticated and request.user.is_staff
+        if preview:
+            detail_product = get_object_or_404(
+                Product.objects.select_related("category__parent", "variant_group")
+                .prefetch_related("images__media", "media", "attributes__attribute", "variant_group__attributes"),
+                slug=slug,
+            )
+            detail_is_hidden = not products.filter(pk=detail_product.pk).exists()
+        else:
+            detail_product = get_object_or_404(products, slug=slug)
+        request._product_page = detail_product
+        request._product_preview = preview
         active_category = detail_product.category.slug
         search_category = active_category
 
@@ -236,10 +262,7 @@ def catalog(request, slug=None):
     else:
         catalog_filters = []
 
-    if slug:
-        products = products.filter(pk=detail_product.pk)
-
-    product_items = [serialize_product(product, request) for product in products]
+    product_items = [] if slug else [serialize_product(product, request) for product in products]
     query_names = {
         "q", "category", "scope", "hits", "sort", "price_min",
         "price_max", "availability",
@@ -331,6 +354,38 @@ def catalog(request, slug=None):
     else:
         page = getattr(content_page, "h1", "") or page_title
 
+    recommended_items = []
+    accessory_items = []
+    detail_data = {}
+    detail_gallery_images = []
+    if detail_product:
+        detail_data = serialize_product(detail_product, request)
+        image_alts = {}
+        for product_image in detail_product.images.all():
+            if not product_image.display_url or (
+                product_image.media_id and not product_image.media.is_image
+            ):
+                continue
+            image_alts.setdefault(
+                product_image.display_url,
+                product_image.alt or getattr(product_image.media, "alt", "") or detail_product.name,
+            )
+        for media in detail_product.media.all():
+            if media.file and media.is_image:
+                image_alts.setdefault(media.file.url, media.alt or detail_product.name)
+        gallery_urls = detail_data["thumbs"] or [detail_data["image"]]
+        detail_gallery_images = [
+            {"url": image_url, "alt": image_alts.get(image_url, detail_product.name)}
+            for image_url in gallery_urls
+        ]
+        related_products = get_store_products_queryset().exclude(pk=detail_product.pk)
+        recommended_items = list(related_products.filter(recommended_for=detail_product)[:8])
+        if not recommended_items:
+            recommended_items = list(
+                related_products.filter(category=detail_product.category)[:8]
+            )
+        accessory_items = list(related_products.filter(accessory_for=detail_product)[:8])
+
     context = {
         "categories": categories,
         "category_tree": category_roots,
@@ -339,8 +394,18 @@ def catalog(request, slug=None):
         "selected_category": selected,
         "products": product_items,
         "detail_product": detail_product,
-        "detail_variants": product_variants(detail_product) if detail_product else [],
-        "detail_specs": product_specs(detail_product) if detail_product else [],
+        "detail_data": detail_data,
+        "detail_is_hidden": detail_is_hidden,
+        "detail_can_purchase": not detail_is_hidden and detail_data.get("can_purchase", False),
+        "detail_gallery_images": detail_gallery_images,
+        "detail_variants": detail_data.get("variants", []),
+        "detail_specs": detail_data.get("specs", []),
+        "recommended_items": [
+            serialize_product(item, request) for item in recommended_items
+        ],
+        "accessory_items": [
+            serialize_product(item, request) for item in accessory_items
+        ],
         "active_category": active_category,
         "search_category": search_category,
         "only_hits": only_hits,
@@ -439,14 +504,16 @@ def catalog(request, slug=None):
     context["active_filter_tags"] = active_filter_tags
     context["active_filter_count"] = len(active_filter_tags)
     apply_common_context(request, context)
+    if detail_product:
+        context["detail_cart_quantity"] = context["cart_quantities"].get(detail_data["id"], 0)
 
-    return render(
-        request,
-        "store/catalog.html",
-        context,
-    )
+    response = render(request, "store/catalog.html", context)
+    if slug and preview:
+        response["X-Robots-Tag"] = "noindex"
+    return response
 
 @require_GET
+@never_cache
 def api_products(request):
     products = get_store_products()
     category = request.GET.get("category")
@@ -469,7 +536,19 @@ def api_products(request):
     from ..seo import metadata
     config = SiteSettings.get_solo()
     pages = {page.page: page for page in PageContent.objects.filter(is_visible=True)}
-    return JsonResponse({"products": [serialize_product(product, request) for product in products], "seo": metadata(request, config, pages)})
+    items = [serialize_product(product, request) for product in products]
+    payload = {"seo": metadata(request, config, pages)}
+    if request.GET.get("cards") == "1":
+        payload["count"] = len(items)
+        payload["cards_html"] = render_to_string("store/partials/catalog_cards.html", {
+            "products": items,
+            "cart_quantities": get_cart_context(request)["cart_quantities"],
+            "favorite_ids": get_favorite_ids(request),
+            "search_query": query,
+        })
+    else:
+        payload["products"] = items
+    return JsonResponse(payload)
 
 @require_GET
 def api_product_suggestions(request):

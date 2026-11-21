@@ -1,0 +1,56 @@
+<section class="mgmt-card form-section product-pricing" data-product-pricing>
+  <h2>Цены</h2>
+  <div class="form-grid pricing-bases">
+    {% for field in fields %}
+      {% if field.name == 'cost_price' or field.name == 'price' %}
+        <label><span {% if field.name == 'price' %}data-retail-price-label{% endif %}>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <p class="section-help">{{ coefficient_help }} Цена округляется до копеек.</p>
+  <div class="pricing-levels">
+    {% for row in price_rows %}
+      <div class="pricing-level" data-price-level="{{ row.level }}">
+        <h3>{{ row.label }}</h3>
+        <label><span>{{ row.field.label }}</span>{{ row.field }}{{ row.field.errors }}</label>
+        <div class="pricing-calculation">
+          <span>Расчётная цена</span>
+          <output data-level-amount>{% if row.quote %}{{ row.quote.amount }} ₽{% else %}—{% endif %}</output>
+          <small data-level-formula>
+            {% if row.quote and row.quote.level != row.level %}По розничной цене
+            {% elif row.quote.coefficient != None and row.quote %}Базовая цена × {{ row.quote.coefficient }}
+            {% elif row.quote %}Вручную
+            {% endif %}
+          </small>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="pricing-buyer">
+    <label>
+      <span>Итоговая цена для покупателя</span>
+      <select data-price-buyer>
+        <option value="" data-level="retail">Гость · розничная цена</option>
+        {% for row in customer_price_rows %}
+          <option value="{{ row.user.pk }}" data-level="{{ row.level }}"
+                  data-coefficient="{{ row.coefficient|default_if_none:''|stringformat:'s' }}"
+                  data-individual="{{ row.price|default_if_none:''|stringformat:'s' }}">
+            {{ row.user.get_full_name|default:row.user.email|default:row.user.username }} · {{ row.level_label }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="pricing-calculation" aria-live="polite">
+      <output data-buyer-amount>{% if price_rows.0.quote %}{{ price_rows.0.quote.amount }} ₽{% else %}—{% endif %}</output>
+      <small data-buyer-formula></small>
+    </div>
+  </div>
+  <p class="section-help">Сохранённая индивидуальная цена имеет приоритет. Затем используется коэффициент клиента для его уровня, затем коэффициент товара. Если расчёт для опта или спеццены недоступен, применяется розничная цена товара.</p>
+  <div class="form-grid pricing-extra">
+    {% for field in fields %}
+      {% if field.name == 'vat_rate' or field.name == 'old_price' %}
+        <label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>

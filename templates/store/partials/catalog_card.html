@@ -1,0 +1,32 @@
+{% load store_extras %}
+{% with cart_quantity=cart_quantities|get_item:product.id %}
+<article class="catalog-card {% if cart_quantity %}is-in-cart{% endif %}" data-product-id="{{ product.id }}" data-product='{{ product|to_json }}'>
+  <div class="catalog-card-image">
+    <div class="catalog-card-badges">{% for badge in product.badges %}<span class="hit-badge">{{ badge }}</span>{% endfor %}</div>
+    <a class="open-product" href="{{ product.url }}" aria-label="Открыть карточку {{ product.name }}">
+      <img src="{{ product.image }}" alt="{{ product.name }}" loading="lazy" decoding="async">
+    </a>
+    <button class="favorite-button {% if product.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Избранное" aria-pressed="{% if product.id in favorite_ids %}true{% else %}false{% endif %}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+    </button>
+  </div>
+  <div class="catalog-card-info">
+    <h2><a href="{{ product.url }}">{{ product.name }}</a></h2>
+    {% if product.sku %}<span class="product-sku">Артикул {{ product.sku }}</span>{% endif %}
+    <span class="product-availability">{{ product.availability_label }}{% if product.availability == 'in_stock' and product.stock_quantity %} · {{ product.stock_quantity }} {{ product.unit }}{% endif %}</span>
+    {% if product.description %}<p class="product-card-description">{{ product.description|truncatechars:110 }}</p>{% endif %}
+  </div>
+  <div class="catalog-card-buy">
+    <div class="product-buy-row">
+      <p class="price">{{ product.price }} ₽ <span>/ {{ product.unit }}</span></p>
+      <div class="quantity-control" aria-label="Количество">
+        <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not product.can_purchase %}disabled{% endif %}>−</button>
+        <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.quantity_step }}" value="{{ cart_quantity|default:product.min_quantity }}" aria-label="Количество товара" {% if not product.can_purchase %}disabled{% endif %}>
+        <button class="quantity-plus" type="button" aria-label="Увеличить количество" {% if not product.can_purchase %}disabled{% endif %}>+</button>
+      </div>
+    </div>
+    <button class="add-to-cart" type="button" {% if not product.can_purchase %}data-purchase-disabled disabled{% endif %}>{% if not product.can_purchase %}Нет в наличии{% elif cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
+    <a class="catalog-details-button" href="{{ product.url }}">Подробнее</a>
+  </div>
+</article>
+{% endwith %}

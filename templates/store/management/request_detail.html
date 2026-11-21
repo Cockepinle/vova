@@ -1,0 +1,22 @@
+{% extends "store/management/base.html" %}
+{% block heading %}Запрос №{{ customer_request.pk }}{% endblock %}
+{% block content %}
+<section class="mgmt-card">
+  <dl class="form-grid">
+    <div><dt>Дата</dt><dd>{{ customer_request.created_at|date:"d.m.Y H:i" }}</dd></div>
+    <div><dt>Тип</dt><dd>{{ customer_request.get_request_type_display }}</dd></div>
+    <div><dt>Имя</dt><dd>{{ customer_request.name }}</dd></div>
+    <div><dt>Компания</dt><dd>{{ customer_request.company|default:"—" }}</dd></div>
+    <div><dt>Email</dt><dd><a href="mailto:{{ customer_request.email }}">{{ customer_request.email }}</a></dd></div>
+    <div><dt>Телефон</dt><dd>{% if customer_request.phone %}<a href="tel:{{ customer_request.phone }}">{{ customer_request.phone }}</a>{% else %}—{% endif %}</dd></div>
+  </dl>
+  <h2>Обращение</h2><p>{{ customer_request.text|linebreaksbr }}</p>
+  {% if customer_request.attachment %}<p><a href="{{ customer_request.attachment.url }}" target="_blank" rel="noopener">Прикрепленный файл</a></p>{% endif %}
+</section>
+<form class="mgmt-card mgmt-form" method="post">
+  {% csrf_token %}
+  <label><span>Статус</span><select name="status">{% for value,label in status_choices %}<option value="{{ value }}" {% if customer_request.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label class="full"><span>Комментарий администратора</span><textarea name="admin_comment" rows="5">{{ customer_request.admin_comment }}</textarea></label>
+  <div class="form-actions"><button class="primary-button" type="submit">Сохранить запрос</button><a class="ghost-button" href="{% url 'management_requests' %}">Назад</a></div>
+</form>
+{% endblock %}

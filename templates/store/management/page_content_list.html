@@ -1,12 +1,13 @@
 {% extends "store/management/base.html" %}
 
-{% block title %}Страницы{% endblock %}
-{% block heading %}Страницы{% endblock %}
+{% block title %}{{ content_title }}{% endblock %}
+{% block heading %}{{ content_title }}{% endblock %}
 
 {% block content %}
   <section class="mgmt-card page-manager">
     <div class="page-manager-toolbar">
       <form class="toolbar" method="get" role="search">
+        <input type="hidden" name="section" value="{{ content_section }}">
         <label class="page-search">
           <span class="sr-only">Поиск страниц</span>
           <input type="search" name="q" value="{{ query }}" data-page-search placeholder="Введите адрес или название" autocomplete="off">
@@ -18,16 +19,15 @@
         <a class="primary-button" href="{% url 'management_page_new' %}"><span aria-hidden="true">+</span> Создать страницу</a>
       </div>
     </div>
-    <p class="section-help">Перетаскивайте строки для изменения порядка; перетащите страницу на другую строку, чтобы сделать её вложенной. Системные страницы защищены от удаления.</p>
-    <div class="page-tree" data-page-tree data-reorder-url="{% url 'management_page_reorder' %}">
-      <ul class="page-tree-list" data-parent-id="">
+    <p class="section-help">{% if content_section == "blocks" %}Выберите страницу, чтобы изменить её блоки или опубликовать черновик.{% elif content_section == "banners" %}Выберите страницу, чтобы изменить текст и кнопку баннера.{% elif content_section == "images" %}Выберите страницу, чтобы заменить её изображения.{% else %}Название, адрес, порядок и вложенность можно изменить в настройках страницы.{% endif %}</p>
+    <div class="page-tree" data-page-tree>
+      <ul class="page-tree-list">
         {% for page in page_tree %}
           {% include "store/management/page_tree_node.html" with node=page %}
         {% empty %}
           <li class="page-tree-empty">Страниц пока нет.</li>
         {% endfor %}
       </ul>
-      <p class="page-tree-status" data-page-tree-status role="status" aria-live="polite"></p>
     </div>
   </section>
 {% endblock %}

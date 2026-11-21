@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.forms import formset_factory
 from django.db.models import Q
@@ -6,11 +8,109 @@ from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from uuid import uuid4
 
-from .models import CustomerPrice, AttributeDefinition, Category, DeliveryMethod, Employee, PageContent, PaymentMethod, Product, ProductAttribute, Promotion, SiteMedia, SiteSettings, SiteLink, VariantGroup
+from .models import CustomerPrice, CustomerProfile, AttributeDefinition, Category, DeliveryMethod, Employee, PageContent, PaymentMethod, Product, ProductAttribute, Promotion, SiteMedia, SiteSettings, SiteLink, VariantGroup
 
 
 
 SEO_FIELDS = ["seo_title", "meta_description", "h1", "canonical", "og_title", "og_description", "og_media"]
+
+COEFFICIENT_FIELDS = ("retail_coefficient", "wholesale_coefficient", "special_coefficient")
+COEFFICIENT_HELP = "Например, 1,20 (или 1.20) увеличивает базовую цену на 20%. Допустимо до четырёх знаков после разделителя."
+
+
+class PricingDecimalField(forms.DecimalField):
+    widget = forms.TextInput(attrs={"inputmode": "decimal"})
+
+    def to_python(self, value):
+        if isinstance(value, str):
+            value = value.strip().replace(",", ".")
+            if value and not re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)", value):
+                raise forms.ValidationError("Введите число с запятой или точкой.")
+        return super().to_python(value)
+
+
+def parse_individual_price(raw):
+    from .pricing import as_money
+
+    field = PricingDecimalField(max_digits=12, decimal_places=2, min_value=0)
+    return as_money(field.clean(raw))
+
+
+class CustomerPricingForm(forms.ModelForm):
+    retail_coefficient = PricingDecimalField(max_digits=10, decimal_places=4, min_value=0, required=False, label="Коэффициент розницы")
+    wholesale_coefficient = PricingDecimalField(max_digits=10, decimal_places=4, min_value=0, required=False, label="Коэффициент опта")
+    special_coefficient = PricingDecimalField(max_digits=10, decimal_places=4, min_value=0, required=False, label="Коэффициент спеццены")
+
+    class Meta:
+        model = CustomerProfile
+        fields = ("price_level", *COEFFICIENT_FIELDS)
+
+    def clean(self):
+        from django.db.models import Max
+        from .pricing import MAX_UNIT_PRICE, calculate_unit_price
+
+        data = super().clean()
+        level = data.get("price_level")
+        field = f"{level}_coefficient"
+        coefficient = data.get(field)
+        if coefficient is not None and ("price_level" in self.changed_data or field in self.changed_data):
+            max_cost = Product.objects.aggregate(value=Max("cost_price"))["value"]
+            if max_cost is not None and calculate_unit_price(max_cost, coefficient) > MAX_UNIT_PRICE:
+                self.add_error(field, "Этот коэффициент даёт цену выше допустимого предела для одного из товаров.")
+        return data
+
+
+class CustomerIdentityForm(forms.Form):
+    first_name = forms.CharField(label="Имя", max_length=150, required=False)
+    last_name = forms.CharField(label="Фамилия", max_length=150, required=False)
+    email = forms.EmailField(label="Email", max_length=254, required=False)
+
+    def __init__(self, *args, customer, **kwargs):
+        self.customer = customer
+        super().__init__(*args, initial={name: getattr(customer, name) for name in self.base_fields}, **kwargs)
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].lower()
+        old_email = self.customer.email.lower()
+        self.uses_email_login = self.customer.username.lower() == old_email or self.customer.username.lower() == email
+        if not email and self.uses_email_login:
+            raise forms.ValidationError("Укажите email для входа покупателя.")
+        if self.uses_email_login and len(email) > self.customer._meta.get_field("username").max_length:
+            raise forms.ValidationError("Этот email слишком длинный для входа в аккаунт.")
+        if email and email != old_email:
+            users = type(self.customer).objects.exclude(pk=self.customer.pk)
+            if users.filter(Q(email__iexact=email) | Q(username__iexact=email)).exists():
+                raise forms.ValidationError("Этот email уже используется другим аккаунтом.")
+        return email
+
+    def save(self):
+        fields = ["first_name", "last_name", "email"]
+        for name in fields:
+            setattr(self.customer, name, self.cleaned_data[name])
+        if self.uses_email_login:
+            self.customer.username = self.cleaned_data["email"]
+            fields.append("username")
+        self.customer.save(update_fields=fields)
+
+
+class CustomerDetailsForm(forms.ModelForm):
+    delivery_addresses = forms.CharField(
+        label="Адреса доставки", required=False,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Один адрес на строку"}),
+    )
+
+    class Meta:
+        model = CustomerProfile
+        fields = ("company", "contact_person", "phone", "inn", "kpp", "status", "delivery_addresses", "comment")
+        widgets = {"comment": forms.Textarea(attrs={"rows": 3}), "phone": forms.TextInput(attrs={"type": "tel"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initial["delivery_addresses"] = "\n".join(str(value) for value in (self.instance.delivery_addresses or []))
+        self.fields["status"].widget.attrs["list"] = "customer-statuses"
+
+    def clean_delivery_addresses(self):
+        return [line.strip() for line in self.cleaned_data["delivery_addresses"].splitlines() if line.strip()]
 
 
 def validate_content_link(value):
@@ -24,7 +124,41 @@ def validate_content_link(value):
         raise forms.ValidationError("Допустимы ссылки /catalog/, https://example.ru, mailto: и tel:.")
 
 
+class MediaPickerOption:
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        media = getattr(value, "instance", None)
+        if selected and media and media.file:
+            option["attrs"].update({
+                "data-url": media.file.url, "data-alt": media.alt,
+                "data-type": SiteMedia.TYPE_IMAGE if media.is_image else media.media_type,
+            })
+        return option
+
+
+class MediaPickerSelect(MediaPickerOption, forms.Select):
+    pass
+
+
+class MediaPickerSelectMultiple(MediaPickerOption, forms.SelectMultiple):
+    pass
+
+
+def configure_media_fields(fields):
+    for field in fields.values():
+        if getattr(getattr(field, "queryset", None), "model", None) is not SiteMedia:
+            continue
+        multiple = isinstance(field, forms.ModelMultipleChoiceField)
+        widget_class = MediaPickerSelectMultiple if multiple else MediaPickerSelect
+        field.widget = widget_class({**field.widget.attrs, "data-media-field": "all" if multiple else "image"})
+        field.widget.choices = field.choices
+
+
 class ContentValidationMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        configure_media_fields(self.fields)
+
     def clean(self):
         data = super().clean()
         for name, value in list(data.items()):
@@ -34,8 +168,7 @@ class ContentValidationMixin:
                 except forms.ValidationError as error:
                     self.add_error(name, error)
             if name.endswith("_media") and value:
-                from pathlib import PurePosixPath
-                if PurePosixPath(value.file.name).suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico"}:
+                if not value.is_image:
                     self.add_error(name, "Выберите изображение, а не документ или видео.")
         from urllib.parse import urlsplit
         for name in ["public_url", "canonical"]:
@@ -80,21 +213,31 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
     sku = forms.CharField(label="Артикул", required=False)
     volume_m3 = forms.DecimalField(label="Объём, м³ (автоматически)", required=False, disabled=True, max_digits=36, decimal_places=15)
     new_variant_group = forms.CharField(label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
-    retail_price_preview = forms.DecimalField(label="Розничная цена (расчёт)", required=False, disabled=True, decimal_places=2)
-    wholesale_price_preview = forms.DecimalField(label="Оптовая цена (расчёт)", required=False, disabled=True, decimal_places=2)
-    special_price_preview = forms.DecimalField(label="Спеццена (расчёт)", required=False, disabled=True, decimal_places=2)
+    cost_price = PricingDecimalField(label="Базовая цена (себестоимость)", required=False, max_digits=12, decimal_places=2, min_value=0)
+    price = PricingDecimalField(label="Ручная розничная цена", required=False, max_digits=12, decimal_places=2, min_value=0)
+    retail_coefficient = PricingDecimalField(label="Коэффициент розницы", required=False, max_digits=10, decimal_places=4, min_value=0)
+    wholesale_coefficient = PricingDecimalField(label="Коэффициент опта", required=False, max_digits=10, decimal_places=4, min_value=0)
+    special_coefficient = PricingDecimalField(label="Коэффициент спеццены", required=False, max_digits=10, decimal_places=4, min_value=0)
+    old_price = PricingDecimalField(label="Старая цена", required=False, max_digits=12, decimal_places=2, min_value=0)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, gallery_editor=False, **kwargs):
         super().__init__(*args, **kwargs)
         category_choices(self.fields["category"])
+        if gallery_editor:
+            media = self.fields["media"]
+            media.queryset = media.queryset.exclude(Q(media_type=SiteMedia.TYPE_IMAGE) & ~Q(file__iendswith=".svg"))
+            media.label = "Видео и документы"
+            media.help_text = ""
+            media.widget.attrs["data-media-field"] = "attachment"
         self.fields["volume_m3"].initial = self.instance.volume_m3
-        from .pricing import price_for_level
-        for level in ("retail", "wholesale", "special"):
-            self.fields[f"{level}_price_preview"].initial = price_for_level(self.instance, level)
-        # Older form clients omit newly added tax fields; preserve the stored/default value.
-        if self.is_bound and "vat_rate" not in self.data:
-            self.data = self.data.copy()
-            self.data["vat_rate"] = self.instance.vat_rate
+        for name in ("min_quantity", "quantity_step"):
+            self.fields[name].widget.attrs["min"] = 1
+        if self.is_bound:
+            missing_fields = [name for name in ("vat_rate", "quantity_step", "image_url") if name not in self.data]
+            if missing_fields:
+                self.data = self.data.copy()
+                for name in missing_fields:
+                    self.data[name] = getattr(self.instance, name)
 
         help_texts = {
             "slug": "Часть адреса страницы товара. Например: korobka-330x330-belaya.",
@@ -105,21 +248,31 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "og_title": "Заголовок при публикации ссылки в соцсетях.",
             "og_description": "Описание при публикации ссылки в соцсетях.",
             "og_media": "Изображение из медиатеки для публикации ссылки.",
+            "recommended_products": "Товары для блока «Рекомендуем к этому товару».",
+            "accessory_products": "Товары для блока «С этим товаром покупают».",
+            "cost_price": "От этой суммы рассчитываются цены по коэффициентам.",
+            "price": "Применяется, когда розничный коэффициент не задан. При включённом расчёте здесь хранится рассчитанная розничная цена.",
+            "min_quantity": "Стартовое количество в корзине.",
+            "quantity_step": "Шаг от минимального количества. Например, при минимуме 2 и шаге 3 можно заказать 2, 5 или 8 единиц.",
         }
         for name, help_text in help_texts.items():
             self.fields[name].help_text = help_text
+        if self.instance.pk:
+            for name in ("recommended_products", "accessory_products"):
+                self.fields[name].queryset = self.fields[name].queryset.exclude(pk=self.instance.pk)
 
     @property
     def groups(self):
         sections = [
             ("Основная информация", ["category", "name", "sku", "description", "keywords", "status"]),
-            ("Цены", ["cost_price", "price", "retail_coefficient", "retail_price_preview", "wholesale_coefficient", "wholesale_price_preview", "special_coefficient", "special_price_preview", "old_price", "vat_rate"]),
-            ("Остатки и продажа", ["unit", "min_quantity", "stock_quantity", "availability", "is_hit", "is_new", "is_special"]),
+            ("Цены", ["cost_price", "price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "old_price", "vat_rate"]),
+            ("Остатки и продажа", ["unit", "min_quantity", "quantity_step", "stock_quantity", "availability", "is_hit", "is_new", "is_special"]),
+            ("Связанные товары", ["recommended_products", "accessory_products"]),
             ("Модификации товара", ["variant_group", "new_variant_group"]),
             ("Габариты и вес", ["length_mm", "width_mm", "height_mm", "weight_kg", "volume_m3"]),
             ("SEO страницы товара", ["slug", "h1", "seo_title", "meta_description", "canonical"]),
             ("Отображение ссылки в соцсетях", ["og_title", "og_description", "og_media"]),
-            ("Главное изображение", ["image", "image_url", "media"]),
+            ("Файлы товара", ["media"]),
         ]
         return [(title, [self[name] for name in names]) for title, names in sections]
 
@@ -141,6 +294,9 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "cost_price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "vat_rate", "length_mm", "width_mm", "height_mm", "weight_kg", "media",
             "unit",
             "min_quantity",
+            "quantity_step",
+            "recommended_products",
+            "accessory_products",
             "stock_quantity",
             "image",
             "image_url",
@@ -160,6 +316,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "old_price": "Старая цена",
             "unit": "Единица измерения",
             "min_quantity": "Минимальное количество",
+            "quantity_step": "Кратность заказа",
             "stock_quantity": "Количество на складе",
             "image": "Главное изображение",
             "image_url": "Или ссылка на главное изображение",
@@ -173,12 +330,40 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
         }
 
     def clean(self):
+        from django.db.models import Max
+        from .pricing import MAX_UNIT_PRICE, calculate_unit_price
+
         data = super().clean()
         if data.get("new_variant_group") and data.get("variant_group"):
             self.add_error("new_variant_group", "Выберите существующую группу или создайте новую.")
-        coefficients = [data.get(name) for name in ("retail_coefficient", "wholesale_coefficient", "special_coefficient")]
-        if any(value is not None for value in coefficients) and data.get("cost_price") is None:
+        minimum = data.get("min_quantity")
+        step = data.get("quantity_step")
+        if minimum is not None and minimum < 1:
+            self.add_error("min_quantity", "Минимальное количество должно быть не меньше 1.")
+        if step is not None and step < 1:
+            self.add_error("quantity_step", "Кратность заказа должна быть не меньше 1.")
+        base = data.get("cost_price")
+        coefficients = {name: data.get(name) for name in COEFFICIENT_FIELDS}
+        if base is None and any(value is not None for value in coefficients.values()):
             self.add_error("cost_price", "Укажите себестоимость для расчёта цен по коэффициентам.")
+        if base is not None:
+            for name, coefficient in coefficients.items():
+                if coefficient is not None and calculate_unit_price(base, coefficient) > MAX_UNIT_PRICE:
+                    self.add_error(name, "Расчётная цена превышает допустимый предел.")
+            if "cost_price" in self.changed_data:
+                active_coefficients = CustomerProfile.objects.aggregate(**{
+                    name: Max(name, filter=Q(price_level=name.removesuffix("_coefficient")))
+                    for name in COEFFICIENT_FIELDS
+                })
+                highest = max((value for value in active_coefficients.values() if value is not None), default=None)
+                if highest is not None and calculate_unit_price(base, highest) > MAX_UNIT_PRICE:
+                    self.add_error("cost_price", "С действующим коэффициентом клиента эта базовая цена превышает предел цены товара.")
+        retail = coefficients["retail_coefficient"]
+        if base is not None and retail is not None and "retail_coefficient" in data:
+            self.errors.pop("price", None)
+            data["price"] = calculate_unit_price(base, retail)
+        elif "price" in data and data["price"] is None:
+            self.add_error("price", "Укажите ручную розничную цену или задайте базовую цену и коэффициент розницы.")
         return data
 
     def save(self, commit=True):
@@ -193,11 +378,16 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
 
 
 class CategoryForm(ContentValidationMixin, forms.ModelForm):
+    remove_image = forms.BooleanField(required=False, widget=forms.HiddenInput)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         excluded = self.instance.descendant_ids() if self.instance.pk else ()
         category_choices(self.fields["parent"], excluded)
         self.fields["filter_attributes"].queryset = AttributeDefinition.objects.filter(is_filterable=True, is_visible=True).order_by("sort_order", "name")
+        self.fields["image_media"].widget = forms.HiddenInput()
+        self.original_image = (self.instance.image.name, self.instance.image_media_id, self.instance.image_url)
+        self.fields["sort_order"].required = False
         help_texts = {
             "parent": "Выберите родительскую категорию. Пустое значение создаёт раздел верхнего уровня.",
             "slug": "Часть адреса категории. Например: gofrokarton.",
@@ -213,7 +403,7 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
     def groups(self):
         sections = [
             ("Категория и вложенность", ["name", "parent", "sort_order", "is_active"]),
-            ("Содержимое каталога", ["description", "filter_attributes", "image_media", "image", "image_url"]),
+            ("Содержимое каталога", ["description"]),
             ("SEO категории", ["slug", "h1", "seo_title", "meta_description", "canonical"]),
             ("Отображение ссылки в соцсетях", ["og_title", "og_description", "og_media"]),
         ]
@@ -224,6 +414,43 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
         if values.count() > 5:
             raise forms.ValidationError("Для одной категории можно выбрать не более пяти фильтров.")
         return values
+
+    def clean_image_media(self):
+        media = self.cleaned_data["image_media"]
+        if media and not media.file:
+            raise forms.ValidationError("Выберите изображение с файлом в медиатеке.")
+        return media
+
+    def clean(self):
+        data = super().clean()
+        if data.get("sort_order") is None:
+            data["sort_order"] = self.instance.sort_order
+        if data.get("name") and "slug" in data and not data["slug"]:
+            slug = slugify(data["name"], allow_unicode=True)
+            if not slug:
+                self.add_error("slug", "Укажите адрес категории буквами или цифрами.")
+            else:
+                data["slug"] = slug
+        return data
+
+    def save(self, commit=True):
+        category = super().save(commit=False)
+        image, media_id, url = self.original_image
+        if self.cleaned_data["remove_image"]:
+            category.image, category.image_media_id, category.image_url = "", None, ""
+        elif self.files.get(self.add_prefix("image")):
+            category.image_media_id, category.image_url = None, ""
+        elif self.cleaned_data["image_media"]:
+            category.image, category.image_url = "", ""
+        elif self.cleaned_data["image_url"]:
+            category.image, category.image_media_id = "", None
+        else:
+            category.image, category.image_media_id, category.image_url = image, media_id, url
+        if commit:
+            category.save()
+            if self.add_prefix("filter_attributes") in self.data:
+                self.save_m2m()
+        return category
 
     class Meta:
         model = Category
@@ -253,6 +480,7 @@ class PromotionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        configure_media_fields(self.fields)
         self.fields["starts_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["ends_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["media"].queryset = SiteMedia.objects.order_by("-created_at")
@@ -315,7 +543,9 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
     @property
     def groups(self):
         sections = [
-            ("Компания и бренд", ["site_name", "company_name", "company_inn", "company_kpp", "logo_text", "logo_image", "logo_alt", "logo_media", "favicon_media"]),
+            ("Компания", ["site_name", "company_name", "company_inn", "company_kpp"]),
+            ("Логотип и оформление", ["logo_text", "logo_alt", "logo_media", "favicon_media"]),
+            ("Показатели на главной", [f"stat_{index}_{part}" for index in range(1, 5) for part in ("value", "label")]),
             ("Общие контакты и доставка", ["contact_phone", "contact_email", "contact_email_b2b", "contact_address", "pickup_address", "contact_work_hours"]),
             ("Шапка и основная кнопка", ["header_phone", "header_email", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "cta_label", "cta_url"]),
             ("Подвал и юридическая информация", [name for name in self.fields if name.startswith("footer_")] + ["copyright_text"]),
@@ -332,7 +562,8 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
     class Meta:
         model = SiteSettings
         fields = [
-            "site_name", "logo_text", "logo_media", "favicon_media", "public_url", "seo_description", "og_media", "allow_indexing",
+            "site_name", "logo_text", "logo_media", "favicon_media",
+            *[f"stat_{index}_{part}" for index in range(1, 5) for part in ("value", "label")], "public_url", "seo_description", "og_media", "allow_indexing",
             "cta_label", "cta_url", "show_header_contacts", "show_header_account", "show_header_favorites", "show_header_cta", "footer_extra_text", "footer_legal_text",
             "contact_phone",
             "currency_code", "currency_symbol", "currency_decimals",
@@ -387,6 +618,7 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
 
 
 class PageContentForm(ContentValidationMixin, forms.ModelForm):
+    remove_hero = forms.BooleanField(required=False, widget=forms.HiddenInput())
     page_type = forms.ChoiceField(
         label="Тип страницы",
         choices=[("fixed", "Существующий раздел сайта"), ("custom", "Новая произвольная страница")],
@@ -459,6 +691,14 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
         elif not cleaned_data.get("page"):
             self.add_error("page", "Выберите раздел сайта.")
 
+        if cleaned_data.get("remove_hero"):
+            cleaned_data["hero_image"] = False
+            cleaned_data["hero_media"] = None
+        elif self.files.get("hero_image"):
+            cleaned_data["hero_media"] = None
+        elif cleaned_data.get("hero_media"):
+            cleaned_data["hero_image"] = False
+
         parent = cleaned_data.get("parent")
         if self.instance.pk and parent and parent.pk in self.instance.descendant_ids():
             self.add_error("parent", "Нельзя переместить страницу внутрь неё самой или её потомка.")
@@ -479,7 +719,10 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
             page.slug = None
             page.page = self.cleaned_data["page"]
         if commit:
-            page.save()
+            if page.pk:
+                page.save(update_fields=[*self.Meta.fields, "is_custom", "updated_at"])
+            else:
+                page.save()
             self.save_m2m()
         return page
 
@@ -518,8 +761,11 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
 class SiteMediaForm(forms.ModelForm):
     def clean_file(self):
         from pathlib import PurePosixPath
+        from django.db.models.fields.files import FieldFile
         from PIL import Image
         value = self.cleaned_data["file"]
+        if isinstance(value, FieldFile):
+            return value
         if value.size > 20 * 1024 * 1024:
             raise forms.ValidationError("Размер файла не должен превышать 20 МБ.")
         extension = PurePosixPath(value.name).suffix.lower()
@@ -561,6 +807,7 @@ class AttributeDefinitionForm(forms.ModelForm):
             "value_type",
             "filter_type",
             "unit",
+            "sort_order",
             "is_required",
             "default_value",
             "is_visible",
@@ -571,6 +818,7 @@ class AttributeDefinitionForm(forms.ModelForm):
             "value_type": "Тип данных",
             "filter_type": "Тип фильтра в каталоге",
             "unit": "Единица измерения",
+            "sort_order": "Порядок отображения",
             "is_required": "Обязательное",
             "default_value": "Значение по умолчанию",
             "is_visible": "Видимое",
@@ -579,6 +827,7 @@ class AttributeDefinitionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["sort_order"].required = False
         if self.instance.pk and self.instance.choices:
             self.fields["choices_text"].initial = "\n".join(self.instance.choices)
 
@@ -618,6 +867,37 @@ class AttributeDefinitionForm(forms.ModelForm):
         if commit:
             instance.save()
 
+        return instance
+
+
+class CategoryFilterForm(AttributeDefinitionForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.saved_value_type = self.instance.value_type
+        self.fields["name"].label = "Название фильтра"
+        self.fields["choices_text"].help_text = "Укажите по одному варианту на строку. На витрине появятся варианты, назначенные товарам."
+        self.fields["sort_order"].help_text = "Меньшее число выводит фильтр раньше."
+
+    def clean(self):
+        data = super().clean()
+        if data.get("sort_order") is None:
+            data["sort_order"] = self.instance.sort_order
+        if data.get("name") and not self.instance.slug and not slugify(data["name"], allow_unicode=True):
+            self.add_error("name", "В названии фильтра должны быть буквы или цифры.")
+        if any(len(choice.strip()) > 160 for choice in data.get("choices_text", "").splitlines()):
+            self.add_error("choices_text", "Каждый вариант должен содержать не более 160 символов.")
+        value_type = data.get("value_type")
+        if self.instance.pk and value_type and value_type != self.saved_value_type:
+            if self.instance.product_values.exists() or self.instance.variant_groups.exists():
+                self.add_error("value_type", "Этот тип уже используется в товарах или модификациях. Создайте новый фильтр для другого типа данных.")
+        return data
+
+    def save(self, commit=True):
+        show_in_table = self.instance.show_in_table
+        instance = super().save(commit=False)
+        instance.show_in_table = show_in_table
+        if commit:
+            instance.save()
         return instance
 
 
@@ -709,6 +989,7 @@ class DynamicProductFieldsForm(forms.Form):
 
         if product and product.pk:
             values = {value.attribute_id: value for value in product.attributes.select_related("attribute")}
+        self.existing_value_ids = values.keys()
 
         for definition in self.definitions:
             field_name = f"field_{definition.pk}"
@@ -763,17 +1044,22 @@ class DynamicProductFieldsForm(forms.Form):
         if definition.value_type == AttributeDefinition.TYPE_DATE:
             return forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_CHOICE:
-            choices = [("", "Не выбрано")] + [(choice, choice) for choice in definition.choices]
+            options = [(choice, choice) for choice in definition.choices]
+            initial_choices = initial if isinstance(initial, list) else [initial]
+            options.extend(
+                (choice, f"{choice} (сохранённое значение)")
+                for choice in initial_choices if choice and choice not in definition.choices
+            )
             if definition.filter_type == AttributeDefinition.FILTER_MULTIPLE:
                 return forms.MultipleChoiceField(
-                    choices=choices[1:],
+                    choices=options,
                     required=definition.is_required,
                     initial=initial,
                     widget=forms.CheckboxSelectMultiple,
                     label=definition.name,
                     help_text=definition.unit,
                 )
-            return forms.ChoiceField(choices=choices, **kwargs)
+            return forms.ChoiceField(choices=[("", "Не выбрано"), *options], **kwargs)
         if definition.value_type == AttributeDefinition.TYPE_IMAGE:
             kwargs["required"] = definition.is_required and not initial
             return forms.FileField(**kwargs)
@@ -789,6 +1075,9 @@ class DynamicProductFieldsForm(forms.Form):
         for definition in self.definitions:
             field_name = f"field_{definition.pk}"
             value = self.cleaned_data.get(field_name)
+            if definition.pk in self.existing_value_ids and definition.value_type == AttributeDefinition.TYPE_CHOICE:
+                if field_name not in self.changed_data:
+                    continue
 
             if value in ["", None, []] and not definition.is_required:
                 ProductAttribute.objects.filter(product=product, attribute=definition).delete()

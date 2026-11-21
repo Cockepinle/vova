@@ -1,5 +1,6 @@
 from decimal import Decimal
 from io import BytesIO
+from tempfile import TemporaryDirectory
 from urllib.parse import unquote
 from unittest.mock import patch
 
@@ -10,11 +11,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from PIL import Image
 
 from .cms_forms import AttributeDefinitionForm, CategoryForm, DynamicProductFieldsForm, ProductForm
 from .excel import BASE_COLUMNS, export_products, import_products
 from .models import (
-    AttributeDefinition, CartItem, Category, CustomerPrice, FavoriteItem, Order, OrderItem,
+    AttributeDefinition, CartItem, Category, CustomerPrice, CustomerProfile, FavoriteItem, Order, OrderItem,
     Product, ProductAttribute, ProductImage, SiteMedia, SiteSettings, VariantGroup,
 )
 
@@ -68,7 +70,7 @@ class CatalogFeaturesTests(TestCase):
         root_response = self.client.get(reverse('catalog'), {'category': self.root.slug})
         self.assertContains(root_response, self.child.name)
         self.assertContains(root_response, reverse('catalog') + '?category=' + self.child.slug)
-        self.assertNotContains(root_response, 'Подробнее')
+        self.assertContains(root_response, 'Подробнее')
         self.assertContains(root_response, root_product.name)
         self.assertNotContains(root_response, child_product.name)
         self.assertNotContains(root_response, self.product.name)
@@ -891,11 +893,328 @@ class CatalogFeaturesTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('parent', form.errors)
 
+    def test_category_media_selection_and_filter_update(self):
+        self.client.force_login(self.staff)
+        self.leaf.image_url = 'https://example.test/old-category.jpg'
+        self.leaf.save(update_fields=['image_url'])
+        color = AttributeDefinition.objects.create(
+            name='Цвет для категории',
+            value_type=AttributeDefinition.TYPE_CHOICE,
+            choices=['Белый', 'Крафт'],
+            is_filterable=True,
+            is_visible=True,
+        )
+        media = SiteMedia.objects.create(
+            title='Фото категории',
+            file=SimpleUploadedFile('category.png', b'png'),
+        )
+        media_response = self.client.get(reverse('management_media_api'))
+        self.assertEqual(media_response.status_code, 200)
+        self.assertIn(media.pk, [item['id'] for item in media_response.json()['items']])
+        api_image = BytesIO()
+        Image.new('RGB', (10, 10)).save(api_image, format='PNG')
+        with TemporaryDirectory() as directory, self.settings(MEDIA_ROOT=directory):
+            upload_response = self.client.post(
+                reverse('management_media_upload_api'),
+                {
+                    'title': 'Фото через медиатеку',
+                    'alt': '',
+                    'file': SimpleUploadedFile(
+                        'media-picker.png',
+                        api_image.getvalue(),
+                        content_type='image/png',
+                    ),
+                },
+            )
+            self.assertEqual(upload_response.status_code, 200, upload_response.content.decode())
+            uploaded_media = SiteMedia.objects.get(pk=upload_response.json()['id'])
+            self.assertTrue(uploaded_media.file.name)
+        image_form_response = self.client.get(
+            reverse('management_category_edit', args=[self.leaf.pk]),
+        )
+        self.assertEqual(image_form_response.status_code, 200)
+        self.assertEqual(
+            image_form_response.content.count(b'class="current-image-preview"'),
+            1,
+        )
+        self.assertContains(image_form_response, 'data-category-image-change')
+        self.assertContains(image_form_response, 'data-category-image-remove')
+        response = self.client.post(
+            reverse('management_category_edit', args=[self.leaf.pk]),
+            {
+                'name': self.leaf.name,
+                'sort_order': '3',
+                'filter_attributes': [str(color.pk)],
+                'image_media': str(media.pk),
+                'is_active': 'on',
+            },
+        )
+        self.assertEqual(response.status_code, 302, response.content.decode())
+        self.leaf.refresh_from_db()
+        self.assertEqual(self.leaf.sort_order, 3)
+        self.assertEqual(self.leaf.image_media_id, media.pk)
+        self.assertEqual(self.leaf.image_url, '')
+        self.assertTrue(self.leaf.filter_attributes.filter(pk=color.pk).exists())
+        image_bytes = BytesIO()
+        Image.new('RGB', (10, 10)).save(image_bytes, format='PNG')
+        with TemporaryDirectory() as directory, self.settings(MEDIA_ROOT=directory):
+            upload_response = self.client.post(
+                reverse('management_category_edit', args=[self.leaf.pk]),
+                {
+                    'name': self.leaf.name,
+                    'sort_order': '3',
+                    'is_active': 'on',
+                    'image_media': '',
+                    'image': SimpleUploadedFile(
+                        'uploaded-category.png',
+                        image_bytes.getvalue(),
+                        content_type='image/png',
+                    ),
+                },
+            )
+            self.assertEqual(upload_response.status_code, 302)
+            self.leaf.refresh_from_db()
+            self.assertIsNone(self.leaf.image_media_id)
+            self.assertTrue(self.leaf.image.name)
+            self.assertEqual(self.leaf.image_url, '')
+
+    def test_category_management_filter_editor_preserves_shared_filter_links(self):
+        self.client.force_login(self.staff)
+        category = self.leaf
+        other_category = Category.objects.create(name='Другая категория для фильтра')
+        AttributeDefinition.objects.create(name='Уже созданный фильтр')
+
+        response = self.client.get(reverse('management_category_edit', args=[category.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Фильтры категории')
+        self.assertContains(response, 'Создать фильтр')
+        self.assertContains(response, 'Привязать существующий фильтр')
+
+        create_response = self.client.post(
+            reverse('management_category_filter_create', args=[category.pk]),
+            {
+                'name': 'Цвет коробки',
+                'value_type': AttributeDefinition.TYPE_CHOICE,
+                'filter_type': AttributeDefinition.FILTER_MULTIPLE,
+                'choices_text': 'Белый\nКрафт',
+                'unit': '',
+                'sort_order': '4',
+                'is_required': '',
+                'default_value': '',
+                'is_visible': 'on',
+                'is_filterable': 'on',
+            },
+        )
+        self.assertEqual(create_response.status_code, 302)
+        field = AttributeDefinition.objects.get(name='Цвет коробки')
+        self.assertEqual(field.choices, ['Белый', 'Крафт'])
+        self.assertEqual(field.sort_order, 4)
+        category.refresh_from_db()
+        self.assertTrue(category.filter_attributes.filter(pk=field.pk).exists())
+        kraft_product = Product.objects.create(
+            category=category, name='Бурая коробка', price=90, status=Product.STATUS_PUBLISHED,
+        )
+        ProductAttribute.objects.create(product=self.product, attribute=field, value_choice='Белый')
+        ProductAttribute.objects.create(product=kraft_product, attribute=field, value_choice='Бурый')
+
+        self.client.post(
+            reverse('management_category_filter_attach', args=[other_category.pk]),
+            {'field_id': str(field.pk)},
+        )
+        edit_response = self.client.post(
+            reverse('management_category_filter_edit', args=[category.pk, field.pk]),
+            {
+                'name': 'Цвет упаковки',
+                'value_type': AttributeDefinition.TYPE_CHOICE,
+                'filter_type': AttributeDefinition.FILTER_SINGLE,
+                'choices_text': 'Белый\nБурый',
+                'unit': '',
+                'sort_order': '2',
+                'is_required': '',
+                'default_value': '',
+                'is_visible': 'on',
+                'is_filterable': 'on',
+            },
+        )
+        self.assertEqual(edit_response.status_code, 302)
+        field.refresh_from_db()
+        self.assertEqual(field.name, 'Цвет упаковки')
+        self.assertEqual(field.choices, ['Белый', 'Бурый'])
+        self.assertEqual(field.sort_order, 2)
+        filtered_response = self.client.get(
+            reverse('catalog'),
+            {'category': category.slug, f'filter_{field.pk}': 'Белый'},
+        )
+        self.assertContains(filtered_response, 'Цвет упаковки')
+        self.assertContains(filtered_response, self.product.name)
+        self.assertNotContains(filtered_response, kraft_product.name)
+
+        self.client.post(
+            reverse('management_category_filter_delete', args=[category.pk, field.pk]),
+        )
+        self.assertTrue(AttributeDefinition.objects.filter(pk=field.pk).exists())
+        self.client.post(
+            reverse('management_category_filter_unlink', args=[category.pk, field.pk]),
+        )
+        self.assertTrue(AttributeDefinition.objects.filter(pk=field.pk).exists())
+        self.assertFalse(category.filter_attributes.filter(pk=field.pk).exists())
+        self.assertTrue(other_category.filter_attributes.filter(pk=field.pk).exists())
+
+        self.client.post(
+            reverse('management_category_filter_delete', args=[other_category.pk, field.pk]),
+        )
+        self.assertTrue(AttributeDefinition.objects.filter(pk=field.pk).exists())
+        ProductAttribute.objects.filter(attribute=field).delete()
+        self.client.post(
+            reverse('management_category_filter_delete', args=[other_category.pk, field.pk]),
+        )
+        self.assertFalse(AttributeDefinition.objects.filter(pk=field.pk).exists())
+
+    def test_category_create_edit_image_clear_and_delete_return_success_responses(self):
+        self.client.force_login(self.staff)
+        category = Category.objects.create(name='Категория без фильтра')
+        field = AttributeDefinition.objects.create(name='Фильтр без формы')
+        category.filter_attributes.add(field)
+
+        create_response = self.client.post(
+            reverse('management_category_new'),
+            {'name': 'Созданная категория', 'is_active': 'on'},
+        )
+        self.assertEqual(create_response.status_code, 302)
+        created = Category.objects.get(name='Созданная категория')
+        self.assertEqual(created.sort_order, 0)
+
+        image_media = SiteMedia.objects.create(
+            title='Выбранное изображение',
+            file=SimpleUploadedFile('category.png', b'png'),
+        )
+        edit_response = self.client.post(
+            reverse('management_category_edit', args=[category.pk]),
+            {
+                'name': category.name,
+                'sort_order': '2',
+                'is_active': 'on',
+                'image_media': str(image_media.pk),
+            },
+        )
+        self.assertEqual(edit_response.status_code, 302)
+        category.refresh_from_db()
+        self.assertEqual(category.image_media_id, image_media.pk)
+        self.assertTrue(category.filter_attributes.filter(pk=field.pk).exists())
+
+        remove_response = self.client.post(
+            reverse('management_category_edit', args=[category.pk]),
+            {
+                'name': category.name,
+                'sort_order': '2',
+                'is_active': 'on',
+                'remove_image': '1',
+            },
+        )
+        self.assertEqual(remove_response.status_code, 302)
+        category.refresh_from_db()
+        self.assertIsNone(category.image_media_id)
+        self.assertEqual(category.image_url, '')
+        self.assertEqual(category.image.name, '')
+
+        delete_response = self.client.post(
+            reverse('management_category_delete', args=[created.pk]),
+        )
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertFalse(Category.objects.filter(pk=created.pk).exists())
+
     def test_category_deletion_keeps_children(self):
         self.client.force_login(self.staff)
         self.client.post(reverse('management_category_delete', args=[self.root.pk]))
         self.assertTrue(Category.objects.filter(pk=self.root.pk).exists())
         self.assertEqual(Category.objects.get(pk=self.child.pk).parent_id, self.root.pk)
+
+    def test_category_filter_editor_preserves_invalid_input_and_product_values(self):
+        self.client.force_login(self.staff)
+        create_url = reverse('management_category_filter_create', args=[self.leaf.pk])
+        response = self.client.post(create_url, {
+            'new-filter-name': 'Новый цвет',
+            'new-filter-value_type': AttributeDefinition.TYPE_CHOICE,
+            'new-filter-filter_type': AttributeDefinition.FILTER_SINGLE,
+        })
+        self.assertContains(response, 'Новый цвет')
+        self.assertContains(response, 'укажите хотя бы один вариант')
+        self.assertContains(response, 'class="filter-create" open')
+        self.assertFalse(AttributeDefinition.objects.filter(name='Новый цвет').exists())
+
+        field = AttributeDefinition.objects.create(
+            name='Цвет', value_type=AttributeDefinition.TYPE_CHOICE,
+            filter_type=AttributeDefinition.FILTER_MULTIPLE, choices=['Белый', 'Синий', 'Старый'],
+        )
+        self.leaf.filter_attributes.add(field)
+        value = ProductAttribute.objects.create(product=self.product, attribute=field, value_choices=['Белый', 'Синий', 'Старый'])
+        edit_url = reverse('management_category_filter_edit', args=[self.leaf.pk, field.pk])
+        prefix = f'filter-{field.pk}-'
+        data = {'name': 'Цвет коробки', 'value_type': AttributeDefinition.TYPE_INTEGER, 'filter_type': AttributeDefinition.FILTER_SINGLE,
+                'choices_text': 'Синий\nБелый', 'sort_order': '3', 'is_visible': 'on', 'is_filterable': 'on'}
+        invalid = self.client.post(edit_url, {prefix + key: entry for key, entry in data.items()})
+        self.assertContains(invalid, 'Этот тип уже используется')
+
+        data['value_type'] = AttributeDefinition.TYPE_CHOICE
+        saved = self.client.post(edit_url, {prefix + key: entry for key, entry in data.items()})
+        self.assertEqual(saved.status_code, 302)
+        value.refresh_from_db()
+        self.assertEqual(value.value_choices, ['Белый', 'Синий', 'Старый'])
+        catalog_url = reverse('catalog')
+        query = {'category': self.leaf.slug, f'filter_{field.pk}': 'Синий'}
+        storefront = self.client.get(catalog_url, query)
+        options = next(item['values'] for item in storefront.context['catalog_filters'] if item.get('parameter') == f'filter_{field.pk}')
+        self.assertEqual([option['value'] for option in options], ['Синий', 'Белый'])
+        api = self.client.get(reverse('api_products'), query).json()
+        self.assertEqual([product['id'] for product in api['products']], [str(self.product.pk)])
+
+        unmodified_product = DynamicProductFieldsForm({f'field_{field.pk}': 'Белый'}, product=self.product)
+        self.assertTrue(unmodified_product.is_valid(), unmodified_product.errors)
+        unmodified_product.save(self.product)
+        value.refresh_from_db()
+        self.assertEqual(value.value_choices, ['Белый', 'Синий', 'Старый'])
+
+    def test_category_image_errors_preserve_current_image_and_remove_keeps_shared_file(self):
+        self.client.force_login(self.staff)
+        edit_url = reverse('management_category_edit', args=[self.leaf.pk])
+        photo = BytesIO()
+        Image.new('RGB', (12, 12)).save(photo, format='PNG')
+        with TemporaryDirectory() as directory, self.settings(MEDIA_ROOT=directory):
+            self.leaf.image.save('shared-category.png', SimpleUploadedFile('shared-category.png', photo.getvalue()))
+            sibling = Category.objects.create(name='Категория с общей фотографией', image=self.leaf.image.name)
+            invalid = self.client.post(edit_url, {'name': self.leaf.name, 'image_media': 'not-an-id'})
+            self.assertContains(invalid, 'Проверьте ошибки в форме категории')
+            self.assertContains(invalid, self.leaf.image.url)
+            removed = self.client.post(edit_url, {'name': self.leaf.name, 'remove_image': '1'})
+            self.assertEqual(removed.status_code, 302)
+            self.leaf.refresh_from_db()
+            self.assertFalse(self.leaf.image)
+            self.assertTrue(sibling.image.storage.exists(sibling.image.name))
+
+    def test_product_detail_page_and_category_recommendations(self):
+        sibling = Product.objects.create(
+            category=self.leaf,
+            name='Рекомендованная коробка',
+            price=75,
+            status=Product.STATUS_PUBLISHED,
+        )
+        response = self.client.get(reverse('product_detail', args=[self.product.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.product.name)
+        self.assertContains(response, 'Характеристики')
+        self.assertContains(response, 'Рекомендуем к этому товару')
+        self.assertContains(response, sibling.name)
+
+        manual = Product.objects.create(
+            category=self.root,
+            name='Ручная рекомендация',
+            price=55,
+            status=Product.STATUS_PUBLISHED,
+        )
+        self.product.recommended_products.set([manual])
+        response = self.client.get(reverse('product_detail', args=[self.product.slug]))
+        self.assertContains(response, manual.name)
+        self.assertNotContains(response, sibling.name)
 
     def test_hidden_ancestor_hides_products_everywhere(self):
         CartItem.objects.create(user=self.customer, product=self.product, quantity=2)
@@ -1008,8 +1327,147 @@ class CatalogFeaturesTests(TestCase):
     def test_catalog_shows_product_description_and_opens_from_card(self):
         response = self.client.get(reverse('catalog'))
         self.assertContains(response, 'class="product-card-description">Прочная упаковка</p>')
-        self.assertContains(response, 'class="open-product" role="button"')
-        self.assertNotContains(response, 'Подробнее')
+        self.assertContains(response, f'class="open-product" href="{reverse("product_detail", args=[self.product.slug])}"')
+        self.assertContains(response, f'class="catalog-details-button" href="{reverse("product_detail", args=[self.product.slug])}"')
+
+    def test_product_detail_gallery_contains_main_photo_and_switchable_thumbnails(self):
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='https://example.test/side-one.jpg',
+            alt='Вид сбоку',
+        )
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='https://example.test/side-two.jpg',
+            alt='Вид сверху',
+        )
+        response = self.client.get(reverse('product_detail', args=[self.product.slug]))
+        self.assertContains(response, 'data-detail-gallery')
+        self.assertContains(response, 'data-detail-main-image src="https://example.test/box.jpg"')
+        self.assertContains(response, 'data-detail-gallery-image="https://example.test/side-one.jpg"')
+        self.assertContains(response, 'data-detail-gallery-image="https://example.test/side-two.jpg"')
+        self.assertContains(response, 'data-detail-gallery-step="-1"')
+        self.assertContains(response, 'aria-label="Открыть фотографию крупно"')
+
+    def test_detail_quantity_and_cart_use_minimum_and_step(self):
+        self.product.min_quantity = 2
+        self.product.quantity_step = 3
+        self.product.save(update_fields=['min_quantity', 'quantity_step'])
+        response = self.client.get(reverse('product_detail', args=[self.product.slug]))
+        self.assertContains(response, 'type="number" min="2" step="3" value="2"')
+
+        cart_response = self.post_json(
+            'add_to_cart',
+            {'product_id': self.product.pk, 'quantity': 7},
+        )
+        self.assertEqual(cart_response.status_code, 200)
+        self.assertEqual(cart_response.json()['items'][0]['quantity'], 8)
+
+    def test_cart_validates_input_and_persists_a_valid_quantity_after_repeated_adds(self):
+        self.product.min_quantity = 2
+        self.product.quantity_step = 3
+        self.product.save(update_fields=['min_quantity', 'quantity_step'])
+        product_id = self.product.pk
+
+        for quantity in (1.5, 'abc', False, -1, 0):
+            with self.subTest(quantity=quantity):
+                response = self.post_json('add_to_cart', {'product_id': product_id, 'quantity': quantity})
+                self.assertEqual(response.status_code, 400)
+
+        self.post_json('add_to_cart', {'product_id': product_id, 'quantity': 2})
+        response = self.post_json('add_to_cart', {'product_id': product_id, 'quantity': 2})
+        self.assertEqual(response.json()['items'][0]['quantity'], 5)
+        self.assertEqual(self.client.session['cart'][str(product_id)], 5)
+
+        response = self.post_json('update_cart', {'product_id': product_id, 'quantity': '8'})
+        self.assertEqual(response.json()['items'][0]['quantity'], 8)
+        self.assertEqual(self.client.session['cart'][str(product_id)], 8)
+
+    def test_catalog_fragment_shows_cart_state_and_preserves_disabled_purchase(self):
+        product_id = self.product.pk
+        self.post_json('add_to_cart', {'product_id': product_id, 'quantity': self.product.min_quantity})
+        query = {'category': self.leaf.slug, 'cards': '1'}
+        response = self.client.get(reverse('api_products'), query)
+        self.assertIn('В корзине</button>', response.json()['cards_html'])
+
+        self.product.availability = Product.AVAILABILITY_OUT_OF_STOCK
+        self.product.save(update_fields=['availability'])
+        response = self.client.get(reverse('api_products'), query)
+        self.assertIn('data-purchase-disabled disabled>Нет в наличии', response.json()['cards_html'])
+
+    def test_cart_add_if_absent_and_bulk_remove(self):
+        other = Product.objects.create(
+            category=self.leaf, name='Бумага', price=15, status='published',
+        )
+        for user in (None, self.customer):
+            with self.subTest(user=user):
+                self.client.logout()
+                if user:
+                    self.client.force_login(user)
+                request = {'product_id': self.product.pk, 'quantity': 2, 'if_absent': True}
+                self.post_json('add_to_cart', request)
+                duplicate = self.post_json('add_to_cart', request)
+                self.assertEqual(duplicate.json()['items'][0]['quantity'], 2)
+                self.post_json('add_to_cart', {'product_id': other.pk, 'quantity': 1})
+                removed = self.post_json('update_cart', {'product_ids': [self.product.pk, other.pk], 'quantity': 0})
+                self.assertEqual(removed.json()['items'], [])
+
+    def test_move_cart_item_to_favorites_is_atomic_and_idempotent(self):
+        action = {'product_id': self.product.pk, 'is_favorite': True, 'move_from_cart': True}
+        self.post_json('add_to_cart', {'product_id': self.product.pk, 'quantity': 2})
+        response = self.post_json('toggle_favorite', action)
+        self.assertTrue(response.json()['auth_required'])
+        self.assertEqual(self.client.session['cart'][str(self.product.pk)], 2)
+
+        self.client.force_login(self.customer)
+        CartItem.objects.create(user=self.customer, product=self.product, quantity=2)
+        CartItem.objects.create(user=self.other, product=self.product, quantity=2)
+        for _ in range(2):
+            response = self.post_json('toggle_favorite', action)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['cart']['items'], [])
+            self.assertTrue(response.json()['is_favorite'])
+        self.assertEqual(FavoriteItem.objects.filter(user=self.customer, product=self.product).count(), 1)
+        self.assertTrue(CartItem.objects.filter(user=self.other, product=self.product).exists())
+
+    def test_recommendations_and_accessories_are_loaded_from_product_relations(self):
+        recommended = Product.objects.create(
+            category=self.leaf, name='Рекомендованный товар', price=45, status='published',
+        )
+        accessory = Product.objects.create(
+            category=self.leaf, name='Сопутствующий товар', price=25, status='published',
+            min_quantity=4,
+        )
+        self.client.force_login(self.staff)
+        save_response = self.client.post(
+            reverse('management_product_edit', args=[self.product.pk]),
+            self.product_payload(
+                recommended_products=[recommended.pk],
+                accessory_products=[accessory.pk],
+            ),
+        )
+        self.assertEqual(save_response.status_code, 302)
+        self.client.logout()
+        response = self.client.get(reverse('product_detail', args=[self.product.slug]))
+        self.assertContains(response, 'Рекомендуем к этому товару')
+        self.assertContains(response, recommended.name)
+        self.assertContains(response, 'С этим товаром покупают')
+        self.assertContains(response, accessory.name)
+        self.assertContains(response, f'data-add-detail-product="{accessory.pk}"')
+        self.assertContains(response, 'data-detail-min="4"')
+
+    def test_staff_preview_uses_the_public_product_template(self):
+        self.product.status = Product.STATUS_DRAFT
+        self.product.save(update_fields=['status'])
+        self.client.force_login(self.staff)
+        response = self.client.get(
+            reverse('product_detail', args=[self.product.slug]),
+            {'preview': '1'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'store/catalog.html')
+        self.assertTemplateUsed(response, 'store/partials/product_detail.html')
+        self.assertContains(response, 'data-purchase-disabled disabled>Предпросмотр')
 
     def test_gallery_and_related_media(self):
         ProductImage.objects.create(product=self.product, image_url='https://example.test/side.jpg')
@@ -1027,6 +1485,60 @@ class CatalogFeaturesTests(TestCase):
         self.client.force_login(self.staff)
         self.client.post(reverse('management_media_delete', args=[video.pk]))
         self.assertTrue(SiteMedia.objects.filter(pk=video.pk).exists())
+
+    def test_product_gallery_saves_selection_primary_order_and_unlinks_only(self):
+        import json
+
+        self.client.force_login(self.staff)
+        photo_a = SiteMedia.objects.create(title="Фото A", file="site_media/photo-a.png")
+        photo_b = SiteMedia.objects.create(title="Фото B", file="site_media/photo-b.jpg")
+        document = SiteMedia.objects.create(title="Паспорт товара", file="site_media/manual.pdf")
+        self.product.media.add(document)
+        edit = reverse("management_product_edit", args=[self.product.pk])
+
+        def save(items, primary, revision=None):
+            if revision is None:
+                self.product.refresh_from_db()
+                revision = self.product.updated_at.isoformat()
+            return self.client.post(edit, self.product_payload(
+                media=[document.pk], gallery_revision=revision,
+                gallery_manifest=json.dumps({"items": items, "primary": primary}),
+            ))
+
+        keys = [f"media:{photo_b.pk}", "cover:url", f"media:{photo_a.pk}"]
+        old_revision = self.product.updated_at.isoformat()
+        response = save([{"key": key, "alt": "Описание"} for key in keys], keys[2])
+        self.assertEqual(response.status_code, 302)
+        rows = list(self.product.images.all())
+        self.assertEqual([row.media_id for row in rows], [photo_b.pk, None, photo_a.pk])
+        self.assertEqual([row.is_primary for row in rows], [False, False, True])
+        self.assertEqual(list(self.product.media.all()), [document])
+        api = self.client.get(reverse("api_product_detail", args=[self.product.pk])).json()["product"]
+        self.assertEqual(api["thumbs"], [photo_a.file.url, photo_b.file.url, "https://example.test/box.jpg"])
+
+        stale = save([], None, old_revision)
+        self.assertContains(stale, "Галерея уже изменилась")
+        self.assertEqual(self.product.images.count(), 3)
+        self.client.post(reverse("management_media_delete", args=[photo_a.pk]))
+        self.assertTrue(SiteMedia.objects.filter(pk=photo_a.pk).exists())
+        remaining = f"link:{rows[0].pk}"
+        self.assertEqual(save([{"key": remaining}], remaining).status_code, 302)
+        self.assertEqual(list(self.product.images.values_list("media_id", flat=True)), [photo_b.pk])
+        self.assertTrue(SiteMedia.objects.filter(pk=photo_a.pk).exists())
+
+    def test_product_gallery_refuses_non_image_media_and_foreign_links(self):
+        import json
+
+        self.client.force_login(self.staff)
+        document = SiteMedia.objects.create(title="Документ", file="site_media/manual.pdf")
+        edit = reverse("management_product_edit", args=[self.product.pk])
+        for key in (f"media:{document.pk}", "link:99999"):
+            response = self.client.post(edit, self.product_payload(
+                gallery_revision=self.product.updated_at.isoformat(),
+                gallery_manifest=json.dumps({"items": [{"key": key}], "primary": key}),
+            ))
+            self.assertContains(response, "Одна из фотографий больше недоступна")
+        self.assertFalse(self.product.images.exists())
 
     def test_modal_gallery_controls_are_available_for_four_product_images(self):
         for index in range(3):
@@ -1086,11 +1598,19 @@ class CatalogFeaturesTests(TestCase):
         self.assertEqual(item.vat_rate, Decimal('22.00'))
         self.assertEqual(order.total_weight_kg, Decimal('0.375'))
         self.assertEqual(order.total_volume_m3, Decimal('0.072'))
-        Product.objects.filter(pk=self.product.pk).update(price=999, weight_kg=9, length_mm=900, vat_rate=10)
+        self.product.cost_price = Decimal("100.00")
+        self.product.retail_coefficient = Decimal("2.5000")
+        self.product.weight_kg = 9
+        self.product.length_mm = 900
+        self.product.vat_rate = 10
+        self.product.save()
         self.special.price = 500
         self.special.save()
         order.refresh_from_db()
+        item.refresh_from_db()
         self.assertEqual(order.total, Decimal('273.81'))
+        self.assertEqual(item.price, Decimal('91.27'))
+        self.assertEqual(item.line_total, Decimal('273.81'))
         self.assertEqual(order.total_weight_kg, Decimal('0.375'))
         self.assertEqual(order.total_volume_m3, Decimal('0.072'))
         self.assertFalse(CartItem.objects.filter(user=self.customer).exists())
@@ -1145,6 +1665,138 @@ class CatalogFeaturesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.product.refresh_from_db()
         self.assertEqual(self.product.name, 'Коробка 400')
+
+    def test_prices_across_levels_storefront_and_cart_without_stacking_coefficients(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("management_product_edit", args=[self.product.pk]),
+            self.product_payload(
+                cost_price="10,05", retail_coefficient="1,30",
+                wholesale_coefficient="1,10", special_coefficient="0,90", price="",
+            ),
+        )
+        self.assertEqual(response.status_code, 302, response.context and response.context["form"].errors)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price, Decimal("13.07"))
+        legacy = Product.objects.create(name="Ручная цена", category=self.leaf, price="84.50", status="published")
+        profile, _ = CustomerProfile.objects.update_or_create(
+            user=self.other, defaults={"price_level": "wholesale"},
+        )
+        self.client.logout()
+
+        def check(product, amount):
+            url = reverse("product_detail", args=[product.slug])
+            self.assertContains(self.client.get(url), f"{amount} ₽")
+            api = self.client.get(reverse("api_product_detail", args=[product.pk])).json()
+            self.assertEqual(api["product"]["price"], amount)
+            response = self.post_json("update_cart", {"product_id": product.pk, "quantity": 2})
+            line = next(item for item in response.json()["items"] if item["id"] == str(product.pk))
+            self.assertEqual(line["price"], amount)
+            self.assertEqual(Decimal(line["line_total"]), Decimal(amount) * 2)
+
+        check(self.product, "13.07")
+        self.client.force_login(self.other)
+        check(self.product, "11.06")
+        profile.wholesale_coefficient = Decimal("1.2500")
+        profile.save()
+        check(self.product, "12.56")
+        check(legacy, "84.50")
+        profile.price_level = "special"
+        profile.save()
+        check(self.product, "9.05")
+        CustomerPrice.objects.create(user=self.other, product=self.product, price=0)
+        check(self.product, "0.00")
+
+    def test_invalid_individual_price_does_not_change_other_prices_or_customer_level(self):
+        self.client.force_login(self.staff)
+        profile, _ = CustomerProfile.objects.update_or_create(user=self.customer, defaults={"price_level": "retail"})
+        url = reverse("management_customer_detail", args=[self.customer.pk])
+        data = {"price_level": "wholesale", "wholesale_coefficient": "1,20",
+                f"individual_price_{self.product.pk}": "NaN", "email": self.customer.email}
+        response = self.client.post(url, data)
+        self.assertContains(response, "Укажите индивидуальную цену")
+        self.special.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertEqual(profile.price_level, "retail")
+        self.assertEqual(self.special.price, Decimal("91.27"))
+        data[f"individual_price_{self.product.pk}"] = "89,05"
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.special.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertEqual(profile.wholesale_coefficient, Decimal("1.2000"))
+        self.assertEqual(self.special.price, Decimal("89.05"))
+
+    def test_customer_admin_edits_identity_and_pricing_without_changing_order_snapshot(self):
+        self.client.force_login(self.staff)
+        self.special.delete()
+        self.product.sku = "QA-PRICE-22"
+        self.product.cost_price = Decimal("100")
+        self.product.retail_coefficient = Decimal("1.20")
+        self.product.wholesale_coefficient = Decimal("1.05")
+        self.product.save()
+        profile = CustomerProfile.objects.create(user=self.customer, company="Тестовая Компания")
+        old_order = Order.objects.create(user=self.customer, full_name="Покупатель", phone="123", total=240)
+        old_item = OrderItem.objects.create(order=old_order, product=self.product, product_name=self.product.name, price=120, quantity=2, line_total=240)
+        archived = Product.objects.create(name="Скрытая позиция", category=self.leaf, price=100, status="hidden")
+        archive_price = CustomerPrice.objects.create(user=self.customer, product=archived, price=77)
+        index = reverse("management_customers")
+        listing = self.client.get(index, {"q": "тестовая компания"})
+        self.assertContains(listing, "Сохранить уровни цен", count=1)
+        self.assertContains(listing, "Открыть")
+        self.assertEqual(self.client.post(index, {f"price_level_{self.customer.pk}": "wholesale"}).status_code, 302)
+        profile.refresh_from_db()
+        self.assertEqual(profile.price_level, "wholesale")
+
+        detail = reverse("management_customer_detail", args=[self.customer.pk])
+        search = reverse("management_customer_product_search", args=[self.customer.pk])
+        result = self.client.get(search, {"q": "qa-price-22"}).json()["items"]
+        self.assertEqual([(row["id"], row["level_price"]) for row in result], [(self.product.pk, "105.00")])
+        self.assertContains(self.client.get(detail), old_order.number)
+        response = self.client.post(detail, {
+            "first_name": "Анна", "last_name": "Новая", "email": "new-buyer@example.test",
+            "company": "ООО Тест", "contact_person": "Анна Новая", "phone": "+70001234567",
+            "status": "inactive", "inn": "1234567890", "kpp": "123456789",
+            "delivery_addresses": "Первый адрес\n\n Второй адрес ", "comment": "Доставка в офис",
+            "price_level": "wholesale", "wholesale_coefficient": "1,08", f"individual_price_{self.product.pk}": "96,50",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.customer.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertEqual(self.customer.username, "new-buyer@example.test")
+        self.assertEqual(self.customer.get_full_name(), "Анна Новая")
+        for field, expected in {
+            "company": "ООО Тест", "contact_person": "Анна Новая", "phone": "+70001234567",
+            "status": "inactive", "inn": "1234567890", "kpp": "123456789",
+            "delivery_addresses": ["Первый адрес", "Второй адрес"], "comment": "Доставка в офис",
+            "wholesale_coefficient": Decimal("1.0800"),
+        }.items():
+            self.assertEqual(getattr(profile, field), expected)
+        self.assertTrue(CustomerPrice.objects.filter(pk=archive_price.pk, price=77).exists())
+        self.client.logout()
+        self.assertEqual(self.client.get(search, {"q": "qa-price-22"}).status_code, 302)
+        self.assertEqual(self.post_json("account_login", {"email": self.customer.email, "password": "test-password"}).status_code, 200)
+        product_api = reverse("api_product_detail", args=[self.product.pk])
+        self.assertEqual(self.client.get(product_api).json()["product"]["price"], "96.50")
+        storefront = self.client.get(reverse("product_detail", args=[self.product.slug]))
+        self.assertContains(storefront, "96.50 ₽")
+        self.assertContains(storefront, old_order.number)
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.post(detail, {f"individual_price_{self.product.pk}": ""}).status_code, 302)
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get(product_api).json()["product"]["price"], "108.00")
+        old_order.refresh_from_db()
+        old_item.refresh_from_db()
+        self.assertEqual(old_order.total, Decimal("240.00"))
+        self.assertEqual(old_item.price, Decimal("120.00"))
+
+    def test_guest_cart_merge_persists_quantity_matching_minimum_and_step(self):
+        self.product.quantity_step = 3
+        self.product.save(update_fields=["quantity_step"])
+        CartItem.objects.create(user=self.customer, product=self.product, quantity=2)
+        self.post_json("add_to_cart", {"product_id": self.product.pk, "quantity": 2})
+        response = self.post_json("account_login", {"email": self.customer.email, "password": "test-password"})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(CartItem.objects.get(user=self.customer, product=self.product).quantity, 5)
 
     def test_cms_creates_nested_category(self):
         self.client.force_login(self.staff)

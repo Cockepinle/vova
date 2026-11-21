@@ -15,6 +15,20 @@ const catalogGrid = document.querySelector(".catalog-grid");
 const catalogTopline = document.querySelector(".catalog-topline");
 const catalogSidebar = document.querySelector(".catalog-sidebar");
 const catalogCategorySection = document.querySelector(".catalog-category-section");
+
+function useFallbackProductImage(image) {
+  const fallback = document.body.dataset.productImageFallback;
+  if (!fallback || !image.matches(".catalog-card-image img, .product-detail-page img, .image-lightbox-img")) return;
+  if (image.src !== new URL(fallback, document.baseURI).href) image.src = fallback;
+}
+
+document.addEventListener("error", (event) => {
+  if (event.target instanceof HTMLImageElement) useFallbackProductImage(event.target);
+}, true);
+document.querySelectorAll(".catalog-card-image img[src], .product-detail-page img[src]").forEach(image => {
+  if (image.complete && !image.naturalWidth) useFallbackProductImage(image);
+});
+
 let modalTouchStartX = null;
 let suppressModalImageClick = false;
 
@@ -50,46 +64,6 @@ function escapeCatalogHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function productCardHtml(product) {
-  const quantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
-  const isInCart = quantity > 0;
-  const isFavorite = typeof window.isProductFavorite === "function" && window.isProductFavorite(product.id);
-  const badge = (product.badges || []).map(label =>
-    `<span class="hit-badge">${escapeCatalogHtml(label)}</span>`
-  ).join("");
-
-  return `
-    <article class="catalog-card ${isInCart ? "is-in-cart" : ""}" data-product-id="${escapeCatalogHtml(product.id)}" data-product='${escapeCatalogHtml(JSON.stringify(product))}'>
-      <div class="open-product" role="button" tabindex="0" aria-label="Открыть карточку ${escapeCatalogHtml(product.name)}">
-        <div class="catalog-card-image">
-          <div class="catalog-card-badges">${badge}</div>
-          <button class="favorite-button ${isFavorite ? "is-active" : ""}" type="button" aria-label="Добавить в избранное">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-          </button>
-          <img src="${escapeCatalogHtml(product.image)}" alt="${escapeCatalogHtml(product.name)}">
-        </div>
-        <div class="catalog-card-info">
-          <span class="product-sku">${escapeCatalogHtml(product.sku)}</span>
-          <h2>${escapeCatalogHtml(product.name)}</h2>
-          <span class="product-availability">${escapeCatalogHtml(product.availability_label || "")}${product.stock_quantity ? ` · ${escapeCatalogHtml(product.stock_quantity)} ${escapeCatalogHtml(product.unit)}` : ""}</span>
-          <p class="product-card-description">${escapeCatalogHtml(product.description)}</p>
-        </div>
-      </div>
-      <div class="catalog-card-buy">
-        <div class="product-buy-row">
-          <p class="price">${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span></p>
-          <div class="quantity-control" aria-label="Количество">
-            <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-            <input class="quantity-input" type="number" min="${Number(product.min_quantity) || 1}" step="1" value="${isInCart ? quantity : Number(product.min_quantity) || 1}" aria-label="Количество товара">
-            <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
-          </div>
-        </div>
-        <button class="add-to-cart" type="button" ${product.can_purchase === false ? "disabled" : ""}>${product.can_purchase === false ? "Нет в наличии" : isInCart ? "В корзине" : "В корзину"}</button>
-      </div>
-    </article>
-  `;
-}
-
 function catalogApiUrl(url) {
   const target = new URL(url, window.location.origin);
   const apiUrl = new URL("/api/products/", window.location.origin);
@@ -100,6 +74,7 @@ function catalogApiUrl(url) {
     }
   });
 
+  apiUrl.searchParams.set("cards", "1");
   return apiUrl;
 }
 
@@ -109,6 +84,10 @@ function updateCatalogHeader(url, count) {
   }
 
   const target = new URL(url, window.location.origin);
+  const sort = document.querySelector(".catalog-toolbar-sort select");
+  if (sort) sort.value = target.searchParams.get("sort") || "default";
+  const resultCount = document.querySelector(".catalog-result-count");
+  if (resultCount) resultCount.textContent = `${count} товаров`;
   const title = catalogTopline.querySelector("h1");
   const summary = catalogTopline.querySelector("div > p:last-child");
   const activeLink = catalogSidebar?.querySelector(`a[href="${target.pathname}${target.search}"]`);
@@ -195,15 +174,22 @@ function updateCatalogCategoryVisibility(url) {
   );
 }
 
+let catalogRequest;
+
 async function loadCatalogFromApi(url, pushState = true) {
   if (!catalogGrid) {
     return;
   }
 
+  catalogRequest?.abort();
+  const controller = new AbortController();
+  catalogRequest = controller;
   catalogGrid.classList.add("is-loading");
+  catalogGrid.setAttribute("aria-busy", "true");
 
   try {
     const response = await fetch(catalogApiUrl(url), {
+      signal: controller.signal,
       headers: {
         "X-Requested-With": "XMLHttpRequest",
       },
@@ -214,10 +200,9 @@ async function loadCatalogFromApi(url, pushState = true) {
       throw new Error(payload.error || "Не удалось загрузить товары");
     }
 
-    catalogGrid.innerHTML = payload.products.length
-      ? payload.products.map(productCardHtml).join("")
-      : '<div class="catalog-empty"><h2>Товары скоро появятся</h2><p>По выбранным условиям ничего не найдено.</p></div>';
-    updateCatalogHeader(url, payload.products.length);
+    if (controller.signal.aborted) return;
+    catalogGrid.innerHTML = payload.cards_html;
+    updateCatalogHeader(url, payload.count);
     if (payload.seo) {
       document.title = payload.seo.title;
       catalogTopline.querySelector('h1').textContent = payload.seo.h1;
@@ -238,194 +223,83 @@ async function loadCatalogFromApi(url, pushState = true) {
       window.history.pushState({}, "", url);
     }
   } catch (error) {
+    if (controller.signal.aborted) return;
     catalogGrid.innerHTML = `<div class="catalog-empty"><h2>Не удалось загрузить товары</h2><p>${escapeCatalogHtml(error.message)}</p></div>`;
   } finally {
-    catalogGrid.classList.remove("is-loading");
+    if (catalogRequest === controller) {
+      catalogGrid.classList.remove("is-loading");
+      catalogGrid.setAttribute("aria-busy", "false");
+    }
   }
 }
 
-function changeQuantity(control, delta) {
+function changeQuantity(control, delta, button) {
   const value = control.querySelector(".quantity-input");
-  value.value = String(Math.max(Number(value.min) || 1, (Number(value.value) || Number(value.min) || 1) + delta));
-  syncCardQuantity(control);
+  const minimum = Math.max(1, Number(value.min) || 1);
+  const step = Math.max(1, Number(value.step) || 1);
+  const current = normalizeQuantityValue(value.value, minimum, step);
+  const next = delta > 0 ? current + step : Math.max(minimum, current - step);
+  value.value = String(next);
+  syncCardQuantity(control, button);
 }
 
-function syncCardQuantity(control) {
+function syncCardQuantity(control, quantityButton = control.querySelector(".quantity-plus")) {
   const modalInfo = control.closest(".modal-info");
 
   if (modalInfo && typeof window.getProductCartQuantity === "function" && window.getProductCartQuantity(modal.dataset.productId) > 0) {
-    window.setProductCartQuantity(modal.dataset.productId, Number(control.querySelector(".quantity-input").value));
+    const input = control.querySelector(".quantity-input");
+    window.setProductCartQuantity(modal.dataset.productId, Number(input.value), quantityButton, input);
     return;
   }
 
-  const card = control.closest(".catalog-card");
-
-  if (!card || !card.classList.contains("is-in-cart")) {
-    return;
+  const purchase = control.closest(".catalog-card, .product-detail-purchase");
+  if (!purchase) return;
+  const button = purchase.querySelector(".add-to-cart, [data-add-detail-product]");
+  if (!button || button.disabled) return;
+  const productId = purchase.dataset.productId || button.dataset.addDetailProduct;
+  const cartQuantity = window.getProductCartQuantity(productId);
+  if (cartQuantity) {
+    button.textContent = Number(control.querySelector(".quantity-input").value) === cartQuantity
+      ? "В корзине" : "Обновить корзину";
   }
-
-  window.setProductCartQuantity(card.dataset.productId, Number(control.querySelector(".quantity-input").value));
 }
 
-async function loadVariantProduct(variantLink) {
-  const productId = variantLink.dataset.productId;
-  const dataUrl = variantLink.dataset.productUrl || `/api/products/${encodeURIComponent(productId)}/`;
-  if (!productId) {
+function setDetailGalleryImage(gallery, index) {
+  const thumbnails = [...gallery.querySelectorAll("[data-detail-gallery-image]")];
+  if (!thumbnails.length) {
     return;
   }
-
-  const variantList = variantLink.closest(".product-variant-list");
-  variantList?.classList.add("is-loading");
-  try {
-    const response = await fetch(dataUrl, {
-      headers: {"X-Requested-With": "XMLHttpRequest"},
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.product) {
-      throw new Error(payload.error || "Не удалось загрузить вариант товара");
+  const normalizedIndex = (index + thumbnails.length) % thumbnails.length;
+  const thumbnail = thumbnails[normalizedIndex];
+  const mainImage = gallery.querySelector("[data-detail-main-image]");
+  if (mainImage) {
+    mainImage.src = thumbnail.dataset.detailGalleryImage;
+    mainImage.alt = thumbnail.dataset.galleryAlt || "";
+    if (lightboxGallery === gallery) {
+      imageLightboxImg.src = mainImage.src;
+      imageLightboxImg.alt = mainImage.alt;
     }
-
-    const product = payload.product;
-    updateProductDetailPanel(product);
-    updateProductCard(product);
-    if (modal?.classList.contains("is-open")) {
-      const info = modal.querySelector(".modal-info");
-      const previousScroll = info.scrollTop;
-      openProductModal(product);
-      info.scrollTop = previousScroll;
-    }
-    window.history.replaceState(
-      {productVariantId: product.id},
-      "",
-      product.url,
-    );
-    if (catalogGrid && !document.querySelector("[data-product-detail]")) {
-      document.title = product.name;
-    }
-  } catch (error) {
-    let status = variantList?.querySelector(".variant-load-error");
-    if (variantList && !status) {
-      status = document.createElement("p");
-      status.className = "variant-load-error";
-      status.setAttribute("role", "status");
-      variantList.append(status);
-    }
-    if (status) {
-      status.textContent = error.message || "Не удалось загрузить вариант товара";
-    }
-  } finally {
-    variantList?.classList.remove("is-loading");
+  }
+  thumbnails.forEach((item, itemIndex) => {
+    item.setAttribute("aria-current", String(itemIndex === normalizedIndex));
+  });
+  gallery.dataset.imageIndex = String(normalizedIndex);
+  const strip = thumbnail.parentElement;
+  if (thumbnail.offsetLeft < strip.scrollLeft || thumbnail.offsetLeft + thumbnail.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+    strip.scrollLeft = thumbnail.offsetLeft;
+  }
+  const counter = gallery.querySelector("[data-detail-gallery-counter]");
+  if (counter) {
+    counter.textContent = `${normalizedIndex + 1} / ${thumbnails.length}`;
   }
 }
 
 function renderVariantLinks(variants) {
   return variants && variants.length > 1
     ? `<h3>Выберите вариант</h3><div class="product-variant-list">${variants.map(variant =>
-        `<a class="product-variant ${variant.current ? "is-current" : ""} ${variant.unavailable ? "is-unavailable" : ""}" href="${escapeCatalogHtml(variant.url)}" data-product-id="${escapeCatalogHtml(variant.id)}" data-product-url="${escapeCatalogHtml(variant.data_url || `/api/products/${variant.id}/`)}" ${variant.current ? 'aria-current="page"' : ""}><span>${escapeCatalogHtml(variant.label)}</span>${variant.unavailable ? "<small>Нет в наличии</small>" : variant.availability === "preorder" ? "<small>Под заказ</small>" : ""}</a>`
+        `<a class="product-variant ${variant.current ? "is-current" : ""} ${variant.unavailable ? "is-unavailable" : ""}" href="${escapeCatalogHtml(variant.url)}" data-product-id="${escapeCatalogHtml(variant.id)}" data-product-url="${escapeCatalogHtml(variant.data_url || `/api/products/${variant.id}/`)}" ${variant.current ? 'aria-current="page"' : ""}><span>${escapeCatalogHtml(variant.label)}</span>${variant.show_identity ? `<small>${escapeCatalogHtml(variant.sku || variant.name)}</small>` : ""}${variant.unavailable ? "<small>Нет в наличии</small>" : variant.availability === "preorder" ? "<small>Под заказ</small>" : ""}</a>`
       ).join("")}</div>`
     : "";
-}
-
-function updateProductDetailPanel(product) {
-  const detail = document.querySelector("[data-product-detail]");
-  if (!detail) {
-    return;
-  }
-
-  detail.dataset.productId = product.id;
-  const description = detail.querySelector("[data-detail-description]");
-  if (description) {
-    description.innerHTML = escapeCatalogHtml(product.description).replace(/\r?\n/g, "<br>");
-  }
-  const specs = detail.querySelector("[data-detail-specs]");
-  if (specs) {
-    specs.innerHTML = product.specs
-      .map(([label, value]) => `<div><dt>${escapeCatalogHtml(label)}</dt><dd>${escapeCatalogHtml(value)}</dd></div>`)
-      .join("");
-  }
-  const variants = detail.querySelector("[data-detail-variants]");
-  if (variants) {
-    variants.innerHTML = product.variants.map(variant =>
-      `<a href="${escapeCatalogHtml(variant.url)}" data-product-id="${escapeCatalogHtml(variant.id)}" data-product-url="${escapeCatalogHtml(variant.data_url || `/api/products/${variant.id}/`)}" class="product-variant ${variant.current ? "is-current" : ""} ${variant.unavailable ? "is-unavailable" : ""}" ${variant.current ? 'aria-current="page"' : ""}><span>${escapeCatalogHtml(variant.label)}</span>${variant.unavailable ? "<small>Нет в наличии</small>" : variant.availability === "preorder" ? "<small>Под заказ</small>" : ""}</a>`
-    ).join("");
-  }
-  window.renderProductMedia?.(product, detail);
-
-  const heading = document.querySelector(".catalog-topline h1");
-  if (heading) {
-    heading.textContent = product.name;
-  }
-}
-
-function updateProductCard(product) {
-  const card = document.querySelector(".catalog-card[data-product-detail-card]")
-    || document.querySelector(`.catalog-card[data-product-id="${CSS.escape(product.id)}"]`);
-  if (!card) {
-    return;
-  }
-
-  card.dataset.productId = product.id;
-  card.dataset.product = JSON.stringify(product);
-  const openButton = card.querySelector(".open-product");
-  if (openButton) {
-    openButton.setAttribute("aria-label", `Открыть карточку ${product.name}`);
-  }
-  const description = card.querySelector(".product-card-description");
-  if (description) {
-    description.textContent = product.description || "";
-  }
-  const image = card.querySelector(".catalog-card-image img");
-  if (image) {
-    image.src = product.image;
-    image.alt = product.name;
-  }
-  const sku = card.querySelector(".product-sku");
-  if (sku) {
-    sku.textContent = product.sku;
-  }
-  const name = card.querySelector(".catalog-card-info h2");
-  if (name) {
-    name.textContent = product.name;
-  }
-  const availability = card.querySelector(".product-availability");
-  if (availability) {
-    availability.textContent = `${product.availability_label || ""}${product.stock_quantity ? ` · ${product.stock_quantity} ${product.unit}` : ""}`;
-  }
-  const badges = card.querySelector(".catalog-card-badges");
-  if (badges) {
-    badges.innerHTML = (product.badges || []).map(label =>
-      `<span class="hit-badge">${escapeCatalogHtml(label)}</span>`
-    ).join("");
-  }
-  const price = card.querySelector(".product-buy-row .price");
-  if (price) {
-    price.innerHTML = `${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span>`;
-  }
-  const input = card.querySelector(".quantity-input");
-  if (input) {
-    input.min = String(Math.max(1, Number(product.min_quantity) || 1));
-    const cartQuantity = typeof window.getProductCartQuantity === "function"
-      ? window.getProductCartQuantity(product.id)
-      : 0;
-    input.value = String(Math.max(
-      Number(input.min),
-      cartQuantity || Number(input.value) || Number(input.min),
-    ));
-  }
-  const addButton = card.querySelector(".add-to-cart");
-  const inCart = typeof window.getProductCartQuantity === "function"
-    ? window.getProductCartQuantity(product.id) > 0
-    : false;
-  card.classList.toggle("is-in-cart", inCart);
-  if (addButton) {
-    addButton.disabled = product.can_purchase === false;
-    addButton.textContent = product.can_purchase === false
-      ? "Нет в наличии"
-      : inCart
-        ? "В корзине"
-        : "В корзину";
-  }
-  window.refreshProductCardGallery?.(card);
 }
 
 document.addEventListener("click", (event) => {
@@ -488,11 +362,46 @@ document.addEventListener("click", (event) => {
     document.body.classList.remove("catalog-category-drawer-open");
   }
 
+  const galleryStep = event.target.closest("[data-detail-gallery-step], [data-lightbox-step]");
+  if (galleryStep) {
+    const gallery = galleryStep.closest("[data-detail-gallery]") || lightboxGallery;
+    if (gallery) {
+      const step = Number(galleryStep.dataset.detailGalleryStep ?? galleryStep.dataset.lightboxStep);
+      setDetailGalleryImage(gallery, Number(gallery.dataset.imageIndex) + step);
+    }
+    return;
+  }
+
+  const thumbnail = event.target.closest("[data-detail-gallery-image]");
+  if (thumbnail) {
+    const gallery = thumbnail.closest("[data-detail-gallery]");
+    const thumbnails = [...gallery.querySelectorAll("[data-detail-gallery-image]")];
+    setDetailGalleryImage(gallery, thumbnails.indexOf(thumbnail));
+    return;
+  }
+
+  const zoom = event.target.closest("[data-detail-gallery-zoom]");
+  if (zoom) {
+    const image = zoom.querySelector("[data-detail-main-image]");
+    openImageLightbox(image.src, image.alt, zoom.closest("[data-detail-gallery]"));
+    return;
+  }
+
+  const detailAdd = event.target.closest("[data-add-detail-product]");
+  if (detailAdd) {
+    const input = detailAdd.closest(".product-detail-purchase")?.querySelector(".quantity-input");
+    const minimum = input?.min || detailAdd.dataset.detailMin;
+    const step = input?.step || detailAdd.dataset.detailStep;
+    const quantity = normalizeQuantityValue(input?.value || minimum, minimum, step);
+    if (input) input.value = String(quantity);
+    window.addProductToCart(detailAdd.dataset.addDetailProduct, quantity, detailAdd, {replaceQuantity: Boolean(input)});
+    return;
+  }
+
   if (event.target.closest(".product-gallery-controls, .gallery-thumbnails")) return;
   const minus = event.target.closest(".quantity-minus");
   const plus = event.target.closest(".quantity-plus");
   const addButton = event.target.closest(".add-to-cart");
-  const variantLink = event.target.closest(".product-variant");
   const openButton = event.target.closest(".open-product");
   const card = event.target.closest(".catalog-card");
   const closeButton = event.target.closest(".modal-close, .modal-backdrop");
@@ -518,26 +427,17 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  if (variantLink) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!variantLink.classList.contains("is-current")) {
-      loadVariantProduct(variantLink);
-    }
-    return;
-  }
-
   if (minus) {
     const control = minus.closest(".quantity-control");
-    if (!control.classList.contains("cart-quantity")) {
-      changeQuantity(control, -1);
+    if (!control.matches(".cart-quantity, .favorite-quantity")) {
+      changeQuantity(control, -1, minus);
     }
   }
 
   if (plus) {
     const control = plus.closest(".quantity-control");
-    if (!control.classList.contains("cart-quantity")) {
-      changeQuantity(control, 1);
+    if (!control.matches(".cart-quantity, .favorite-quantity")) {
+      changeQuantity(control, 1, plus);
     }
   }
 
@@ -548,9 +448,9 @@ document.addEventListener("click", (event) => {
       ? modal.dataset.productId
       : addButton.closest(".catalog-card").dataset.productId;
     const input = addButton.closest("article, .modal-info").querySelector(".quantity-input");
-    const quantityValue = input ? input.value : "1";
-    const quantity = Math.max(1, Number(quantityValue) || 1);
-    window.addProductToCart(productId, quantity, addButton);
+    const quantity = normalizeQuantityValue(input?.value || 1, input?.min, input?.step);
+    if (input) input.value = String(quantity);
+    window.addProductToCart(productId, quantity, addButton, {replaceQuantity: Boolean(input && card)});
     return;
   }
 
@@ -558,15 +458,11 @@ document.addEventListener("click", (event) => {
     event.stopPropagation();
   }
 
-  if (openButton && !event.target.closest(".favorite-button")) {
-    if (!event.target.closest("button, input, select, textarea, a")) {
-      openProductModal(JSON.parse(openButton.closest(".catalog-card").dataset.product));
-      return;
-    }
-  }
+  if (openButton) return;
 
   if (card && !event.target.closest("button, input, select, textarea, a, [role='button'], .quantity-control")) {
-    openProductModal(JSON.parse(card.dataset.product));
+    const openLink = card.querySelector(".open-product");
+    if (openLink) window.location.assign(openLink.href);
   }
 
   if (closeButton) {
@@ -698,6 +594,13 @@ window.addEventListener("popstate", () => {
 
 window.refreshCatalogProducts = () => loadCatalogFromApi(window.location.href, false);
 
+document.querySelector(".catalog-toolbar-sort")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const url = new URL(window.location.href);
+  url.searchParams.set("sort", event.currentTarget.elements.sort.value);
+  loadCatalogFromApi(url.href);
+});
+
 document.addEventListener("change", (event) => {
   const toolbarSelect = event.target.closest
     ? event.target.closest(".catalog-toolbar-category select, .catalog-toolbar-sort select")
@@ -713,22 +616,25 @@ document.addEventListener("change", (event) => {
     return;
   }
 
-  quantityInput.value = String(Math.max(Number(quantityInput.min) || 1, Number(quantityInput.value) || 1));
+  quantityInput.value = String(normalizeQuantityValue(quantityInput.value, quantityInput.min, quantityInput.step));
   syncCardQuantity(quantityInput.closest(".quantity-control"));
 });
 
 document.addEventListener("keydown", (event) => {
-  const openButton = event.target.closest(".open-product");
-
-  if (openButton && !event.target.closest("button, input, a") && (event.key === "Enter" || event.key === " ")) {
+  const gallery = lightboxGallery || event.target.closest("[data-detail-gallery]");
+  if (gallery && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
     event.preventDefault();
-    const card = openButton.closest(".catalog-card");
-    const product = JSON.parse(card.dataset.product);
-    openProductModal(product);
+    setDetailGalleryImage(gallery, Number(gallery.dataset.imageIndex) + (event.key === "ArrowRight" ? 1 : -1));
+    return;
   }
-});
-
-document.addEventListener("keydown", (event) => {
+  if (imageLightbox.classList.contains("is-open") && event.key === "Tab") {
+    const controls = [...imageLightbox.querySelectorAll("button:not([hidden])")];
+    const index = controls.indexOf(document.activeElement);
+    const next = (index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+    event.preventDefault();
+    controls[next].focus();
+    return;
+  }
   if (event.key === "Escape") {
     const catalogPanel = document.querySelector(".catalog-mobile-filter-panel.is-open, .catalog-mobile-sort-panel.is-open");
     if (catalogPanel) {
@@ -750,16 +656,24 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-function openImageLightbox(image, alt) {
+let lightboxGallery = null;
+let lightboxTrigger = null;
+
+function openImageLightbox(image, alt, gallery = null) {
   if (!imageLightbox || !imageLightboxImg || !image) {
     return;
   }
 
+  lightboxGallery = gallery;
+  lightboxTrigger = document.activeElement;
+  const showSteps = (gallery?.querySelectorAll("[data-detail-gallery-image]").length || 0) > 1;
+  imageLightbox.querySelectorAll("[data-lightbox-step]").forEach(button => { button.hidden = !showSteps; });
   imageLightboxImg.src = image;
   imageLightboxImg.alt = alt || "";
   imageLightbox.classList.add("is-open");
   imageLightbox.setAttribute("aria-hidden", "false");
   document.body.classList.add("lightbox-open");
+  imageLightbox.querySelector(".image-lightbox-close").focus();
 }
 
 function closeImageLightbox() {
@@ -770,6 +684,9 @@ function closeImageLightbox() {
   imageLightbox.classList.remove("is-open");
   imageLightbox.setAttribute("aria-hidden", "true");
   document.body.classList.remove("lightbox-open");
+  lightboxGallery = null;
+  lightboxTrigger?.focus();
+  lightboxTrigger = null;
 }
 
 function setModalImage(index) {
@@ -815,9 +732,13 @@ function openProductModal(product) {
   const cartQuantity = typeof window.getProductCartQuantity === "function" ? window.getProductCartQuantity(product.id) : 0;
   const modalInput = modal.querySelector(".modal-controls .quantity-input");
   modalInput.min = String(Math.max(1, Number(product.min_quantity) || 1));
-  modalInput.step = "1";
+  modalInput.step = String(Math.max(1, Number(product.quantity_step) || 1));
 
-  modalInput.value = String(Math.max(Number(modalInput.min), cartQuantity || Number(cardInput ? cardInput.value : modalInput.min) || 1));
+  modalInput.value = String(normalizeQuantityValue(
+    cartQuantity || cardInput?.value || modalInput.min,
+    modalInput.min,
+    modalInput.step,
+  ));
   modal.querySelector(".modal-favorite").classList.toggle("is-active", favoriteButton ? favoriteButton.classList.contains("is-active") : false);
   const modalAdd = modal.querySelector(".modal-add");
   modalAdd.disabled = product.can_purchase === false;

@@ -9,6 +9,92 @@ const cartSelectAll = drawer.querySelector(".cart-select-all");
 const cartRemoveSelected = drawer.querySelector(".cart-remove-selected");
 const checkoutDrawer = document.querySelector(".checkout-drawer");
 let cartProductQuantities = {};
+let cartActionPending = false;
+let cartRevision = 0;
+let cartRefreshRequest = null;
+let cartLastSync = Date.now();
+let cartSnapshot = null;
+let storeFeedbackTimer;
+
+function notifyStore(message, error = false) {
+  const feedback = document.querySelector("[data-store-feedback]");
+  if (!feedback) return;
+  clearTimeout(storeFeedbackTimer);
+  feedback.dataset.error = String(error);
+  feedback.replaceChildren(message);
+  feedback.classList.add("is-visible");
+  storeFeedbackTimer = setTimeout(() => {
+    feedback.classList.remove("is-visible");
+    feedback.replaceChildren();
+  }, error ? 5500 : 3500);
+}
+
+function setStoreButtonPending(button) {
+  if (!button) return () => {};
+  const disabled = button.disabled;
+  const spinner = document.createElement("i");
+  spinner.className = "store-action-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  button.append(spinner);
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  return () => {
+    spinner.remove();
+    button.disabled = disabled;
+    button.removeAttribute("aria-busy");
+  };
+}
+
+async function postStoreAction(url, payload) {
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error("Проверьте соединение и повторите попытку");
+  }
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data) {
+    if (data?.auth_required) window.openAccountDrawer?.(data.error);
+    throw new Error(data?.error || "Не удалось выполнить действие");
+  }
+  return data;
+}
+
+async function runCartAction(button, action) {
+  if (cartActionPending) return;
+  cartActionPending = true;
+  cartRevision += 1;
+  const restore = setStoreButtonPending(button);
+  const controls = [...drawer.querySelectorAll(".cart-remove, .cart-clear, .cart-remove-selected, .cart-favorite, .cart-checkout, .cart-invoice, .cart-quantity button")]
+    .filter(control => control !== button && !control.disabled);
+  controls.forEach(control => { control.disabled = true; });
+  try {
+    await action();
+    return true;
+  } catch (error) {
+    notifyStore(error.message, true);
+    return false;
+  } finally {
+    restore();
+    controls.forEach(control => { control.disabled = false; });
+    updateCartBulkState();
+    cartActionPending = false;
+  }
+}
+
+function applyCartMutation(cart, options) {
+  renderCart(cart, options);
+  try {
+    localStorage.setItem("paklineCartChange", String(Date.now()));
+  } catch {
+    // Cart state is still available in the active tab.
+  }
+}
+
 
 drawer.querySelectorAll(".cart-item").forEach((item) => {
   cartProductQuantities[item.dataset.productId] = Number(item.querySelector(".cart-quantity span").textContent);
@@ -23,23 +109,31 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function normalizeQuantityValue(value, minimum = 1, step = 1) {
+  minimum = Math.max(1, Math.floor(Number(minimum) || 1));
+  step = Math.max(1, Math.floor(Number(step) || 1));
+  const requested = Number(value);
+  const quantity = Math.max(minimum, Number.isFinite(requested) ? Math.floor(requested) : minimum);
+  return minimum + Math.ceil((quantity - minimum) / step) * step;
+}
+
 function updateCartBadges(count) {
   document.querySelectorAll("#cart-count, [data-cart-count]").forEach((badge) => {
     badge.textContent = String(count);
   });
 }
 
-function getMinimumQuantityFromElement(element) {
-  const input = element ? element.querySelector(".quantity-input") : null;
-  const minimum = Number(input ? input.getAttribute("min") : 1);
-
-  return Math.max(1, Number.isFinite(minimum) ? minimum : 1);
-}
-
 function openCartDrawer() {
+  const favorites = document.querySelector(".favorites-drawer.is-open");
+  if (favorites) {
+    favorites.classList.remove("is-open");
+    favorites.setAttribute("aria-hidden", "true");
+    if (!document.querySelector(".side-drawer.is-open")) document.body.classList.remove("drawer-open");
+  }
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("cart-open");
+  refreshStaleCart();
 }
 
 async function saveCheckoutDraft() {
@@ -180,59 +274,31 @@ function updateCartBulkState() {
   }
 }
 
-function setCardCartState(productId, quantity) {
-  document.querySelectorAll(`[data-product-id="${productId}"]`).forEach((card) => {
-    const input = card.querySelector(".quantity-input");
-    const button = card.querySelector(".add-to-cart");
-    const isInCart = quantity > 0;
-    const minimum = getMinimumQuantityFromElement(card);
-
-    card.classList.toggle("is-in-cart", isInCart);
-
-    if (input) {
-      input.value = String(Math.max(minimum, quantity || Number(input.value) || minimum));
-    }
-
-    if (button) {
-      button.textContent = isInCart ? "В корзине" : "В корзину";
-      button.disabled = false;
-    }
-  });
-
-  const modal = document.querySelector(".product-modal");
-
-  if (modal && modal.dataset.productId === productId) {
-    const modalButton = modal.querySelector(".modal-add");
-    const modalInput = modal.querySelector(".modal-controls .quantity-input");
-    const minimum = getMinimumQuantityFromElement(modal);
-
-    if (modalButton) {
-      modalButton.textContent = quantity > 0 ? "В корзине" : "В корзину";
-      modalButton.disabled = false;
-    }
-
-    if (modalInput) {
-      modalInput.value = String(Math.max(minimum, quantity || Number(modalInput.value) || minimum));
-    }
-  }
-}
-
 function syncProductCards(cart) {
-  const quantities = {};
-
-  cart.items.forEach((item) => {
-    quantities[item.id] = item.quantity;
-  });
-
+  const previous = cartProductQuantities;
+  const quantities = Object.fromEntries(cart.items.map(item => [item.id, item.quantity]));
   cartProductQuantities = quantities;
 
-  document.querySelectorAll("[data-product-id]").forEach((card) => {
+  document.querySelectorAll(".product-card[data-product-id], .catalog-card[data-product-id], .product-modal[data-product-id]").forEach(card => {
     const productId = card.dataset.productId;
-    const isProductCard = card.classList.contains("product-card") || card.classList.contains("catalog-card");
-
-    if (isProductCard) {
-      setCardCartState(productId, quantities[productId] || 0);
+    const quantity = quantities[productId] || 0;
+    if (quantity === (previous[productId] || 0)) return;
+    const input = card.querySelector(".quantity-input");
+    const button = card.querySelector(".add-to-cart");
+    card.classList.toggle("is-in-cart", quantity > 0);
+    if (input && !input.disabled && quantity) input.value = String(quantity);
+    if (button && !button.hasAttribute("data-purchase-disabled") && (!button.disabled || button.hasAttribute("aria-busy"))) {
+      button.textContent = quantity ? "В корзине" : "В корзину";
     }
+  });
+
+  document.querySelectorAll("[data-add-detail-product]:not([data-purchase-disabled])").forEach(button => {
+    const productId = button.dataset.addDetailProduct;
+    const quantity = quantities[productId] || 0;
+    if (quantity === (previous[productId] || 0)) return;
+    button.textContent = quantity ? "В корзине" : "В корзину";
+    const input = button.closest(".product-detail-purchase")?.querySelector(".quantity-input");
+    if (input && quantity) input.value = String(quantity);
   });
 }
 
@@ -244,7 +310,13 @@ function isProductFavorite(productId) {
   return Boolean(document.querySelector(`[data-product-id="${productId}"] .favorite-button.is-active`));
 }
 
-function renderCart(cart) {
+function renderCart(cart, {saveDraft = true} = {}) {
+  cartLastSync = Date.now();
+  const snapshot = JSON.stringify(cart);
+  if (snapshot === cartSnapshot) return;
+  cartSnapshot = snapshot;
+  const selected = new Set([...cartItems.querySelectorAll(".cart-select-item:checked")]
+    .map(input => input.closest(".cart-item").dataset.productId));
   cartTitleCount.textContent = `(${cart.count})`;
   cartTotal.textContent = `${cart.total} ₽`;
   const checkoutTotal = checkoutDrawer?.querySelector("[data-checkout-total]");
@@ -265,7 +337,7 @@ function renderCart(cart) {
       (item) => `
         <article class="cart-item" data-product-id="${escapeHtml(item.id)}" data-product='${escapeHtml(JSON.stringify(item.product))}'>
           <label class="cart-select">
-            <input class="cart-select-item" type="checkbox" aria-label="Выбрать товар">
+            <input class="cart-select-item" type="checkbox" aria-label="Выбрать товар" ${selected.has(item.id) ? "checked" : ""}>
           </label>
           <img src="${escapeHtml(item.image)}" alt="">
           <div class="cart-item-info">
@@ -273,7 +345,7 @@ function renderCart(cart) {
               <h3>${escapeHtml(item.name)}</h3>
               <p>${escapeHtml(item.sku)}</p>
             </div>
-            <button class="favorite-button cart-favorite ${isProductFavorite(item.id) ? "is-active" : ""}" type="button" aria-label="Добавить в избранное">
+            <button class="favorite-button cart-favorite ${isProductFavorite(item.id) ? "is-active" : ""}" type="button" aria-label="Переместить в избранное" title="Переместить в избранное">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
             </button>
             <div class="cart-item-row">
@@ -284,6 +356,7 @@ function renderCart(cart) {
               </div>
               <strong data-price="${item.price}">${item.line_total} ₽</strong>
             </div>
+            <small class="cart-min-quantity">Мин. заказ: ${item.min_quantity} ${escapeHtml(item.unit)} · шаг ${item.product.quantity_step}</small>
           </div>
           <button class="cart-remove" type="button" aria-label="Удалить">×</button>
         </article>
@@ -291,148 +364,84 @@ function renderCart(cart) {
     )
     .join("");
   updateCartBulkState();
-  if (checkoutDrawer?.classList.contains("is-open") && window.isAuthenticated) {
+  if (saveDraft && checkoutDrawer?.classList.contains("is-open") && window.isAuthenticated) {
     saveCheckoutDraft();
   }
 }
 
-async function refreshCartFromApi() {
-  const response = await fetch("/api/cart/", {
-    headers: {
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  });
-
-  if (!response.ok) {
-    return;
-  }
-
-  renderCart(await response.json());
+function refreshCartFromApi() {
+  if (cartActionPending) return;
+  if (cartRefreshRequest) return cartRefreshRequest;
+  const revision = cartRevision;
+  cartRefreshRequest = (async () => {
+    try {
+      const response = await fetch("/api/cart/", {headers: {"X-Requested-With": "XMLHttpRequest"}});
+      if (!response.ok) return;
+      const cart = await response.json();
+      if (revision === cartRevision && !cartActionPending) renderCart(cart, {saveDraft: false});
+    } catch {
+      // Keep the last known cart if the refresh fails.
+    }
+  })().finally(() => { cartRefreshRequest = null; });
+  return cartRefreshRequest;
 }
 
-async function addProductToCart(productId, quantity, button) {
-  if ((button && button.closest(".is-in-cart")) || cartProductQuantities[productId] > 0) {
+function refreshStaleCart() {
+  if (Date.now() - cartLastSync >= 30000) refreshCartFromApi();
+}
+
+async function addProductToCart(productId, quantity, button, {replaceQuantity = false} = {}) {
+  if (cartActionPending) return;
+  const currentQuantity = cartProductQuantities[productId] || 0;
+  if (currentQuantity && (!replaceQuantity || currentQuantity === quantity)) {
     openCartDrawer();
     return;
   }
 
-  const previousText = button ? button.textContent : "";
-
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Добавляем";
-  }
-
-  const response = await fetch("/cart/add/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    body: JSON.stringify({
-      product_id: productId,
-      quantity,
-    }),
+  return runCartAction(button, async () => {
+    const endpoint = currentQuantity ? "/cart/update/" : "/cart/add/";
+    const {already_in_cart: alreadyInCart, ...cart} = await postStoreAction(endpoint, {product_id: productId, quantity, if_absent: true});
+    applyCartMutation(cart);
+    if (button) button.textContent = "В корзине";
+    if (currentQuantity) {
+      notifyStore("Количество обновлено");
+    } else {
+      notifyStore(alreadyInCart ? "Товар уже в корзине" : "Товар добавлен в корзину");
+    }
+    openCartDrawer();
   });
+}
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (error.auth_required && typeof window.openAccountDrawer === "function") {
-      window.openAccountDrawer(error.error);
-    }
-    if (button) {
-      button.disabled = false;
-      button.textContent = previousText || "В корзину";
-    }
-    return;
-  }
-
-  const cart = await response.json();
-  renderCart(cart);
-  openCartDrawer();
-
-  if (button) {
-    button.disabled = false;
-    button.textContent = "В корзине";
-  }
+async function updateProductInCart(productId, quantity, button, input) {
+  if (quantity > 0 && quantity === cartProductQuantities[productId]) return;
+  const updated = await runCartAction(button, async () => {
+    const cart = await postStoreAction("/cart/update/", {product_id: productId, quantity});
+    applyCartMutation(cart);
+    notifyStore(quantity ? "Количество обновлено" : "Товар удалён из корзины");
+  });
+  if (!updated && input) input.value = String(cartProductQuantities[productId] || input.min);
 }
 
 window.addProductToCart = addProductToCart;
-
-async function updateProductInCart(productId, quantity) {
-  if (quantity <= 0) {
-    const response = await fetch("/cart/update/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      body: JSON.stringify({
-        product_id: productId,
-        quantity: 0,
-      }),
-    });
-
-    if (response.ok) {
-      renderCart(await response.json());
-    }
-
-    return;
-  }
-
-  const cartItem = drawer.querySelector(`.cart-item[data-product-id="${productId}"]`);
-  const cartProduct = cartItem ? JSON.parse(cartItem.dataset.product) : null;
-  const minimum = Math.max(1, Number(
-    cartProduct?.min_quantity || document.querySelector(`[data-product-id="${productId}"] .quantity-input`)?.getAttribute("min") || 1,
-  ));
-  const normalizedQuantity = Math.max(minimum, Number(quantity) || minimum);
-
-  const response = await fetch("/cart/update/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    body: JSON.stringify({
-      product_id: productId,
-      quantity: normalizedQuantity,
-    }),
-  });
-
-  if (response.ok) {
-    renderCart(await response.json());
-  } else {
-    const error = await response.json().catch(() => ({}));
-    if (error.auth_required && typeof window.openAccountDrawer === "function") {
-      window.openAccountDrawer(error.error);
-    }
-  }
-}
-
 window.setProductCartQuantity = updateProductInCart;
 window.openCartDrawer = openCartDrawer;
 window.applyRepeatedOrder = (cart) => {
-  renderCart(cart);
+  applyCartMutation(cart);
   openCartDrawer();
 };
 window.getProductCartQuantity = (productId) => cartProductQuantities[productId] || 0;
 window.refreshCartFromApi = refreshCartFromApi;
 
-async function removeSelectedCartItems() {
-  const selectedIds = Array.from(drawer.querySelectorAll(".cart-select-item:checked"))
-    .map((checkbox) => checkbox.closest(".cart-item"))
-    .filter(Boolean)
-    .map((item) => item.dataset.productId);
+function removeSelectedCartItems(button) {
+  const productIds = [...drawer.querySelectorAll(".cart-select-item:checked")]
+    .map(checkbox => checkbox.closest(".cart-item").dataset.productId);
 
-  if (!selectedIds.length) {
-    return;
-  }
-
-  for (const productId of selectedIds) {
-    await updateProductInCart(productId, 0);
-  }
-
-  updateCartBulkState();
+  if (!productIds.length) return;
+  return runCartAction(button, async () => {
+    const cart = await postStoreAction("/cart/update/", {product_ids: productIds, quantity: 0});
+    applyCartMutation(cart);
+    notifyStore("Выбранные товары удалены из корзины");
+  });
 }
 
 document.addEventListener("click", (event) => {
@@ -462,28 +471,22 @@ document.addEventListener("click", (event) => {
   }
 
   if (event.target.closest(".cart-remove-selected")) {
-    removeSelectedCartItems();
+    removeSelectedCartItems(event.target.closest(".cart-remove-selected"));
     return;
   }
 
-  if (event.target.closest(".cart-clear")) {
-    fetch("/cart/clear/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      body: "{}",
-    }).then(async (response) => {
-      if (response.ok) {
-        renderCart(await response.json());
-      }
+  const clearButton = event.target.closest(".cart-clear");
+  if (clearButton) {
+    runCartAction(clearButton, async () => {
+      const cart = await postStoreAction("/cart/clear/", {});
+      applyCartMutation(cart);
+      notifyStore("Корзина очищена");
     });
     return;
   }
 
   if (event.target.closest(".cart-checkout, .cart-invoice")) {
-    if (!cartItems.querySelector(".cart-item")) {
+    if (cartActionPending || !cartItems.querySelector(".cart-item")) {
       return;
     }
 
@@ -501,19 +504,22 @@ document.addEventListener("click", (event) => {
   }
 
   if (cartItem && event.target.closest(".cart-remove")) {
-    updateProductInCart(cartItem.dataset.productId, 0);
+    updateProductInCart(cartItem.dataset.productId, 0, event.target.closest(".cart-remove"));
   }
 
   if (cartItem && event.target.closest(".cart-drawer .quantity-minus")) {
     const value = cartItem.querySelector(".cart-quantity span");
     const product = JSON.parse(cartItem.dataset.product);
     const minimum = Math.max(1, Number(product.min_quantity) || 1);
-    updateProductInCart(cartItem.dataset.productId, Math.max(minimum, Number(value.textContent) - 1));
+    const step = Math.max(1, Number(product.quantity_step) || 1);
+    updateProductInCart(cartItem.dataset.productId, Math.max(minimum, Number(value.textContent) - step), event.target.closest(".quantity-minus"));
   }
 
   if (cartItem && event.target.closest(".cart-drawer .quantity-plus")) {
     const value = cartItem.querySelector(".cart-quantity span");
-    updateProductInCart(cartItem.dataset.productId, Number(value.textContent) + 1);
+    const product = JSON.parse(cartItem.dataset.product);
+    const step = Math.max(1, Number(product.quantity_step) || 1);
+    updateProductInCart(cartItem.dataset.productId, Number(value.textContent) + step, event.target.closest(".quantity-plus"));
   }
 
   if (cartItem && !event.target.closest("button, input, label, .quantity-control")) {
@@ -586,7 +592,7 @@ document.addEventListener("submit", async (event) => {
       deliveryData.hidden = !requestData;
       deliveryData.querySelector("pre").textContent = requestData ? JSON.stringify(requestData, null, 2) : "";
     }
-    renderCart(payload.cart);
+    applyCartMutation(payload.cart, {saveDraft: false});
     sessionStorage.removeItem("paklineCheckoutOrderId");
     sessionStorage.removeItem("paklineCheckoutFormDraft");
     checkoutForm.reset();
@@ -627,18 +633,14 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.addEventListener("focus", refreshCartFromApi);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    refreshCartFromApi();
-  }
+  if (!document.hidden && drawer.classList.contains("is-open")) refreshStaleCart();
 });
-
-setInterval(() => {
-  if (!document.hidden) {
-    refreshCartFromApi();
-  }
-}, 30000);
+window.addEventListener("storage", (event) => {
+  if (event.key !== "paklineCartChange") return;
+  cartLastSync = 0;
+  if (!document.hidden && drawer.classList.contains("is-open")) refreshCartFromApi();
+});
 
 updateCartBulkState();
 

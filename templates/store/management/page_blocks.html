@@ -1,0 +1,125 @@
+{% extends "store/management/base.html" %}
+{% block title %}Информационные блоки · {{ page }}{% endblock %}
+{% block heading %}Информационные блоки{% endblock %}
+{% block content %}
+{% url 'management_page_blocks' page.pk as blocks_url %}
+<section class="mgmt-card mgmt-form site-editor-card">
+  <div class="page-editor-header">
+    <div><h2>{{ page }}</h2><p class="section-help">{% if has_draft %}Есть изменения в черновике.{% else %}Неопубликованных изменений нет.{% endif %}</p></div>
+    <div class="form-actions">
+      <a class="ghost-button" href="{% url 'management_pages' %}?section=blocks">К списку страниц</a>
+      <a class="ghost-button" href="{% url 'management_page_edit' page.pk %}">Настройки страницы</a>
+      {% if preview_url %}<a class="ghost-button" href="{{ preview_url }}" target="_blank" rel="noopener">Открыть страницу ↗</a>{% endif %}
+      {% if has_draft and draft_preview_url %}<a class="ghost-button" href="{{ draft_preview_url }}" target="_blank" rel="noopener">Предпросмотр черновика ↗</a>{% endif %}
+      {% if has_draft %}<form method="post" action="{{ blocks_url }}">{% include "store/management/block_form_token.html" %}<button class="primary-button" name="action" value="publish">Опубликовать блоки</button></form>{% endif %}
+    </div>
+  </div>
+</section>
+<div class="site-block-layout">
+  <section class="mgmt-card mgmt-form site-editor-card">
+    <h2>Блоки страницы</h2>
+    <ul class="site-block-list">
+      {% for row in rows %}
+        <li style="--block-depth: {{ row.depth }}">
+          <a class="site-block-link{% if row.path == selected.path %} active{% endif %}" href="{{ blocks_url }}?block={{ row.path }}" {% if row.path == selected.path %}aria-current="true"{% endif %}>
+            <strong>{{ row.label }}</strong>{% if row.teaser %}<span>{{ row.teaser|truncatechars:72 }}</span>{% endif %}
+          </a>
+        </li>
+      {% empty %}
+        <li class="muted">Для этой страницы ещё нет дополнительных блоков.</li>
+      {% endfor %}
+    </ul>
+    <form class="form-actions site-block-add" method="post" action="{{ blocks_url }}">
+      {% include "store/management/block_form_token.html" %}
+      {% include "store/management/block_type_field.html" %}
+      <button class="ghost-button" name="action" value="add">Добавить блок</button>
+    </form>
+  </section>
+  {% if selected %}
+    <section class="mgmt-card mgmt-form site-editor-card">
+      <h2>{{ selected.label }}</h2>
+      {% if placeholder_block %}<p class="section-help">Этот блок выводится на сайте как заголовок. Можно изменить его оформление или заменить обычным текстовым блоком.</p>{% endif %}
+      {% if block_styles %}
+        <form method="post" action="{{ blocks_url }}" data-page-editor>
+          {% include "store/management/block_form_token.html" %}
+          <input type="hidden" name="block" value="{{ selected.path }}">
+          <div class="form-grid">
+            {% for key, label, value in block_fields %}
+              {% if key == "src" or selected.node.type == "image" and key == "url" %}
+                <div class="full" data-block-image>
+                  <div class="media-picker-field-previews"><img data-block-thumbnail {% if value %}src="{{ value }}"{% else %}hidden{% endif %} alt="Миниатюра"></div>
+                  <input type="hidden" name="replace-image" value="">
+                  <div class="form-actions">
+                    <button type="button" class="ghost-button" data-block-choose>Выбрать или загрузить изображение</button>
+                    <button type="button" class="ghost-button" data-block-clear {% if not value %}hidden{% endif %}>Убрать изображение</button>
+                  </div>
+                  <label><span>Адрес изображения</span><input type="text" name="content-{{ key }}" data-block-image-url value="{{ value }}"></label>
+                </div>
+              {% elif key == "text" or key == "html" %}
+                <label class="full"><span>{{ label }}</span><textarea name="content-{{ key }}" rows="4" maxlength="10000">{{ value }}</textarea></label>
+              {% elif key == "level" %}
+                <label><span>{{ label }}</span><select name="content-level"><option value="">По умолчанию</option><option value="h1" {% if value == 'h1' %}selected{% endif %}>H1</option><option value="h2" {% if value == 'h2' %}selected{% endif %}>H2</option>{% if value and value != 'h1' and value != 'h2' %}<option selected value="{{ value }}">{{ value }}</option>{% endif %}</select></label>
+              {% else %}
+                <label><span>{{ label }}</span><input type="text" name="content-{{ key }}" value="{{ value }}"></label>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <details class="site-block-details">
+            <summary>Оформление и видимость</summary>
+            <div class="form-grid">
+              {% for key, label, value in block_styles %}
+                <label><span>{{ label }}</span><input type="text" name="style-{{ key }}" maxlength="180" value="{{ value }}"></label>
+              {% endfor %}
+              <input type="hidden" name="visibility-fields" value="1">
+              <label><span>Скрыть на телефоне</span><input type="checkbox" name="hidden_mobile" {% if selected.node.public_hidden_mobile %}checked{% endif %}></label>
+              <label><span>Скрыть на планшете</span><input type="checkbox" name="hidden_tablet" {% if selected.node.public_hidden_tablet %}checked{% endif %}></label>
+            </div>
+          </details>
+          <div class="form-actions site-block-save"><button class="primary-button" name="action" value="edit">Сохранить в черновик</button></div>
+        </form>
+      {% else %}
+        <p class="section-help">Блок нестандартного типа. Его содержимое сохранено. Блок можно переместить или скопировать.</p>
+      {% endif %}
+      <form method="post" action="{{ blocks_url }}" class="form-actions site-block-actions">
+        {% include "store/management/block_form_token.html" %}
+        <input type="hidden" name="block" value="{{ selected.path }}">
+        {% if selected.up %}<button class="ghost-button" name="action" value="up">Выше</button>{% endif %}
+        {% if selected.down %}<button class="ghost-button" name="action" value="down">Ниже</button>{% endif %}
+        <button class="ghost-button" name="action" value="duplicate">Дублировать</button>
+        <button class="ghost-button site-block-delete" name="action" value="delete" onclick="return confirm('Удалить блок и его вложенные элементы из черновика?')">Удалить</button>
+      </form>
+      {% if move_targets or selected.depth %}
+        <form method="post" action="{{ blocks_url }}" class="form-actions site-block-add">
+          {% include "store/management/block_form_token.html" %}
+          <input type="hidden" name="block" value="{{ selected.path }}">
+          <label><span>Переместить в</span><select name="destination">
+            <option value="">Верхний уровень</option>
+            {% for row in move_targets %}<option value="{{ row.path }}">{{ row.label }}{% if row.teaser %} · {{ row.teaser|truncatechars:60 }}{% endif %} ({{ row.path }})</option>{% endfor %}
+          </select></label>
+          <button class="ghost-button" name="action" value="move">Переместить</button>
+        </form>
+      {% endif %}
+      {% if can_add_child %}
+        <form method="post" action="{{ blocks_url }}" class="form-actions site-block-add">
+          {% include "store/management/block_form_token.html" %}
+          <input type="hidden" name="block" value="{{ selected.path }}">
+          {% include "store/management/block_type_field.html" %}
+          <button class="ghost-button" name="action" value="add">Добавить вложенный блок</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>
+{% if revisions %}
+<section class="mgmt-card mgmt-form site-editor-card">
+  <details>
+    <summary>История версий</summary>
+    <form method="post" action="{{ blocks_url }}" class="form-actions site-block-add" onsubmit="return confirm('Заменить текущий черновик выбранной версией?')">
+      {% include "store/management/block_form_token.html" %}
+      <label><span>Версия</span><select name="revision">{% for revision in revisions %}<option value="{{ revision.pk }}">{{ revision.created_at|date:"d.m.Y H:i" }} · {{ revision.label }}</option>{% endfor %}</select></label>
+      <button class="ghost-button" name="action" value="restore">Восстановить как черновик</button>
+    </form>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

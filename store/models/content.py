@@ -191,6 +191,10 @@ class PageContent(models.Model):
     meta_description = models.TextField("Meta description", blank=True)
     h1 = models.CharField("Основной заголовок (H1)", max_length=220, blank=True)
     is_visible = models.BooleanField("Показывать", default=True)
+    draft_structure = models.JSONField("Черновик структуры", default=list, blank=True)
+    published_structure = models.JSONField("Опубликованная структура", default=list, blank=True)
+    draft_design = models.JSONField("Черновик дизайна", default=dict, blank=True)
+    published_design = models.JSONField("Опубликованный дизайн", default=dict, blank=True)
     updated_at = models.DateTimeField("Обновлено", auto_now=True)
 
     class Meta:
@@ -233,6 +237,64 @@ class PageContent(models.Model):
     def get_page_display(self):
         return dict(self.PAGE_CHOICES).get(self.page, self.page)
 
+class BuilderRevision(models.Model):
+    page = models.ForeignKey(PageContent, verbose_name="Страница", on_delete=models.CASCADE, related_name="builder_revisions")
+    structure = models.JSONField("Структура", default=list)
+    design = models.JSONField("Дизайн", default=dict)
+    label = models.CharField("Описание версии", max_length=180, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Автор",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="builder_page_revisions",
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Версия конструктора"
+        verbose_name_plural = "Версии конструктора"
+
+    def __str__(self):
+        return f"{self.page}: {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class GlobalBlock(models.Model):
+    LOCATION_HEADER = "header"
+    LOCATION_FOOTER = "footer"
+    LOCATION_CHOICES = [(LOCATION_HEADER, "Шапка"), (LOCATION_FOOTER, "Подвал")]
+
+    name = models.CharField("Название", max_length=180)
+    location = models.CharField("Расположение", max_length=20, choices=LOCATION_CHOICES)
+    structure = models.JSONField("Структура", default=list)
+    published_structure = models.JSONField("Опубликованная структура", default=list)
+    is_visible = models.BooleanField("Показывать", default=True)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+
+    class Meta:
+        ordering = ["location", "name"]
+        verbose_name = "Глобальный блок"
+        verbose_name_plural = "Глобальные блоки"
+
+    def __str__(self):
+        return self.name
+
+
+class DesignSettings(models.Model):
+    settings = models.JSONField("Настройки дизайна", default=dict)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+
+    class Meta:
+        verbose_name = "Дизайн сайта"
+        verbose_name_plural = "Дизайн сайта"
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
 class SiteMedia(models.Model):
     TYPE_IMAGE = "image"
     TYPE_VIDEO = "video"
@@ -248,12 +310,14 @@ class SiteMedia(models.Model):
     @property
     def is_video(self):
         from pathlib import PurePosixPath
-        return PurePosixPath(self.file.name).suffix.lower() in {".mp4", ".webm"}
+        extension = PurePosixPath(self.file.name or "").suffix.lower()
+        return extension in {".mp4", ".webm", ".mov"} or (not extension and self.media_type == self.TYPE_VIDEO)
 
     @property
     def is_image(self):
         from pathlib import PurePosixPath
-        return PurePosixPath(self.file.name).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"}
+        extension = PurePosixPath(self.file.name or "").suffix.lower()
+        return extension in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"} or (not extension and self.media_type == self.TYPE_IMAGE)
 
     title = models.CharField("Название", max_length=160)
     file = models.FileField("Файл", upload_to="site_media/")

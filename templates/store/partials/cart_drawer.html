@@ -1,4 +1,5 @@
 {% load store_extras %}
+<div class="store-feedback" data-store-feedback role="status" aria-live="polite" aria-atomic="true"></div>
 <aside class="cart-drawer" aria-hidden="true">
   <div class="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
     <header class="cart-panel-header">
@@ -25,7 +26,7 @@
               <h3>{{ item.name }}</h3>
               <p>{{ item.sku }}</p>
             </div>
-            <button class="favorite-button cart-favorite {% if item.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Добавить в избранное">
+            <button class="favorite-button cart-favorite {% if item.id in favorite_ids %}is-active{% endif %}" type="button" aria-label="Переместить в избранное" title="Переместить в избранное">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
             </button>
             <div class="cart-item-row">
@@ -36,7 +37,7 @@
               </div>
               <strong data-price="{{ item.price }}">{{ item.line_total }} ₽</strong>
             </div>
-            <small class="cart-min-quantity">Мин. заказ: {{ item.product.min_quantity }} {{ item.unit }}</small>
+            <small class="cart-min-quantity">Мин. заказ: {{ item.product.min_quantity }} {{ item.unit }} · шаг {{ item.product.quantity_step }}</small>
           </div>
           <button class="cart-remove" type="button" aria-label="Удалить">×</button>
         </article>

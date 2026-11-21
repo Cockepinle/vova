@@ -1,14 +1,13 @@
 {% extends "store/management/base.html" %}
-{% block heading %}Настройки сайта{% endblock %}
+{% block heading %}{% if content_section == "brand" %}Логотип и оформление{% else %}Основные настройки{% endif %}{% endblock %}
 {% block content %}
 <form class="mgmt-card mgmt-form" method="post" enctype="multipart/form-data" data-page-editor>
   {% csrf_token %}
-  <p class="section-help">Настройки сайта сгруппированы по основным разделам магазина.</p>
-  {% if form.instance.logo_url %}<div class="media-previews"><img src="{{ form.instance.logo_url }}" alt="Текущий логотип"><button class="ghost-button" type="submit" name="remove_logo" value="1">Удалить логотип</button></div>{% endif %}
   <div class="page-editor-tabs settings-tabs" role="tablist" aria-label="Разделы настроек">
-    <button type="button" class="page-editor-tab active" role="tab" aria-selected="true" data-page-tab="settings-main">Основное</button>
+    <button type="button" class="page-editor-tab{% if content_section != 'brand' %} active{% endif %}" role="tab" aria-selected="{% if content_section == 'brand' %}false{% else %}true{% endif %}" data-page-tab="settings-main">Основное</button>
     <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-contacts">Контакты</button>
-    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-brand">Шапка и подвал</button>
+    <button type="button" class="page-editor-tab{% if content_section == 'brand' %} active{% endif %}" role="tab" aria-selected="{% if content_section == 'brand' %}true{% else %}false{% endif %}" data-page-tab="settings-brand">Логотип и оформление</button>
+    <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-stats">Показатели главной</button>
     <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-seo">SEO сайта</button>
     <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-currency">Валюта</button>
     <button type="button" class="page-editor-tab" role="tab" aria-selected="false" data-page-tab="settings-order">Заказ</button>
@@ -16,12 +15,14 @@
   </div>
   {{ form.non_field_errors }}
   {% for title, fields in form.groups %}
-    {% if title == "Компания и бренд" %}
-      <section class="settings-section page-editor-panel active" data-page-panel="settings-main">
+    {% if title == "Компания" %}
+      <section class="settings-section page-editor-panel{% if content_section != 'brand' %} active{% endif %}" data-page-panel="settings-main" {% if content_section == "brand" %}hidden{% endif %}>
     {% elif title == "Общие контакты и доставка" %}
       <section class="settings-section page-editor-panel" data-page-panel="settings-contacts" hidden>
-    {% elif title == "Шапка и основная кнопка" or title == "Подвал и юридическая информация" %}
-      <section class="settings-section page-editor-panel" data-page-panel="settings-brand" hidden>
+    {% elif title == "Логотип и оформление" or title == "Шапка и основная кнопка" or title == "Подвал и юридическая информация" %}
+      <section class="settings-section page-editor-panel{% if content_section == 'brand' %} active{% endif %}" data-page-panel="settings-brand" {% if content_section != "brand" %}hidden{% endif %}>
+    {% elif title == "Показатели на главной" %}
+      <section class="settings-section page-editor-panel" data-page-panel="settings-stats" hidden>
     {% elif title == "Валюта магазина" %}
       <section class="settings-section page-editor-panel" data-page-panel="settings-currency" hidden>
     {% elif title == "Настройки заказа" %}
@@ -32,7 +33,11 @@
       <h2>{{ title }}</h2>
       <div class="form-grid">
         {% for field in fields %}
+          {% if field.name == "logo_media" %}
+            {% include "store/management/content_image_field.html" with fallback=form.instance.logo_url remove=form.remove_logo upload=form.logo_image %}
+          {% else %}
           <label><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
+          {% endif %}
         {% endfor %}
       </div>
     </section>
