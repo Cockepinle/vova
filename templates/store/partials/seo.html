@@ -9,4 +9,4 @@
 <meta property="og:description" content="{{ seo.og_description }}">
 <meta property="og:url" content="{{ seo.canonical }}">
 {% if seo.og_image %}<meta property="og:image" content="{{ seo.og_image }}">{% endif %}
-{% if site_settings.favicon_media %}<link rel="icon" href="{{ site_settings.favicon_media.file.url }}">{% endif %}
+{% if site_settings.favicon_media %}<link rel="icon" href="{{ site_settings.favicon_media.file.url }}">{% else %}<link rel="icon" href="{% url 'favicon' %}">{% endif %}

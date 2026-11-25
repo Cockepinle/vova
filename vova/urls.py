@@ -1,13 +1,20 @@
 from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.http import Http404, HttpResponseRedirect
 from django.urls import include, path
 from django.utils.encoding import filepath_to_uri
 
 from store import cms_views
 
+
+def favicon(request):
+    return HttpResponseRedirect(staticfiles_storage.url("store/images/favicon.svg"))
+
+
 urlpatterns = [
+    path("favicon.ico", favicon, name="favicon"),
     path("admin/login/", cms_views.AdminLoginView.as_view(), name="admin_login"),
     path("admin/", admin.site.urls),
     path("", include("store.urls")),

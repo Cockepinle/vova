@@ -592,17 +592,7 @@ document.querySelectorAll("[data-catalog-search]").forEach((form) => {
       window.location.assign(options[highlightedSuggestion].href);
     }
   });
-  document.addEventListener("change", event => {
-  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
-});
-
-window.addEventListener("pageshow", () => {
-  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
-    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
-  });
-});
-
-document.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     if (!form.contains(event.target)) {
       hideSuggestions();
     }
@@ -817,17 +807,7 @@ if (categoryMenu) {
       trigger.focus();
     }
   });
-  document.addEventListener("change", event => {
-  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
-});
-
-window.addEventListener("pageshow", () => {
-  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
-    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
-  });
-});
-
-document.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     if (!categoryMenu.contains(event.target)) categoryMenu.open = false;
   });
 }

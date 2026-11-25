@@ -1,7 +1,7 @@
 from decimal import Decimal
 from io import BytesIO
 from tempfile import TemporaryDirectory
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -69,19 +69,19 @@ class CatalogFeaturesTests(TestCase):
         )
         root_response = self.client.get(reverse('catalog'), {'category': self.root.slug})
         self.assertContains(root_response, self.child.name)
-        self.assertContains(root_response, reverse('catalog') + '?category=' + self.child.slug)
+        self.assertContains(root_response, reverse('catalog') + '?category=' + quote(self.child.slug))
         self.assertContains(root_response, 'Подробнее')
         self.assertContains(root_response, root_product.name)
         self.assertNotContains(root_response, child_product.name)
         self.assertNotContains(root_response, self.product.name)
-        self.assertContains(root_response, reverse('catalog') + '?category=' + self.root.slug)
+        self.assertContains(root_response, reverse('catalog') + '?category=' + quote(self.root.slug))
 
         child_response = self.client.get(reverse('catalog'), {'category': self.child.slug})
         self.assertContains(child_response, self.leaf.name)
         self.assertContains(child_response, child_product.name)
         self.assertNotContains(child_response, root_product.name)
         self.assertNotContains(child_response, self.product.name)
-        self.assertContains(child_response, reverse('catalog') + '?category=' + self.root.slug)
+        self.assertContains(child_response, reverse('catalog') + '?category=' + quote(self.root.slug))
 
         child_api_products = self.client.get(
             reverse('api_products'), {'category': self.child.slug},
@@ -94,7 +94,7 @@ class CatalogFeaturesTests(TestCase):
         self.assertNotContains(leaf_response, child_product.name)
         self.assertContains(leaf_response, self.child.name)
         self.assertContains(leaf_response, self.root.name)
-        self.assertContains(leaf_response, reverse('catalog') + '?category=' + self.root.slug)
+        self.assertContains(leaf_response, reverse('catalog') + '?category=' + quote(self.root.slug))
 
     def test_sidebar_renders_nested_accordion_and_expands_active_ancestry(self):
         response = self.client.get(reverse('catalog'), {'category': self.leaf.slug})

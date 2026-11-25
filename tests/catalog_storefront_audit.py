@@ -98,9 +98,10 @@ class CatalogStorefrontAudit(ResponsiveAudit):
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), width
                 expect(page.locator(".product-back")).to_be_visible()
                 expect(page.locator(".product-detail-gallery-stage .image-favorite")).to_be_visible()
-            expect(page.locator(".detail-variant-more")).not_to_have_attribute("open", "")
-            page.locator(".detail-variant-more summary").press("Enter")
-            page.locator(f'.detail-variant-more a[data-product-id="{selected.pk}"]').click()
+            selector = page.get_by_role("combobox", name="Вариант товара")
+            expect(selector).to_be_visible()
+            option = selector.locator(f'option[data-product-url="{reverse("api_product_detail", args=[selected.pk])}"]')
+            selector.select_option(value=option.get_attribute("value"))
             expect(page.locator("h1")).to_have_text(selected.name)
             expect(page.locator("[data-detail-sku]")).to_contain_text(selected.sku)
             expect(page.locator("[data-detail-price]")).to_contain_text(str(selected.price))

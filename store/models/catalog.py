@@ -193,7 +193,7 @@ class Product(models.Model):
     width_mm = models.DecimalField("Ширина, мм", max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     height_mm = models.DecimalField("Высота, мм", max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     weight_kg = models.DecimalField("Вес, кг", max_digits=12, decimal_places=3, null=True, blank=True, validators=[MinValueValidator(0)])
-    variant_sort_order = models.PositiveIntegerField("Порядок в группе модификаций", default=0)
+    variant_sort_order = models.PositiveIntegerField("Порядок в группе модификаций", default=0, db_default=0)
     media = models.ManyToManyField("SiteMedia", verbose_name="Видео и файлы из медиатеки", blank=True, related_name="products", help_text="Фотографии, видео MP4/WebM и документы PDF. Файлы загружаются в общей медиатеке.")
     old_price = models.DecimalField("Старая цена", max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField("Единица измерения", max_length=40, default="шт")

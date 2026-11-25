@@ -19,7 +19,7 @@ git fetch origin
 git status --short
 git log --oneline --left-right HEAD...origin/main
 git switch -c release/pakline-audit
-git add -- .env.example DEPLOY_FREE.md RELEASE_UPDATE.md build_files.sh requirements.txt static/store store templates tests vova
+git add -- .env.example DEPLOY_FREE.md RELEASE_UPDATE.md build_files.sh requirements.txt static/store store templates tests vercel.json vova
 git diff --cached --check
 git diff --cached --name-only
 git commit -m "Prepare PakLine CMS release"
@@ -30,7 +30,9 @@ git push -u origin release/pakline-audit
 
 ## Сборка, схема и медиа
 
-На изолированной среде проверяйте следующую последовательность. Для `collectstatic` используйте рабочую папку Preview или отдельный `STATIC_ROOT`. Скрипт `build_files.sh` устанавливает зависимости и собирает статику при вызове из настроенного Build Command.
+В существующем проекте Vercel проверьте Root Directory (папка с `manage.py`), ветку `main`, домены и переменные Production. Снимите переопределения Build Command, Install Command и Output Directory, если они заданы для прежней сборки. Нативная сборка Django находит `vova/wsgi.py` через `WSGI_APPLICATION`, устанавливает `requirements.txt`, запускает `collectstatic` и публикует `/static/` через CDN. `build_files.sh` оставлен для ручной сборки в других окружениях. [Документация Vercel о Django](https://vercel.com/docs/frameworks/full-stack/django#serving-static-assets)
+
+На изолированной PostgreSQL проверьте следующую последовательность.
 
 ```text
 python -m pip install -r requirements.txt
@@ -41,7 +43,29 @@ python manage.py migrate --plan
 python manage.py collectstatic --noinput
 ```
 
-Это обновление не добавляет миграций. Если проверка production-схемы показывает старые неприменённые миграции, сверяйте их с рабочим деплоем и отдельно согласуйте план после резервной копии. Команда `migrate --plan` показывает план. Команду `migrate` в задачу автоматической сборки не добавляйте.
+Миграция `0042` добавляет `store_product.variant_sort_order` со значением 0 для существующих товаров. `0043` восстанавливает отсутствующий столбец, если `0042` уже записана в истории, и устанавливает постоянный SQL DEFAULT 0. Для уже заполненного столбца сохраняются текущие значения.
+
+### Этап миграции Production
+
+1. В Production → Branch Tracking отключите Auto-assign Custom Production Domains до отправки изменений в `main`. Проверьте, какой deployment обслуживает `vova-xi.vercel.app`, и после сборки убедитесь, что новый deployment имеет статус Staged, а публичный домен по-прежнему ведёт на прежний. Если автоматическое назначение нельзя отключить в панели, используйте привязанный к существующему проекту CLI и `vercel deploy --prod --skip-domain`, сохраняя блокировку автоматического выпуска из Git на время операции. [Документация Vercel о staged deployment](https://vercel.com/docs/deployments/promoting-a-deployment)
+2. Сверьте список проектов и окружений Vercel, подключённых к репозиторию, и назначения их `DATABASE_URL`. Назначьте одного исполнителя релиза для общей PostgreSQL. Все изменения схемы этого приложения должны проходить через `release_migrate --apply`. Команда удерживает advisory lock на соединении PostgreSQL и завершает попытку, если блокировка уже занята. Блокировка общая для прямых подключений к одной базе и действует для исполнителей, запускающих эту команду. Для операции нужен прямой endpoint без transaction pooling. Для Neon возьмите строку подключения с выключенным Connection pooling.
+3. Убедитесь, что у вас есть проверенная резервная копия именно этой PostgreSQL. Снимите свежий snapshot у провайдера либо выполните `pg_dump` с прямым подключением и проверьте восстановление в отдельной базе. Для команды ниже задайте параметры прямого подключения через `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, а пароль передайте через защищённый `PGPASSFILE`. Архив сохраните вне репозитория. Выполняйте команду `release_migrate` из того же коммита, который собран в Staged. Передайте ему прямой URI через переменную окружения `DATABASE_URL` из менеджера секретов. Сверьте базу и схему с настройками Production до применения.
+
+   ```text
+   pg_dump --format=custom --file=vova-before-release.dump
+   pg_restore --list vova-before-release.dump
+   python manage.py showmigrations
+   python manage.py release_migrate
+   ```
+
+4. При отсутствии столбца ожидается либо `0042` и `0043` (если `0042` не записана), либо только `0043` (если `0042` записана). Если обнаружилась другая комбинация, например `0042` не записана при уже существующем столбце или в плане есть неожиданные старые миграции, разберите расхождение до запуска. Для этого аварийного релиза проведите этап в окне обслуживания, если версию до `0042` по-прежнему используют для записи товаров: между двумя миграциями старый код может столкнуться с ограничением NOT NULL.
+
+   ```text
+   python manage.py release_migrate --apply
+   python manage.py release_migrate
+   ```
+
+5. Продолжайте после сообщений о наличии таблиц и столбцов и пустом плане. На URL staged deployment проверьте главную, каталог, вход сотрудника и `/management/`, CSS, JavaScript, `/favicon.ico` и доступность прежних файлов. Затем выберите **Promote to Production** для этого deployment и повторите проверки на публичном домене. При ошибке миграции или smoke-проверки оставьте релиз в Staged до выяснения причины. Выполняйте тот же порядок при последующих изменениях схемы. Для миграций, несовместимых с работающим приложением, требуется совместимое обновление в несколько релизов либо окно обслуживания.
 
 Новые файлы на Vercel записываются в Cloudinary. Для старых файлов с относительными путями скопируйте публичные оригиналы на постоянный HTTPS-источник с сохранением путей. Укажите базовый URL источника в `MEDIA_URL`, например `https://media.example.ru/`. Тогда старые адреса `/media/…` будут перенаправлены. Сверьте список ссылок и копируйте только предназначенные для публикации файлы. Рабочие пути в базе и имеющиеся экземпляры файлов сохраните. При размещении на сервере с постоянным диском следуйте настройке тома и выдачи `MEDIA_URL` в [DEPLOY_FREE.md](DEPLOY_FREE.md).
 

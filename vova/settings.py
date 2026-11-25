@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, unquote, urlparse
 from django.core.exceptions import ImproperlyConfigured
 
 
@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 env_path = BASE_DIR / ".env"
 
-if env_path.exists():
+if not os.environ.get("VERCEL") and env_path.exists():
     for line in env_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -85,25 +85,18 @@ WSGI_APPLICATION = "vova.wsgi.application"
 
 if database_url:
     parsed_database_url = urlparse(database_url)
-    database_engine = "django.db.backends.postgresql"
-    database_options = {}
-
-    if parsed_database_url.query:
-        for item in parsed_database_url.query.split("&"):
-            if "=" not in item:
-                continue
-            key, value = item.split("=", 1)
-            database_options[key] = value
+    if parsed_database_url.scheme not in {"postgres", "postgresql"}:
+        raise ImproperlyConfigured("DATABASE_URL must use postgres:// or postgresql://.")
 
     DATABASES = {
         "default": {
-            "ENGINE": database_engine,
-            "NAME": parsed_database_url.path.lstrip("/"),
-            "USER": parsed_database_url.username or "",
-            "PASSWORD": parsed_database_url.password or "",
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(parsed_database_url.path.lstrip("/")),
+            "USER": unquote(parsed_database_url.username or ""),
+            "PASSWORD": unquote(parsed_database_url.password or ""),
             "HOST": parsed_database_url.hostname or "",
             "PORT": parsed_database_url.port or "",
-            "OPTIONS": database_options,
+            "OPTIONS": dict(parse_qsl(parsed_database_url.query, keep_blank_values=True)),
         }
     }
 else:
@@ -126,6 +119,9 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = True
+if IS_VERCEL:
+    # The native Django builder publishes STATIC_ROOT through the CDN.
+    MIDDLEWARE.remove("whitenoise.middleware.WhiteNoiseMiddleware")
 MEDIA_URL = os.environ.get("MEDIA_URL") or "/media/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media").resolve()
 CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
