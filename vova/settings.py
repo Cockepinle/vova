@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 env_path = BASE_DIR / ".env"
 
-if not os.environ.get("VERCEL") and env_path.exists():
+if not os.environ.get("VERCEL") and not os.environ.get("DJANGO_SKIP_DOTENV") and env_path.exists():
     for line in env_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     "store",
 ]
 
-if not DEBUG:
+if not DEBUG and not IS_VERCEL:
     INSTALLED_APPS.insert(-1, "whitenoise.runserver_nostatic")
 
 if os.environ.get("CLOUDINARY_URL"):
@@ -53,7 +53,6 @@ if os.environ.get("CLOUDINARY_URL"):
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -62,6 +61,8 @@ MIDDLEWARE = [
     "store.cms.drafts.ManagementDraftMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+if not IS_VERCEL:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 ROOT_URLCONF = "vova.urls"
 
@@ -87,6 +88,10 @@ if database_url:
     parsed_database_url = urlparse(database_url)
     if parsed_database_url.scheme not in {"postgres", "postgresql"}:
         raise ImproperlyConfigured("DATABASE_URL must use postgres:// or postgresql://.")
+    database_options = dict(parse_qsl(parsed_database_url.query, keep_blank_values=True))
+    if IS_VERCEL:
+        database_options.setdefault("sslmode", "require")
+        database_options.setdefault("connect_timeout", "10")
 
     DATABASES = {
         "default": {
@@ -96,7 +101,8 @@ if database_url:
             "PASSWORD": unquote(parsed_database_url.password or ""),
             "HOST": parsed_database_url.hostname or "",
             "PORT": parsed_database_url.port or "",
-            "OPTIONS": dict(parse_qsl(parsed_database_url.query, keep_blank_values=True)),
+            "OPTIONS": database_options,
+            "DISABLE_SERVER_SIDE_CURSORS": IS_VERCEL,
         }
     }
 else:
@@ -118,10 +124,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
-WHITENOISE_USE_FINDERS = True
-if IS_VERCEL:
-    # The native Django builder publishes STATIC_ROOT through the CDN.
-    MIDDLEWARE.remove("whitenoise.middleware.WhiteNoiseMiddleware")
+WHITENOISE_USE_FINDERS = DEBUG
 MEDIA_URL = os.environ.get("MEDIA_URL") or "/media/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media").resolve()
 CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")

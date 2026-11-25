@@ -2,22 +2,26 @@ from django.apps import apps
 from django.core.management import BaseCommand, CommandError, call_command
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.db.migrations.recorder import MigrationRecorder
 
 
 LOCK_KEY = 782_435_162_042
 
 
 class Command(BaseCommand):
-    help = "Inspect or apply release migrations via a direct PostgreSQL connection."
+    help = "Inspect, verify, or apply release migrations on PostgreSQL."
 
     def add_arguments(self, parser):
-        parser.add_argument("--apply", action="store_true", help="Apply the reviewed migration plan.")
+        action = parser.add_mutually_exclusive_group()
+        action.add_argument("--apply", action="store_true", help="Apply the reviewed migration plan.")
+        action.add_argument("--verify", action="store_true", help="Fail on pending migrations or missing schema objects.")
 
     def handle(self, *args, **options):
         if connection.vendor != "postgresql":
-            raise CommandError("A direct PostgreSQL DATABASE_URL is required.")
+            raise CommandError("A PostgreSQL DATABASE_URL is required.")
 
+        if options["verify"]:
+            self.verify_schema()
+            return
         if not options["apply"]:
             self.show_plan()
             return
@@ -35,7 +39,7 @@ class Command(BaseCommand):
                 cursor.execute("SET lock_timeout = '5s'")
             self.show_plan()
             call_command("migrate", interactive=False, stdout=self.stdout)
-            self.check_columns()
+            self.verify_schema()
         finally:
             # Closing the direct session also releases its advisory lock.
             connection.close()
@@ -43,7 +47,7 @@ class Command(BaseCommand):
     def show_plan(self):
         executor = MigrationExecutor(connection)
         executor.loader.check_consistent_history(connection)
-        applied = MigrationRecorder(connection).applied_migrations()
+        applied = executor.loader.applied_migrations
         with connection.cursor() as cursor:
             table = "store_product"
             columns = set()
@@ -51,9 +55,19 @@ class Command(BaseCommand):
                 columns = {
                     column.name for column in connection.introspection.get_table_description(cursor, table)
                 }
-        self.stdout.write(f"store.0042 recorded: {('store', '0042_product_variant_sort_order') in applied}")
+        for migration in ("0042_product_variant_sort_order", "0043_repair_product_variant_sort_order"):
+            self.stdout.write(f"store.{migration[:4]} recorded: {('store', migration) in applied}")
         self.stdout.write(f"store_product.variant_sort_order present: {'variant_sort_order' in columns}")
         call_command("migrate", plan=True, interactive=False, stdout=self.stdout)
+
+    def verify_schema(self):
+        executor = MigrationExecutor(connection)
+        executor.loader.check_consistent_history(connection)
+        pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        if pending:
+            names = ", ".join(f"{migration.app_label}.{migration.name}" for migration, _ in pending)
+            raise CommandError("Pending migrations: " + names)
+        self.check_columns()
 
     def check_columns(self):
         missing = []
