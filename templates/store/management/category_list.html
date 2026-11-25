@@ -1,4 +1,5 @@
 {% extends "store/management/base.html" %}
+{% load static %}
 
 {% block heading %}Категории{% endblock %}
 
@@ -6,13 +7,12 @@
   <section class="mgmt-card">
     <div class="card-header">
       <form class="toolbar" method="get">
-        <input name="q" value="{{ query }}" placeholder="Поиск категорий...">
-        <button class="ghost-button" type="submit">Найти</button>
+        <input type="search" data-category-search aria-label="Поиск категорий" placeholder="Поиск категорий…">
       </form>
       <a class="primary-button" href="{% url 'management_category_new' %}">+ Добавить категорию</a>
     </div>
 
-    <form method="post" action="{% url 'management_category_bulk' %}">
+    <form method="post" data-category-bulk action="{% url 'management_category_bulk' %}">
       {% csrf_token %}
       <div class="bulk-bar">
         <select name="action">
@@ -26,18 +26,21 @@
 
       <div class="table-wrap">
         <table class="mgmt-table">
-          <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('[name=ids]').forEach(item => item.checked = this.checked)"></th><th>Название</th><th>Товары</th><th>Статус</th><th></th></tr></thead>
+          <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('tr[data-category-id]:not([hidden]) [name=ids]').forEach(item => item.checked = this.checked)"></th><th>Название</th><th>Товары</th><th>Статус</th><th></th></tr></thead>
           <tbody>
-            {% for category in page %}
-              <tr>
+            {% for category in tree %}
+              <tr data-category-id="{{ category.pk }}" data-parent="{{ category.parent_id|default_if_none:'' }}" data-name="{{ category.name }}" data-direct="{{ category.product_count }}">
                 <td data-label="Выбрать"><input type="checkbox" name="ids" value="{{ category.id }}"></td>
-                <td class="product-cell" data-label="Название">{% if category.display_image_url %}<img src="{{ category.display_image_url }}" alt="">{% endif %}<span><strong>{{ category.name }}</strong>{% if category.parent %}<small>В категории: {{ category.parent.name }}</small>{% endif %}</span></td>
+                <td data-label="Название">
+                  <div class="category-tree-name" style="--depth: {{ category.tree_depth }}">
+                    {% if category.has_children %}<button class="ghost-button" type="button" data-category-branch aria-expanded="false" aria-label="Подкатегории {{ category.name }}">+</button>{% endif %}
+                    <strong>{{ category.name }}</strong>
+                  </div>
+                </td>
                 <td data-label="Товары">
-                  {% if category.product_count %}
-                    <a class="count-link" href="{% url 'management_products' %}?category={{ category.id }}">{{ category.product_count }}</a>
-                  {% else %}
-                    <span class="muted">0</span>
-                  {% endif %}
+                  <button class="ghost-button" type="button" data-category-products data-url="{% url 'management_category_products' category.pk %}" aria-expanded="false"
+                          aria-controls="category-products-{{ category.pk }}" title="Просмотреть товары этой категории">{{ category.product_count }}</button>
+                  {% if category.has_children %}<small title="Товары во всех подкатегориях">Во вложенных: <span data-category-descendants>{{ category.descendant_count }}</span></small>{% endif %}
                 </td>
                 <td data-label="Статус">
                   <select class="status-select" name="status_{{ category.id }}">
@@ -53,6 +56,7 @@
                   <button type="submit" formaction="{% url 'management_category_delete' category.id %}" formmethod="post" onclick="return confirm('Удалить категорию?')">Удалить</button>
                 </td>
               </tr>
+              <tr id="category-products-{{ category.pk }}" class="category-products-row" hidden><td colspan="5"></td></tr>
             {% empty %}
               <tr><td colspan="5">Категории не найдены.</td></tr>
             {% endfor %}
@@ -61,10 +65,34 @@
       </div>
     </form>
 
-    <div class="pagination">
-      {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query }}">Назад</a>{% endif %}
-      <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query }}">Вперёд</a>{% endif %}
-    </div>
+    <p class="muted" data-category-no-results hidden>Категории не найдены.</p>
   </section>
+
+  <template data-category-products-template>
+    <section class="category-products-panel">
+      <div class="toolbar">
+        <label>Поиск товаров<input type="search" data-member-search placeholder="Название или артикул"></label>
+        <label>Список<select data-member-mode><option value="linked">В этой категории</option><option value="available">В других категориях</option></select></label>
+        <label>Куда переместить снятые товары
+          <select data-member-destination><option value="">Выберите категорию</option>
+          {% for category in tree %}<option value="{{ category.pk }}">{{ category.tree_label }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <p class="muted" data-member-status role="status"></p>
+      <div class="table-wrap"><table class="mgmt-table">
+        <thead><tr><th>Привязка</th><th>Товар</th><th>Артикул</th><th>Статус</th><th>Цена</th><th>Действия</th></tr></thead>
+        <tbody data-member-rows></tbody>
+      </table></div>
+      <div class="toolbar-actions">
+        <button class="ghost-button" type="button" data-member-prev>Назад</button>
+        <button class="ghost-button" type="button" data-member-next>Вперёд</button>
+        <button class="primary-button" type="button" data-member-save>Сохранить изменения</button>
+      </div>
+    </section>
+  </template>
+{% endblock %}
+
+{% block management_scripts %}
+  <script src="{% static 'store/js/category-tree.js' %}?v=2"></script>
 {% endblock %}

@@ -14,10 +14,13 @@
   let nextUrlKey = Date.now();
 
   function sync() {
+    field.dataset.draftPreviews = JSON.stringify(Object.fromEntries(items
+      .filter(item => item.key.startsWith("media:")).map(item => [item.key, item.url])));
     field.value = JSON.stringify({
       primary,
       items: items.map(({key, alt, url}) => ({key, alt, ...(key.startsWith("url:") ? {url} : {})})),
     });
+    field.dispatchEvent(new Event("change", {bubbles: true}));
   }
 
   function render(focusKey, selector = "[data-gallery-open]") {
@@ -156,6 +159,25 @@
     grid.querySelector(".is-drop-target")?.classList.remove("is-drop-target");
   });
 
+  editor.closest("form").addEventListener("management-draft-restored", event => {
+    const saved = event.detail.gallery_manifest?.[0];
+    if (!saved) return;
+    try {
+      const manifest = JSON.parse(saved);
+      const previews = JSON.parse(event.detail.gallery_previews?.[0] || "{}");
+      const originals = new Map(items.map(item => [item.key, item]));
+      const restored = manifest.items.flatMap(entry => {
+        const original = originals.get(entry.key);
+        const url = original?.url || entry.url || previews[entry.key];
+        if (!url || !["http:", "https:"].includes(new URL(url, location.href).protocol)) return [];
+        return [{...original, key: entry.key, url, alt: entry.alt,
+          primary: entry.key === manifest.primary}];
+      });
+      items.splice(0, items.length, ...restored);
+      primary = restored.some(item => item.key === manifest.primary) ? manifest.primary : restored[0]?.key ?? null;
+      render();
+    } catch {}
+  });
   render();
   field.disabled = false;
 })();

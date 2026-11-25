@@ -1,8 +1,12 @@
+import json
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from django.db.models import Count
+from django.db.models import Count, FilteredRelation, Value
+from django.db.models.functions import Coalesce, Concat
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
 from .common import ADDITION, AttributeDefinition, CHANGE, Category, CustomerPrice, CustomerPriceFormSet, CustomerProfile, DELETION, DynamicProductFieldsForm
 from .common import HttpResponse, Paginator, Product, ProductExcelImportForm, ProductForm, ProductImage, Q, SiteMedia, export_products
@@ -108,6 +112,7 @@ def product_form(request, product_id=None):
     products = Product.objects.select_for_update() if request.method == "POST" else Product.objects.all()
     product = get_object_or_404(products, pk=product_id) if product_id else None
     preview_slug = product.slug if product else ""
+    published_url = bool(product and product.status == Product.STATUS_PUBLISHED)
 
     if request.method == "POST" and "save_customer_prices" in request.POST:
         if not product:
@@ -187,18 +192,6 @@ def product_form(request, product_id=None):
         dynamic_form = DynamicProductFieldsForm(product=product)
         price_formset = CustomerPriceFormSet(instance=form.instance, prefix="prices")
 
-    saved_prices = {price.user_id: price.price for price in CustomerPrice.objects.filter(product=product)} if product else {}
-    customer_price_rows = []
-    if product:
-        for user in get_user_model().objects.filter(is_staff=False, is_active=True).select_related("customer_profile").order_by("email", "username"):
-            profile = getattr(user, "customer_profile", None)
-            level = profile.price_level if profile and profile.price_level in PRICE_LEVELS else CustomerProfile.PRICE_RETAIL
-            customer_price_rows.append({
-                "user": user, "price": saved_prices.get(user.pk), "selected": user.pk in saved_prices,
-                "level": level, "level_label": PRICE_LEVELS[level],
-                "coefficient": getattr(profile, f"{level}_coefficient", None),
-            })
-
     price_rows = [
         {
             "level": level, "label": label, "field": form[f"{level}_coefficient"],
@@ -219,10 +212,11 @@ def product_form(request, product_id=None):
             "product_gallery": gallery,
             "gallery_revision": gallery_revision,
             "gallery_error": gallery_error,
-            "customer_price_rows": customer_price_rows,
+            "price_levels": CustomerProfile.PRICE_LEVEL_CHOICES,
             "price_rows": price_rows,
             "coefficient_help": COEFFICIENT_HELP,
             "preview_slug": preview_slug,
+            "published_url": published_url,
         },
     )
 
@@ -328,3 +322,71 @@ def product_excel_import(request):
     else:
         form = ProductExcelImportForm()
     return render(request, "store/management/product_import.html", {"section": "products", "form": form, "result": result})
+
+
+@management_required
+@require_http_methods(["GET", "POST"])
+def product_customer_prices(request, product_id):
+    product = get_object_or_404(Product, pk=product_id)
+    customers = get_user_model().objects.filter(is_staff=False, is_active=True)
+    prices = CustomerPrice.objects.filter(product=product, user__in=customers)
+    if request.method == "POST":
+        try:
+            edits = json.loads(request.POST["edits"])
+            if not isinstance(edits, dict) or len(edits) > 5000:
+                raise ValueError
+            entries = {}
+            for key, value in edits.items():
+                if not key.isascii() or not key.isdecimal() or len(key) > 18:
+                    raise ValueError
+                if value is not None and not isinstance(value, str):
+                    raise ValueError
+                entries[int(key)] = None if value is None else parse_individual_price(value)
+            if customers.filter(pk__in=entries).count() != len(entries):
+                raise ValueError
+        except (KeyError, ValueError, ValidationError):
+            return JsonResponse({"error": "Проверьте покупателей и цены. Цена должна быть указана с точностью до копеек."}, status=400)
+        with transaction.atomic():
+            Product.objects.select_for_update().get(pk=product.pk)
+            for buyer, price in entries.items():
+                if price is None:
+                    prices.filter(user_id=buyer).delete()
+                else:
+                    CustomerPrice.objects.update_or_create(product=product, user_id=buyer, defaults={"price": price})
+        return JsonResponse({"saved": True})
+
+    total_selected = prices.count()
+    customers = customers.select_related("customer_profile").annotate(
+        product_price=FilteredRelation("individual_prices", condition=Q(individual_prices__product=product)),
+        level=Coalesce("customer_profile__price_level", Value(CustomerProfile.PRICE_RETAIL)),
+        full_name=Concat("first_name", Value(" "), "last_name"),
+    )
+    if query := request.GET.get("q", "").strip()[:180]:
+        customers = customers.filter(
+            Q(full_name__icontains=query) | Q(email__icontains=query) | Q(username__icontains=query)
+            | Q(customer_profile__company__icontains=query) | Q(customer_profile__phone__icontains=query)
+            | (Q(pk=int(query)) if query.isascii() and query.isdecimal() and len(query) < 18 else Q())
+        )
+    if request.GET.get("level") in PRICE_LEVELS:
+        customers = customers.filter(level=request.GET["level"])
+    if request.GET.get("selected") == "1":
+        added, removed = [], []
+        for token in request.GET.get("selection", "").split(",")[:1000]:
+            if len(token) < 20 and token[1:].isascii() and token[1:].isdecimal():
+                (removed if token[0] == "-" else added).append(int(token[1:]))
+        customers = customers.filter(Q(product_price__isnull=False) | Q(pk__in=added)).exclude(pk__in=removed)
+    if request.GET.get("priced") == "1":
+        customers = customers.filter(product_price__isnull=False)
+    page = Paginator(customers.order_by("last_name", "first_name", "email", "pk").values(
+        "pk", "full_name", "email", "username", "customer_profile__company",
+        "level", "product_price__price", "customer_profile__retail_coefficient",
+        "customer_profile__wholesale_coefficient", "customer_profile__special_coefficient",
+    ), 25).get_page(request.GET.get("page"))
+    rows = [{
+        "id": row["pk"], "name": row["full_name"].strip() or row["username"],
+        "email": row["email"], "company": row["customer_profile__company"], "level": row["level"],
+        "price": row["product_price__price"],
+        "coefficient": row.get(f"customer_profile__{row['level']}_coefficient"),
+    } for row in page]
+    return JsonResponse({"rows": rows, "total": page.paginator.count, "selected": total_selected,
+                         "page": page.number, "pages": page.paginator.num_pages})

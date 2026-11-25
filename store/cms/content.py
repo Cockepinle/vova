@@ -1,6 +1,7 @@
 import copy
 import html
 import json
+import logging
 import re
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
@@ -11,13 +12,17 @@ from django.db.models import Count
 from django.utils.encoding import filepath_to_uri
 
 from ..models import Category, Employee, Product, ProductAttribute, ProductImage
-from ..uploads import local_media_missing
+from ..uploads import MediaStorageUnavailable, local_media_missing
 from .common import ADDITION, AttributeDefinition, AttributeDefinitionForm, BuilderRevision, CHANGE, DELETION, PageContent, PageContentForm, SiteLinkFormSet, SiteMedia
 from .common import SiteMediaForm, SiteSettings, SiteSettingsForm, delete_unreferenced_file, get_object_or_404, log_change, management_required, messages, redirect, render
 from .common import require_POST, transaction
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.urls import reverse
+from django.views.csrf import csrf_failure
 from django.views.decorators.http import require_http_methods
+
+logger = logging.getLogger(__name__)
+
 
 MEDIA_REFERENCE_FIELDS = (
     (SiteSettings, ("logo_image",)), (PageContent, ("hero_image",)),
@@ -125,6 +130,25 @@ def page_content_delete(request, page_id):
     messages.success(request, "Страница удалена.")
     return redirect("management_pages")
 
+
+def management_csrf_failure(request, reason=""):
+    if request.path == reverse("management_media_upload_api"):
+        logger.warning("Media upload CSRF check failed: %s", reason)
+        response = media_access_error(request)
+        if response is not None:
+            return response
+        return JsonResponse({"error": "Не удалось подтвердить сессию. Обновите страницу и повторите загрузку."}, status=403)
+    return csrf_failure(request, reason=reason)
+
+
+def media_access_error(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Срок действия сессии истёк. Войдите в систему повторно"}, status=401)
+    if not request.user.is_staff:
+        return JsonResponse({"error": "Недостаточно прав для загрузки файла"}, status=403)
+    return None
+
+
 @management_required
 @require_POST
 def site_media_upload(request):
@@ -133,8 +157,13 @@ def site_media_upload(request):
         return media_library(request, form=form)
     try:
         media = form.save()
-    except OSError:
-        form.add_error("file", "Не удалось записать файл. Повторите загрузку позже.")
+    except MediaStorageUnavailable:
+        logger.exception("Persistent media storage is not configured")
+        form.add_error("file", "На сервере не настроено постоянное хранилище файлов.")
+        return media_library(request, form=form)
+    except (OSError, ValueError):
+        logger.exception("Could not store media uploaded from library")
+        form.add_error("file", "Не удалось сохранить файл на сервере")
         return media_library(request, form=form)
     log_change(request, media, ADDITION, "Медиафайл загружен")
     messages.success(request, "Файл загружен в медиатеку.")
@@ -162,6 +191,7 @@ def media_library_api(request):
             items.append({
                 "id": media.pk,
                 "title": media.title,
+                "filename": media.file.name.rsplit("/", 1)[-1],
                 "alt": media.alt,
                 "url": media.file.url,
                 "type": media.media_type,
@@ -170,9 +200,11 @@ def media_library_api(request):
             continue
     return JsonResponse({"items": items})
 
-@management_required
 @require_POST
 def media_library_upload_api(request):
+    forbidden = media_access_error(request)
+    if forbidden is not None:
+        return forbidden
     kind = request.POST.get("kind") or "all"
     if request.POST.get("images_only") == "1":
         kind = "image"
@@ -185,8 +217,12 @@ def media_library_upload_api(request):
     media = form.save(commit=False)
     try:
         media.save()
-    except OSError:
-        return JsonResponse({"error": "Не удалось записать файл. Повторите загрузку позже."}, status=503)
+    except MediaStorageUnavailable:
+        logger.exception("Persistent media storage is not configured")
+        return JsonResponse({"error": "На сервере не настроено постоянное хранилище файлов."}, status=503)
+    except (OSError, ValueError):
+        logger.exception("Could not store media uploaded from picker")
+        return JsonResponse({"error": "Не удалось сохранить файл на сервере"}, status=503)
     log_change(request, media, ADDITION, "Медиафайл загружен через выборщик")
     return JsonResponse({
         "id": media.pk,

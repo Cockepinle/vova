@@ -361,10 +361,25 @@ if (pageTree) {
       imageUrl.value = "";
       removeInput.value = "";
       showPreview(item.url, item.alt || item.title);
+      mediaField.dispatchEvent(new Event("change", {bubbles: true}));
       status.textContent = "Изображение из медиатеки выбрано. Сохраните категорию.";
       sources.open = false;
       summary.focus();
     }
+    component.closest("form").addEventListener("management-draft-restored", async () => {
+      const expected = mediaField.value;
+      if (!expected) {
+        if (removeInput.value === "1") showPreview("");
+        return;
+      }
+      try {
+        const response = await fetch(document.body.dataset.mediaApi);
+        if (!response.ok || response.redirected) return;
+        const {items} = await response.json();
+        const match = items.find(item => String(item.id) === expected);
+        if (match && mediaField.value === expected) showPreview(match.url, match.alt || match.title);
+      } catch {}
+    });
     library.addEventListener("click", () => window.openManagementMediaPicker(library, {
       kind: "image", multiple: false, onSelect: ([item]) => selectImage(item),
     }));
@@ -406,6 +421,7 @@ if (pageTree) {
       mediaField.value = "";
       imageUrl.value = "";
       removeInput.value = "1";
+      mediaField.dispatchEvent(new Event("change", {bubbles: true}));
       showPreview("");
       status.textContent = "Изображение будет убрано после сохранения категории.";
       summary.focus();

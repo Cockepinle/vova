@@ -313,6 +313,7 @@ def product_variants(product, request=None):
         cache[group_id] = list(
             get_store_products_queryset().filter(variant_group_id=group_id)
             .select_related(None).prefetch_related(None).prefetch_related("attributes__attribute")
+            .order_by("variant_sort_order", "name", "pk")
         )
     variants = cache[group_id]
     if all(variant.pk != product.pk for variant in variants):
@@ -321,15 +322,18 @@ def product_variants(product, request=None):
     for variant in variants:
         values = {value.attribute_id: value for value in variant.attributes.all()}
         labels = []
+        options = {}
         for parameter in parameters:
             value = values.get(parameter.pk)
             display = value.display_value() if value else None
             if display not in (None, ""):
                 suffix = f" {parameter.unit}" if parameter.unit else ""
+                options[parameter.name] = f"{display}{suffix}"
                 labels.append(f"{parameter.name}: {display}{suffix}")
         result.append({
             "id": str(variant.pk),
             "name": variant.name,
+            "options": options,
             "sku": variant.sku or "",
             "label": " · ".join(labels) or variant.name,
             "url": reverse("product_detail", args=[variant.slug]) + ("?preview=1" if variant is product else ""),
@@ -343,6 +347,36 @@ def product_variants(product, request=None):
     for item in result:
         item["show_identity"] = label_counts[item["label"]] > 1
     return result
+
+def variant_selectors(variants):
+    if len(variants) < 2:
+        return []
+    current = next(item for item in variants if item["current"])
+    params = current["options"]
+    selectors = []
+    for name in params:
+        buckets = {}
+        for item in variants:
+            if label := item["options"].get(name):
+                buckets.setdefault(label, []).append(item)
+        if len(buckets) < 2:
+            continue
+        choices = []
+        for label, items in buckets.items():
+            target = max(items, key=lambda item: (
+                item["current"],
+                sum(item["options"].get(key) == value for key, value in params.items() if key != name),
+                not item["unavailable"],
+            ))
+            choices.append({**target, "value_label": label})
+        selectors.append({"name": name, "choices": choices})
+    combinations = [tuple(sorted(item["options"].items())) for item in variants]
+    if not selectors or any(item["options"].keys() != params.keys() for item in variants) or len(set(combinations)) != len(variants):
+        selectors.append({"name": "Вариант товара", "choices": [
+            {**item, "value_label": item["sku"] or item["name"]} for item in variants
+        ]})
+    return selectors
+
 
 def safe_site_settings():
     try:

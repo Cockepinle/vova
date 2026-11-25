@@ -294,16 +294,24 @@ function setDetailGalleryImage(gallery, index) {
   }
 }
 
-function renderVariantLinks(variants) {
+function renderQuickVariantSelect(variants) {
   if (!variants || variants.length < 2) return "";
-  const links = `<div class="product-variant-list">${variants.map(variant =>
-        `<a class="product-variant ${variant.current ? "is-current" : ""} ${variant.unavailable ? "is-unavailable" : ""}" href="${escapeCatalogHtml(variant.url)}" data-product-id="${escapeCatalogHtml(variant.id)}" data-product-url="${escapeCatalogHtml(variant.data_url || `/api/products/${variant.id}/`)}" ${variant.current ? 'aria-current="page"' : ""}><span>${escapeCatalogHtml(variant.label)}</span>${variant.show_identity ? `<small>${escapeCatalogHtml(variant.sku || variant.name)}</small>` : ""}${variant.unavailable ? "<small>Нет в наличии</small>" : variant.availability === "preorder" ? "<small>Под заказ</small>" : ""}</a>`
-      ).join("")}</div>`;
-  const choices = variants.length > 6
-    ? `<details class="detail-variant-more"><summary>Все варианты (${variants.length})</summary>${links}</details>`
-    : links;
-  return `<h3>Выберите вариант</h3>${choices}`;
+  return `<div class="variant-selectors"><label><span>Вариант товара</span><select data-detail-variant-select>${variants.map(variant => {
+    const identity = variant.show_identity ? " · " + (variant.sku || variant.name) : "";
+    const availability = variant.availability === "in_stock" ? "" : " · " + variant.availability_label;
+    return `<option value="${escapeCatalogHtml(variant.url)}" ${variant.current ? "selected" : ""}>${escapeCatalogHtml(variant.label + identity + availability)}</option>`;
+  }).join("")}</select></label></div>`;
 }
+
+document.addEventListener("change", event => {
+  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
+});
+
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
+    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
+  });
+});
 
 document.addEventListener("click", (event) => {
   const panelOpen = event.target.closest(".catalog-filter-open, .catalog-sort-open");
@@ -584,7 +592,17 @@ document.querySelectorAll("[data-catalog-search]").forEach((form) => {
       window.location.assign(options[highlightedSuggestion].href);
     }
   });
-  document.addEventListener("click", (event) => {
+  document.addEventListener("change", event => {
+  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
+});
+
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
+    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
+  });
+});
+
+document.addEventListener("click", (event) => {
     if (!form.contains(event.target)) {
       hideSuggestions();
     }
@@ -711,7 +729,7 @@ function openProductModal(product) {
   modalBadge.style.display = product.badge ? "inline-block" : "none";
   modalMeta.textContent = `${product.sku} · ${product.category}`;
   modalTitle.textContent = product.name;
-  modalVariants.innerHTML = renderVariantLinks(product.variants);
+  modalVariants.innerHTML = renderQuickVariantSelect(product.variants);
   modalDescription.textContent = product.description;
   modalPrice.innerHTML = `${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span>`;
   modalSpecs.innerHTML = product.specs
@@ -750,10 +768,6 @@ function openProductModal(product) {
     : cartQuantity > 0 || (productCard && productCard.classList.contains("is-in-cart"))
       ? "В корзине"
       : "В корзину";
-  const selectedVariant = modalVariants.querySelector(".product-variant.is-current");
-  if (selectedVariant) {
-    selectedVariant.setAttribute("aria-current", "page");
-  }
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -803,7 +817,17 @@ if (categoryMenu) {
       trigger.focus();
     }
   });
-  document.addEventListener("click", (event) => {
+  document.addEventListener("change", event => {
+  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
+});
+
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
+    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
+  });
+});
+
+document.addEventListener("click", (event) => {
     if (!categoryMenu.contains(event.target)) categoryMenu.open = false;
   });
 }

@@ -28,35 +28,33 @@
     </div>
     <div class="product-detail-purchase">
       <h1>{{ detail_product.h1|default:detail_product.name }}</h1>
+      {% if detail_product.h1 and detail_product.h1 != detail_product.name %}<p class="product-detail-category">{{ detail_product.name }}</p>{% endif %}
       <p class="product-sku" data-detail-sku>Артикул: {{ detail_product.sku|default:"—" }}</p>
       <p class="product-availability" data-detail-availability>{{ detail_product.get_availability_display }}</p>
-      {% if detail_product.h1 and detail_product.h1 != detail_product.name %}<p class="product-detail-category">{{ detail_product.name }}</p>{% endif %}
       <p class="product-detail-category" data-detail-category>
         {% if detail_product.category.parent %}<a href="{% url 'catalog' %}?category={{ detail_product.category.parent.slug }}">{{ detail_product.category.parent.name }}</a> / {% endif %}
         <a href="{% url 'catalog' %}?category={{ detail_product.category.slug }}">{{ detail_product.category.name }}</a>
       </p>
-      {% if detail_variants|length > 1 %}
-        <section class="product-variants detail-variant-picker">
-          <h2>Модификации</h2>
-          {% if detail_variants|length > 6 %}
-          <details class="detail-variant-more">
-            <summary>{% for variant in detail_variants %}{% if variant.current %}{{ variant.label|truncatechars:72 }} · {% endif %}{% endfor %}Все варианты ({{ detail_variants|length }})</summary>
-          {% endif %}
-          <div class="product-variant-list" data-detail-variants>
-            {% for variant in detail_variants %}
-              <a href="{{ variant.url }}" data-product-id="{{ variant.id }}" data-product-url="{{ variant.data_url }}"
-                 class="product-variant {% if variant.current %}is-current{% endif %} {% if variant.unavailable %}is-unavailable{% endif %}"
-                 {% if variant.current %}aria-current="page"{% endif %}>
-                <span>{{ variant.label }}</span>
-                {% if variant.show_identity %}<small>{{ variant.sku|default:variant.name }}</small>{% endif %}
-                {% if variant.availability != 'in_stock' %}<small>{{ variant.availability_label }}</small>{% endif %}
-              </a>
-            {% endfor %}
-          </div>
-          {% if detail_variants|length > 6 %}</details>{% endif %}
-        </section>
-      {% endif %}
       <p class="price product-detail-price" data-detail-price>{{ detail_data.price }} ₽ <span>/ {{ detail_product.unit }}</span></p>
+      {% if detail_variant_selectors %}
+        <div class="variant-selectors">
+          {% for selector in detail_variant_selectors %}
+            <label>
+              <span>{{ selector.name }}</span>
+              <select data-detail-variant-select aria-label="{{ selector.name }}">
+                {% for item in selector.choices %}
+                  <option value="{{ item.url }}" data-product-url="{{ item.data_url }}" title="{{ item.name }}" aria-label="{{ item.label }}" {% if item.current %}selected{% endif %}>{{ item.value_label }}{% if item.availability != 'in_stock' %} · {{ item.availability_label }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endfor %}
+          <noscript>
+            {% for selector in detail_variant_selectors %}{% for item in selector.choices %}
+              {% if not item.current %}<a href="{{ item.url }}">{{ item.label }}</a>{% endif %}
+            {% endfor %}{% endfor %}
+          </noscript>
+        </div>
+      {% endif %}
       <div class="detail-buy-actions">
         <div class="quantity-control" role="group" aria-label="Количество">
           <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not detail_can_purchase %}disabled{% endif %}>−</button>

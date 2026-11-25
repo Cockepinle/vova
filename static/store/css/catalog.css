@@ -1492,3 +1492,11 @@ body.modal-open {
   .product-detail-gallery-thumbnail { width: 64px; height: 64px; flex-basis: 64px; }
   .product-detail-recommendation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.variant-selectors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 10px;
+}
+.variant-selectors label { display: grid; gap: 4px; min-width: 0; font-weight: 600; }
+.variant-selectors select { width: 100%; min-width: 0; }

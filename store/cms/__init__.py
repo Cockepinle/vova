@@ -1,8 +1,8 @@
 """Compatibility facade for the modularized view functions."""
 
 from .common import AdminLoginView, ManagementLoginView, can_manage, delete_unreferenced_file, log_change, management_logout, management_required
-from .products import product_bulk_action, product_delete, product_duplicate, product_excel_export, product_excel_import, product_form, product_list
-from .categories import category_bulk_action, category_delete, category_duplicate, category_filter_attach, category_filter_create, category_filter_delete, category_filter_edit, category_filter_unlink, category_form, category_list
+from .products import product_customer_prices, product_bulk_action, product_delete, product_duplicate, product_excel_export, product_excel_import, product_form, product_list
+from .categories import category_products, category_bulk_action, category_delete, category_duplicate, category_filter_attach, category_filter_create, category_filter_delete, category_filter_edit, category_filter_unlink, category_form, category_list
 from .orders import order_bulk_action, order_detail, order_export, order_list
 from .customers import customer_detail, customer_list, customer_product_search, request_bulk_action, request_detail, request_list
 from .content import field_delete, field_form, field_list, media_library, media_library_api, media_library_upload_api, media_usage, page_builder, page_builder_restore, page_builder_save, page_content_delete, page_content_form, page_content_list, page_content_reorder, site_media_delete, site_media_replace, site_media_upload, site_settings

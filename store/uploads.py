@@ -13,9 +13,15 @@ IMAGE_FORMATS = {
 ATTACHMENT_EXTENSIONS = (".pdf", ".mp4", ".webm")
 
 
+class MediaStorageUnavailable(OSError):
+    pass
+
+
 class ReadOnlyMediaStorage(FileSystemStorage):
     def save(self, name, content, max_length=None):
-        raise OSError("Set CLOUDINARY_URL to enable persistent uploads on Vercel.")
+        raise MediaStorageUnavailable(
+            "Persistent media storage is not configured. Set CLOUDINARY_URL or mount a persistent MEDIA_ROOT."
+        )
 
 
 def local_media_missing(file):
@@ -55,10 +61,10 @@ def upload_policy(kind="image"):
 def validate_upload(value, kind="image"):
     policy = upload_policy(kind)
     if value.size > policy["data-upload-limit"]:
-        raise forms.ValidationError(policy["data-upload-hint"], code="file_size")
+        raise forms.ValidationError("Размер файла превышает допустимые 4 МБ", code="file_size")
     extension = PurePosixPath(value.name).suffix.lower()
     if extension not in policy["accept"].split(","):
-        raise forms.ValidationError(policy["data-upload-hint"], code="file_format")
+        raise forms.ValidationError("Данный формат файла не поддерживается", code="file_format")
     expected_format = IMAGE_FORMATS.get(extension)
     if expected_format:
         try:

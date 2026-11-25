@@ -2053,3 +2053,46 @@ body.management-modal-open { overflow: hidden; }
   .page-tree-title, .page-tree-url { white-space: normal; overflow-wrap: anywhere; }
   .page-tree-actions :is(a, button), .page-editor-tab { min-height: 44px; }
 }
+
+.variant-dialog {
+  width: min(860px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: clamp(12px, 3vw, 24px);
+}
+.variant-dialog::backdrop { background: rgb(18 29 48 / .62); }
+.variant-dialog .toolbar-actions { margin-block: 12px; flex-wrap: wrap; }
+.variant-dialog :is(.card-header, .variant-product-option) { overflow-wrap: anywhere; }
+.seo-reset { justify-self: start; }
+.media-library .media-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr));
+  align-items: start;
+}
+.media-library .media-list > article { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.media-library .media-list > article[hidden] { display: none; }
+.media-library .media-list .current-image-preview { width: 100%; height: 150px; object-fit: contain; }
+
+.draft-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--section);
+  border-radius: var(--radius-control);
+}
+.draft-bar[hidden], tr[data-category-id][hidden], .category-products-row[hidden] { display: none !important; }
+.category-tree-name { display: flex; align-items: center; gap: 8px; padding-inline-start: min(calc(var(--depth) * 12px), 48px); }
+.category-tree-name button { min-width: 36px; }
+.category-products-panel { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); width: 100%; }
+.category-products-panel .toolbar, [data-customer-prices] .toolbar { flex-wrap: wrap; align-items: end; }
+.category-products-panel .toolbar-actions, [data-customer-prices] .toolbar-actions { flex-wrap: wrap; margin-top: 10px; }
+.category-member-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.category-member-name img { width: 36px; height: 36px; object-fit: contain; }
+[data-buyer-rows] input[inputmode=decimal] { width: 9rem; }

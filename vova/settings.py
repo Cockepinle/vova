@@ -59,6 +59,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "store.cms.drafts.ManagementDraftMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -126,9 +127,11 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = True
 MEDIA_URL = os.environ.get("MEDIA_URL") or "/media/"
-MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media")
-# Reserve space for multipart headers and form fields in the standard Vercel request limit.
-CMS_UPLOAD_MAX_BYTES = (4 if IS_VERCEL else 20) * 1024 * 1024
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media").resolve()
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
+PERSISTENT_MEDIA_VOLUME = bool(os.environ.get("MEDIA_ROOT")) and not MEDIA_ROOT.is_relative_to(BASE_DIR)
+# Leave space for multipart overhead within the Vercel request limit.
+CMS_UPLOAD_MAX_BYTES = 4 * 1024 * 1024
 
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -137,13 +140,14 @@ STORAGES = {
 if os.environ.get("CLOUDINARY_URL"):
     CLOUDINARY_STORAGE = {"PREFIX": "media/"}
     STORAGES["default"]["BACKEND"] = "store.media_storage.StoreCloudinaryStorage"
-elif IS_VERCEL:
+elif IS_VERCEL or (not DEBUG and not PERSISTENT_MEDIA_VOLUME):
     STORAGES["default"]["BACKEND"] = "store.uploads.ReadOnlyMediaStorage"
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_FAILURE_VIEW = "store.cms.content.management_csrf_failure"
 
 ADMIN_LOGIN_MAX_ATTEMPTS = int(os.environ.get("ADMIN_LOGIN_MAX_ATTEMPTS", "5"))
 ADMIN_LOGIN_WINDOW_SECONDS = int(os.environ.get("ADMIN_LOGIN_WINDOW_SECONDS", "900"))

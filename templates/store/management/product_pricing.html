@@ -31,13 +31,7 @@
       <span>Итоговая цена для покупателя</span>
       <select data-price-buyer>
         <option value="" data-level="retail">Гость · розничная цена</option>
-        {% for row in customer_price_rows %}
-          <option value="{{ row.user.pk }}" data-level="{{ row.level }}"
-                  data-coefficient="{{ row.coefficient|default_if_none:''|stringformat:'s' }}"
-                  data-individual="{{ row.price|default_if_none:''|stringformat:'s' }}">
-            {{ row.user.get_full_name|default:row.user.email|default:row.user.username }} · {{ row.level_label }}
-          </option>
-        {% endfor %}
+
       </select>
     </label>
     <div class="pricing-calculation" aria-live="polite">

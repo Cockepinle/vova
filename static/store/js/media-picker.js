@@ -12,6 +12,7 @@
   const closeButton = picker.querySelector("button[data-media-picker-close]");
   const workspace = document.querySelector(".mgmt-shell");
   let session = null;
+  let queued = [];
 
   function setVisible(visible) {
     picker.hidden = !visible;
@@ -20,7 +21,10 @@
   }
 
   function close() {
+    if (session?.uploading) return;
     const trigger = session?.trigger;
+    queued = [];
+    send.textContent = "Загрузить";
     session = null;
     setVisible(false);
     pending.hidden = true;
@@ -43,13 +47,14 @@
 
   function finish(selection) {
     const callback = session.onSelect;
+    session.uploading = false;
     close();
     callback(selection);
   }
 
   function render() {
     const query = search.value.trim().toLocaleLowerCase();
-    const items = [...session.items.values()].filter(item => item.title.toLocaleLowerCase().includes(query));
+    const items = [...session.items.values()].filter(item => [item.title, item.filename].some(value => value?.toLocaleLowerCase().includes(query)));
     grid.replaceChildren();
     if (!items.length && !session.loading) {
       const empty = document.createElement("p");
@@ -86,6 +91,7 @@
       }
       if (session.multiple) button.setAttribute("aria-pressed", String(session.selected.has(key)));
       button.addEventListener("click", () => {
+        if (session.uploading) return;
         if (!session.multiple) {
           finish([item]);
           return;
@@ -118,13 +124,14 @@
       const url = new URL(document.body.dataset.mediaApi, document.baseURI);
       url.searchParams.set("kind", current.kind);
       const response = await fetch(url);
+      if (response.redirected) throw new Error("Срок действия сессии истёк. Войдите в систему повторно");
       if (!response.ok) throw new Error("Не удалось загрузить медиатеку.");
       const {items} = await response.json();
       if (session !== current) return;
       items.forEach(item => current.items.set(String(item.id), item));
       announce();
     } catch (error) {
-      if (session === current) announce(error.message, true);
+      if (session === current) announce(error instanceof TypeError ? "Не удалось подключиться к серверу. Попробуйте снова." : error.message, true);
     } finally {
       current.loading = false;
       if (session === current) {
@@ -156,14 +163,19 @@
     }
   });
 
-  upload.addEventListener("change", () => { pending.hidden = true; });
-  upload.addEventListener("image-upload-ready", () => { pending.hidden = !session; });
+  upload.addEventListener("change", () => { queued = []; pending.hidden = true; });
+  upload.addEventListener("image-upload-ready", () => {
+    queued = [...upload.files];
+    send.textContent = "Загрузить";
+    pending.hidden = !session;
+    announce();
+  });
   send.addEventListener("click", async () => {
-    if (!session || session.uploading || !upload.files.length) return;
+    if (!session || session.uploading || !queued.length) return;
     const current = session;
-    const files = [...upload.files];
-    const csrf = document.querySelector('[name="csrfmiddlewaretoken"]')?.value
-      || document.cookie.split("; ").find(cookie => cookie.startsWith("csrftoken="))?.split("=")[1];
+    const files = queued;
+    queued = [];
+    const csrf = picker.querySelector('[name="csrfmiddlewaretoken"]').value;
     current.uploading = true;
     upload.disabled = true;
     send.disabled = true;
@@ -179,11 +191,12 @@
         data.set("kind", current.kind);
         try {
           const response = await fetch(document.body.dataset.mediaUploadApi, {
-            method: "POST", headers: {"X-CSRFToken": csrf || ""}, body: data,
+            method: "POST", mode: "same-origin", headers: {"X-CSRFToken": csrf}, body: data,
           });
-          if (response.status === 413) throw new Error("Сервер отклонил слишком большой запрос.");
+          if (response.status === 413) throw new Error("Размер файла превышает допустимые 4 МБ");
+          if (response.redirected || response.status === 401) throw new Error("Срок действия сессии истёк. Войдите в систему повторно");
           const item = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(item.error || "Не удалось загрузить файл.");
+          if (!response.ok) throw new Error(item.error || (response.status === 403 ? "Недостаточно прав для загрузки файла" : "Не удалось сохранить файл на сервере"));
           if (!item.id) throw new Error("Не удалось получить данные файла. Проверьте вход в панель управления.");
           if (session !== current) return;
           if (!current.multiple) {
@@ -193,7 +206,9 @@
           current.items.set(String(item.id), item);
           current.selected.set(String(item.id), item);
         } catch (error) {
-          failures.push(file.name + " — " + error.message);
+          queued.push(file);
+          failures.push(file.name + " — " + (error instanceof TypeError
+            ? "Не удалось подключиться к серверу. Попробуйте повторить загрузку" : error.message));
         }
       }
       if (session !== current) return;
@@ -201,11 +216,14 @@
       announce(failures.length ? failures.join(" · ") : "Файлы загружены и отмечены для выбора.", failures.length > 0);
     } finally {
       current.uploading = false;
-      upload.value = "";
       upload.disabled = false;
       send.disabled = false;
-      pending.hidden = true;
-      upload.dispatchEvent(new Event("upload-reset"));
+      pending.hidden = !queued.length;
+      send.textContent = queued.length ? "Повторить загрузку" : "Загрузить";
+      if (!queued.length) {
+        upload.value = "";
+        upload.dispatchEvent(new Event("upload-reset"));
+      }
       if (session === current) updateSelection();
     }
   });

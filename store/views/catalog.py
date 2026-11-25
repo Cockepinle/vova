@@ -9,6 +9,7 @@ from .common import settings, sort_products
 from ..pricing import resolve_product_price
 from ..services.accounts import get_favorite_ids
 from ..services.cart import get_cart_context
+from ..services.catalog import variant_selectors
 
 @require_GET
 def api_categories(request):
@@ -404,7 +405,7 @@ def catalog(request, slug=None):
         "detail_is_hidden": detail_is_hidden,
         "detail_can_purchase": not detail_is_hidden and detail_data.get("can_purchase", False),
         "detail_gallery_images": detail_gallery_images,
-        "detail_variants": detail_data.get("variants", []),
+        "detail_variant_selectors": variant_selectors(detail_data.get("variants", [])),
         "detail_specs": detail_data.get("specs", []),
         "recommended_items": [
             serialize_product(item, request) for item in recommended_items

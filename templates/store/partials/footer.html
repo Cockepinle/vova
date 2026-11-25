@@ -1,4 +1,4 @@
-{% load store_extras %}
+{% load static store_extras %}
 <footer class="site-footer" id="contacts">
   {% if show_footer_cta %}
     <section class="footer-cta">
@@ -29,10 +29,12 @@
     </div>
     <div>
       <h3>Категории</h3>
-      <a href="{% url 'catalog' %}">Все категории</a>
-      {% for category in footer_categories %}
-        <a href="{% url 'catalog' %}?category={{ category.slug }}">{{ category.name }}</a>
-      {% endfor %}
+      <div class="footer-category-scroll" {% if footer_categories %}tabindex="0"{% endif %} role="region" aria-label="Категории каталога" data-footer-categories>
+        <a href="{% url 'catalog' %}">Все категории</a>
+        {% if footer_categories %}
+          {% include "store/partials/footer_categories.html" with nodes=footer_categories root=True only %}
+        {% endif %}
+      </div>
     </div>
     <div>
       <h3>Контакты</h3>
@@ -53,3 +55,4 @@
     </nav>
   </section>
 </footer>
+<script src="{% static 'store/js/footer-categories.js' %}?v=1" defer></script>

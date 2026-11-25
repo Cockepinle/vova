@@ -4,7 +4,7 @@
 {% block heading %}{% if product %}Редактировать товар{% else %}Новый товар{% endif %}{% endblock %}
 
 {% block content %}
-  <form class="mgmt-form-grid" method="post" enctype="multipart/form-data">
+  <form class="mgmt-form-grid" data-product-editor data-product-id="{{ product.pk|default_if_none:'' }}" data-bound="{{ form.is_bound|yesno:"1,0" }}" data-original-slug="{{ preview_slug }}" data-published="{{ published_url|yesno:"1,0" }}" method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for group_title, fields in form.groups %}
@@ -22,14 +22,19 @@
               {{ field }}
               {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
-              <a class="ghost-button" href="{% url 'management_variant_groups' %}">Открыть управление группами</a>
             </label>
+            <button class="ghost-button" type="button" data-open-variant>Открыть управление группами</button>
           {% else %}
             <label class="{% if field.name == 'description' or field.name == 'keywords' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">
               <span>{{ field.label }}</span>
               {{ field }}
               {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
+              {% if field.name == 'category' %}<a class="ghost-button" data-draft-related="category" href="{% url 'management_category_new' %}">+ Создать категорию</a>{% endif %}
+              {% if field.name == 'slug' or field.name == 'h1' or field.name == 'seo_title' %}
+                <button class="ghost-button seo-reset" type="button" data-seo-reset="{{ field.name }}">Восстановить автоматически</button>
+                {% if field.name == 'slug' and published_url %}<small>При смене адреса сохранённые ссылки на товар перестанут работать.</small>{% endif %}
+              {% endif %}
             </label>
           {% endif %}
         {% endfor %}
@@ -58,6 +63,10 @@
               {{ field }}
               {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
               {{ field.errors }}
+              {% if field.name == 'slug' or field.name == 'h1' or field.name == 'seo_title' %}
+                <button class="ghost-button seo-reset" type="button" data-seo-reset="{{ field.name }}">Восстановить автоматически</button>
+                {% if field.name == 'slug' and published_url %}<small>При смене адреса сохранённые ссылки на товар перестанут работать.</small>{% endif %}
+              {% endif %}
             </label>
           {% endif %}
         {% empty %}
@@ -69,16 +78,26 @@
     <section class="mgmt-card">
       <div class="card-header"><div><h2>Индивидуальные цены</h2><p class="muted">Отметьте покупателей и укажите их цены.</p></div></div>
       {% if product %}
-        <div class="customer-price-list">
-          {% for row in customer_price_rows %}
-            <div class="customer-price-row">
-              <label class="customer-price-customer"><input class="js-customer-price-toggle" type="checkbox" name="price_customers" value="{{ row.user.id }}" {% if row.selected %}checked{% endif %}><span><strong>{{ row.user.get_full_name|default:row.user.username }}</strong><small>{{ row.user.email|default:row.user.username }} · уровень: {{ row.level_label }}</small></span></label>
-              <label><span>Индивидуальная цена</span><input inputmode="decimal" name="customer_price_{{ row.user.id }}" value="{% if row.price != None %}{{ row.price|stringformat:'s' }}{% endif %}" {% if not row.selected %}disabled{% endif %}></label>
-            </div>
-          {% empty %}<p class="muted">Нет активных покупателей. Сначала добавьте покупателя.</p>{% endfor %}
+        <div data-customer-prices data-url="{% url 'management_product_prices' product.pk %}">
+          <div class="toolbar">
+            <label>Покупатель<input type="search" data-buyer-search placeholder="Имя, почта, организация, телефон"></label>
+            <label>Уровень цен<select data-buyer-level><option value="">Все уровни</option>{% for key, label in price_levels %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+            <label><input type="checkbox" data-buyer-priced> Только с индивидуальной ценой</label>
+            <label><input type="checkbox" data-buyer-selected> Только выбранные</label>
+          </div>
+          <p role="status" data-buyer-status></p>
+          <div class="table-wrap"><table class="mgmt-table">
+            <thead><tr><th>Выбор</th><th>Покупатель</th><th>Электронная почта</th><th>Уровень цен</th><th>Индивидуальная цена</th></tr></thead>
+            <tbody data-buyer-rows></tbody>
+          </table></div>
+          <div class="toolbar-actions">
+            <button class="ghost-button" type="button" data-buyer-step="-1">Назад</button>
+            <button class="ghost-button" type="button" data-buyer-step="1">Вперёд</button>
+            <button class="primary-button" type="button" data-buyer-save>Сохранить цены</button>
+          </div>
+          <input type="hidden" name="customer_price_draft" data-buyer-edits>
         </div>
-        {% if customer_price_rows %}<button class="primary-button price-save-button" type="submit" name="save_customer_prices" value="1" formnovalidate>Сохранить цены</button>{% endif %}
-      {% else %}<p class="muted">Сначала сохраните товар, затем здесь появится список покупателей.</p>{% endif %}
+      {% else %}<p class="muted">Сначала сохраните товар, чтобы назначить индивидуальные цены.</p>{% endif %}
     </section>
 
     <section class="mgmt-card product-gallery-editor" data-product-gallery>
@@ -127,9 +146,27 @@
       <a class="ghost-button" href="{% url 'management_products' %}">Отмена</a>
     </div>
   </form>
+  <dialog class="variant-dialog mgmt-card" data-variant-dialog aria-labelledby="variant-dialog-title"
+          data-new-url="{% url 'management_variant_group_new' %}"
+          data-edit-url="{% url 'management_variant_group_edit' 0 %}">
+    <div class="card-header">
+      <h2 id="variant-dialog-title">Управление группами модификаций</h2>
+      <button type="button" class="ghost-button" data-close-variant>Закрыть</button>
+    </div>
+    <div class="toolbar-actions">
+      <label><span>Группа для редактирования</span><select data-dialog-group></select></label>
+      <button type="button" class="ghost-button" data-load-variant>Открыть форму</button>
+      <button type="button" class="ghost-button" data-new-variant>Новая группа</button>
+    </div>
+    <p class="mgmt-message" data-variant-status role="status" hidden></p>
+    <div data-variant-content></div>
+  </dialog>
 {% endblock %}
 
 {% block management_scripts %}
-  <script src="{% static 'store/js/product-gallery.js' %}?v=1"></script>
-  <script src="{% static 'store/js/product-pricing.js' %}?v=1"></script>
+  <script src="{% static 'store/js/product-gallery.js' %}?v=3"></script>
+  <script src="{% static 'store/js/product-pricing.js' %}?v=2"></script>
+  <script src="{% static 'store/js/variant-groups.js' %}?v=3"></script>
+  <script src="{% static 'store/js/product-editor.js' %}?v=3"></script>
+  <script src="{% static 'store/js/customer-prices.js' %}?v=1"></script>
 {% endblock %}

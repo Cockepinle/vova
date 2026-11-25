@@ -128,6 +128,13 @@ class VariantGroup(models.Model):
     def __str__(self):
         return self.name
 
+PRODUCT_SLUG_TRANSLITERATION = str.maketrans(dict(zip(
+    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+    ("a", "b", "v", "g", "d", "e", "yo", "zh", "z", "i", "y", "k", "l", "m", "n",
+     "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"),
+)))
+
+
 class Product(models.Model):
     seo_title = models.CharField("Заголовок в поиске", max_length=220, blank=True)
     meta_description = models.TextField("Описание в поиске", blank=True)
@@ -186,6 +193,7 @@ class Product(models.Model):
     width_mm = models.DecimalField("Ширина, мм", max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     height_mm = models.DecimalField("Высота, мм", max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     weight_kg = models.DecimalField("Вес, кг", max_digits=12, decimal_places=3, null=True, blank=True, validators=[MinValueValidator(0)])
+    variant_sort_order = models.PositiveIntegerField("Порядок в группе модификаций", default=0)
     media = models.ManyToManyField("SiteMedia", verbose_name="Видео и файлы из медиатеки", blank=True, related_name="products", help_text="Фотографии, видео MP4/WebM и документы PDF. Файлы загружаются в общей медиатеке.")
     old_price = models.DecimalField("Старая цена", max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField("Единица измерения", max_length=40, default="шт")
@@ -233,10 +241,26 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+    def available_slug(self, name):
+        import re
+
+        normalized = name.lower().translate(PRODUCT_SLUG_TRANSLITERATION)
+        base = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")[:240].rstrip("-") or "product"
+        products = type(self).objects.exclude(pk=self.pk)
+        candidate = base
+        index = 2
+        while products.filter(slug=candidate).exists():
+            suffix = f"-{index}"
+            candidate = base[:240 - len(suffix)].rstrip("-") + suffix
+            index += 1
+        return candidate
+
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name, allow_unicode=True)
         update_fields = kwargs.get("update_fields")
+        if update_fields is None or self._state.adding:
+            self.slug = self.slug or self.available_slug(self.name)
+            self.h1 = self.h1 or self.name[:220]
+            self.seo_title = self.seo_title or self.name[:220]
         price_inputs = {"price", "cost_price", "retail_coefficient"}
         should_recalculate_retail = (
             self._state.adding

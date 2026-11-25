@@ -1,9 +1,10 @@
 from io import BytesIO
+from unittest.mock import patch
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
@@ -56,6 +57,23 @@ class MediaUploadTests(TestCase):
                 self.assertEqual(self.upload(upload).status_code, 400)
         with override_settings(CMS_UPLOAD_MAX_BYTES=64):
             self.assertEqual(self.upload(image_file("large.png")).status_code, 400)
+        self.assertFalse(SiteMedia.objects.exists())
+
+    def test_picker_reports_session_permissions_csrf_and_storage_errors(self):
+        anonymous = Client(enforce_csrf_checks=True)
+        self.assertEqual(anonymous.post(self.upload_url).status_code, 401)
+        customer = get_user_model().objects.create_user("media-customer")
+        anonymous.force_login(customer)
+        self.assertEqual(anonymous.post(self.upload_url).status_code, 403)
+        anonymous.force_login(self.staff)
+        csrf_failure = anonymous.post(self.upload_url)
+        self.assertEqual(csrf_failure.status_code, 403)
+        self.assertIn("подтвердить сессию", csrf_failure.json()["error"])
+        with patch("store.models.SiteMedia.save", side_effect=OSError("private storage detail")):
+            with self.assertLogs("store.cms.content", level="ERROR"):
+                response = self.upload(image_file("photo.png"))
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "Не удалось сохранить файл на сервере")
         self.assertFalse(SiteMedia.objects.exists())
 
     def test_attachment_rejects_content_disguised_by_extension(self):

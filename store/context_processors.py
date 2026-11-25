@@ -16,7 +16,14 @@ def site_content(request):
         pages = {}
 
     try:
-        footer_categories = Category.tree_rows(visible_only=True)
+        nodes = {}
+        for category in Category.tree_rows(visible_only=True):
+            node = {"category": category, "children": []}
+            nodes[category.pk] = node
+            if category.parent_id:
+                nodes[category.parent_id]["children"].append(node)
+            else:
+                footer_categories.append(node)
     except Exception:
         footer_categories = []
 

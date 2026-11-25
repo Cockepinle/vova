@@ -88,5 +88,9 @@
 
   panel.addEventListener("input", refresh);
   buyer.addEventListener("change", refresh);
+  form.addEventListener("management-draft-restored", () => {
+    manualValue = manualInput.value;
+    refresh();
+  });
   refresh();
 })();

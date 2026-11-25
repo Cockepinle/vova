@@ -3,21 +3,25 @@
 {% block heading %}Общие медиафайлы{% endblock %}
 {% block content %}
 <section class="mgmt-card">
-  <h2>Загрузить файл</h2>
-  <form class="mgmt-form" method="post" enctype="multipart/form-data" action="{% url 'management_media_upload' %}">
+  <div class="card-header">
+    <h2>Медиатека</h2>
+    <label><span>Поиск по названию файла</span><input type="search" data-library-search></label>
+  </div>
+  <form class="mgmt-form" data-library-upload method="post" enctype="multipart/form-data" action="{% url 'management_media_upload' %}">
     {% csrf_token %}
     {{ media_form.non_field_errors }}
     <div class="form-grid">
       {% for field in media_form %}<label><span>{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}
     </div>
     <button class="primary-button" type="submit">Загрузить</button>
+    <span data-library-status role="status"></span>
   </form>
 </section>
 <section class="mgmt-card media-library">
   <h2>Библиотека файлов</h2>
   <div class="media-list">
     {% for row in media %}
-      <article>
+      <article data-library-item data-file-name="{{ row.item.file.name }}">
         <div>
           {% if row.item.is_image %}
             <img class="current-image-preview" src="{% if row.url %}{{ row.url }}{% else %}{% static 'store/images/no-photo.svg' %}{% endif %}"
@@ -25,7 +29,7 @@
           {% elif row.url and row.item.is_video %}
             <video class="current-image-preview" controls preload="metadata" src="{{ row.url }}"></video>
           {% endif %}
-          <h3>{{ row.item.title }}</h3>
+          <h3 data-library-title>{{ row.item.title }}</h3>
           <p class="muted">{{ row.item.get_media_type_display }} · загружен {{ row.item.created_at|date:"d.m.Y H:i" }}</p>
           {% if row.item.description %}<p>{{ row.item.description }}</p>{% endif %}
           {% if row.url %}
@@ -56,5 +60,9 @@
       </article>
     {% empty %}<p>Файлы ещё не загружены.</p>{% endfor %}
   </div>
+  <p class="muted" data-library-no-results hidden>Файлы не найдены.</p>
 </section>
+{% endblock %}
+{% block management_scripts %}
+  <script src="{% static 'store/js/media-library.js' %}?v=1"></script>
 {% endblock %}

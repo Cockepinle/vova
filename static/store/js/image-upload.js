@@ -73,7 +73,10 @@
       const accepted = input.accept.split(",");
       const invalid = files.find(file => !accepted.includes(extension(file)) || file.size > Number(input.dataset.uploadLimit) || !file.size);
       if (invalid) {
-        showError(invalid.name + " — " + (invalid.size ? hint.textContent : "файл пуст."));
+        const message = !invalid.size ? "Файл пуст."
+          : invalid.size > Number(input.dataset.uploadLimit) ? "Размер файла превышает допустимые 4 МБ"
+          : "Данный формат файла не поддерживается";
+        showError(invalid.name + " — " + message);
         return;
       }
 

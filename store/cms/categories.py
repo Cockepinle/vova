@@ -1,11 +1,16 @@
+import json
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef
+from django.http import JsonResponse
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 
 from ..cms_forms import CategoryFilterForm
-from ..models import AttributeDefinition
+from ..models import AttributeDefinition, Product
 from .common import ADDITION, CHANGE, Category, CategoryForm, Count, DELETION, Paginator, Q, get_object_or_404, log_change
 from .common import management_required, messages, redirect, render, require_POST
 
@@ -214,6 +219,8 @@ def category_bulk_action(request):
 
         for category in Category.objects.filter(id__in=category_ids):
             new_status = request.POST.get(f"status_{category.id}")
+            if new_status not in {"published", "hidden"}:
+                continue
             is_active = new_status == "published"
 
             if category.is_active != is_active:
@@ -246,29 +253,79 @@ def category_bulk_action(request):
 
 @management_required
 def category_list(request):
-    categories = Category.objects.select_related("parent").annotate(product_count=Count("products", distinct=True)).order_by("sort_order", "name")
-    query = request.GET.get("q", "").strip()
+    rows = Category.tree_rows()
+    by_id = {row.pk: row for row in rows}
+    counts = dict(Product.objects.values("category_id").annotate(total=Count("pk")).values_list("category_id", "total"))
+    for row in rows:
+        row.product_count = counts.get(row.pk, 0)
+        row.descendant_count = 0
+        row.has_children = False
+    for row in reversed(rows):
+        if parent := by_id.get(row.parent_id):
+            parent.has_children = True
+            parent.descendant_count += row.product_count + row.descendant_count
+    return render(request, "store/management/category_list.html", {"section": "categories", "tree": rows})
 
-    if query:
-        categories = categories.filter(
-            Q(name__icontains=query)
-            | Q(description__icontains=query)
-            | Q(products__name__icontains=query)
-            | Q(products__sku__icontains=query)
-        ).distinct()
 
-    paginator = Paginator(categories, 12)
-    page = paginator.get_page(request.GET.get("page"))
+@management_required
+@require_http_methods(["GET", "POST"])
+def category_products(request, category_id):
+    category = get_object_or_404(Category, pk=category_id)
+    if request.method == "POST":
+        try:
+            moves = json.loads(request.POST["moves"])
+            if not isinstance(moves, list) or not 1 <= len(moves) <= 1000:
+                raise ValueError
+            changes = {}
+            for move in moves:
+                values = [str(move[key]) for key in ("id", "source", "destination")]
+                if not all(value.isascii() and value.isdecimal() and len(value) <= 18 for value in values):
+                    raise ValueError
+                pk, source, destination = map(int, values)
+                if min(pk, source, destination) <= 0 or max(pk, source, destination) >= 10**18:
+                    raise ValueError
+                if source == destination or category.pk not in (source, destination) or pk in changes:
+                    raise ValueError
+                changes[pk] = (source, destination)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return JsonResponse({"error": "Проверьте товары и выберите категорию назначения."}, status=400)
+        with transaction.atomic():
+            targets = {destination for _, destination in changes.values()}
+            if Category.objects.filter(pk__in=targets).count() != len(targets):
+                return JsonResponse({"error": "Категория назначения больше не существует."}, status=409)
+            products = list(Product.objects.select_for_update().filter(pk__in=changes).order_by("pk"))
+            if len(products) != len(changes) or any(item.category_id != changes[item.pk][0] for item in products):
+                return JsonResponse({"error": "Категории товаров изменились. Обновите список и повторите операцию."}, status=409)
+            affected = {category.pk}
+            timestamp = timezone.now()
+            for item in products:
+                item.updated_at = timestamp
+                source, item.category_id = changes[item.pk]
+                affected.update((source, item.category_id))
+                log_change(request, item, CHANGE, f"Категория товара изменена с {source} на {item.category_id}")
+            Product.objects.bulk_update(products, ["category_id", "updated_at"])
+            totals = dict(Product.objects.filter(category_id__in=affected).values("category_id")
+                          .annotate(total=Count("pk")).values_list("category_id", "total"))
+        return JsonResponse({"counts": {key: totals.get(key, 0) for key in affected}})
 
-    return render(
-        request,
-        "store/management/category_list.html",
-        {
-            "section": "categories",
-            "page": page,
-            "query": query,
-        },
-    )
+    products = Product.objects.select_related("category").prefetch_related("images__media").order_by("name", "pk")
+    if request.GET.get("mode") == "available":
+        products = products.exclude(category=category)
+    else:
+        products = products.filter(category=category)
+    if query := request.GET.get("q", "").strip()[:180]:
+        products = products.filter(Q(name__icontains=query) | Q(sku__icontains=query))
+    page = Paginator(products, 20).get_page(request.GET.get("page"))
+    return JsonResponse({
+        "rows": [{
+            "id": item.pk, "name": item.name, "sku": item.sku, "category": item.category_id,
+            "category_name": item.category.name, "image": item.display_image_url,
+            "status": item.get_status_display(), "price": str(item.price),
+            "url": reverse("management_product_edit", args=[item.pk]),
+        } for item in page],
+        "page": page.number, "pages": page.paginator.num_pages, "total": page.paginator.count,
+    })
+
 
 @management_required
 @require_POST

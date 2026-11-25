@@ -1,10 +1,10 @@
 from pathlib import PurePosixPath
 from uuid import uuid4
 
+from cloudinary import CloudinaryResource, uploader
 from cloudinary.exceptions import Error
 from cloudinary_storage.storage import MediaCloudinaryStorage
 from django.core.files.storage import FileSystemStorage
-from django.core.files.uploadedfile import UploadedFile
 
 
 class StoreCloudinaryStorage(MediaCloudinaryStorage):
@@ -19,6 +19,10 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
         if self.is_local_name(name):
             return self.local_storage.url(name)
         return super().url(name)
+
+    def _get_url(self, name):
+        resource_type = self._get_resource_type(name)
+        return CloudinaryResource(self._prepend_prefix(name), default_resource_type=resource_type).build_url(secure=True)
 
     def _open(self, name, mode="rb"):
         if self.is_local_name(name):
@@ -54,7 +58,11 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
     def _save(self, name, content):
         name = self._prepend_prefix(self._normalise_name(name))
         try:
-            result = self._upload(name, UploadedFile(content, name))
+            resource_type = self._get_resource_type(name)
+            extension = PurePosixPath(name).suffix
+            public_id = name if resource_type == "raw" else name.removesuffix(extension)
+            result = uploader.upload((PurePosixPath(name).name, content.read()), public_id=public_id,
+                                     resource_type=resource_type, tags=self.TAG, overwrite=False, timeout=30)
         except Error as error:
             raise OSError("Cloudinary could not store the file.") from error
         public_id = result["public_id"]

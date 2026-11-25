@@ -459,9 +459,10 @@ svg {
 
 .footer-main {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1.3fr 1.2fr;
-  gap: 56px;
-  padding: 18px 20px 58px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: clamp(22px, 4vw, 56px);
+  padding: 18px 20px 36px;
 }
 
 .footer-brand {
@@ -2208,3 +2209,71 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 .managed-page-copy h2, .managed-page-copy h3 { margin: 0 0 10px; }
+
+.footer-category-scroll {
+  block-size: 10rem;
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: #747b86 transparent;
+  padding-inline-end: 4px;
+}
+.footer-category-scroll:not(:has(li)) { block-size: auto; }
+.footer-category-list { list-style: none; padding: 0; margin: 0; }
+.footer-category-list .footer-category-list {
+  padding-inline-start: min(12px, 4%);
+}
+.footer-category-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+.footer-category-scroll a {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0 0 4px;
+  padding-block: 4px;
+  transition: color 160ms ease;
+}
+.footer-category-scroll a:hover, .footer-category-toggle:hover { color: #fff; }
+.footer-category-toggle {
+  flex: 0 0 32px;
+  inline-size: 32px;
+  block-size: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b7bdc8;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+.footer-category-toggle[hidden], .footer-category-panel[hidden] { display: none; }
+.footer-category-toggle svg {
+  width: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 180ms ease;
+}
+.footer-category-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.footer-category-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease;
+}
+.footer-category-panel.is-open { grid-template-rows: 1fr; }
+.footer-category-panel > div { min-height: 0; overflow: hidden; }
+.footer-category-scroll:focus-visible, .footer-category-scroll :is(a, button):focus-visible {
+  outline: 2px solid #b7bdc8;
+  outline-offset: -2px;
+}
+@media (pointer: coarse), (max-width: 720px) {
+  .footer-category-toggle { flex-basis: 44px; inline-size: 44px; block-size: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .footer-category-scroll *, .footer-category-scroll *::before { transition: none; }
+}

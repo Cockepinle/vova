@@ -1,0 +1,20 @@
+<ul class="footer-category-list"{% if root %} data-footer-category-roots{% endif %}>
+  {% for node in nodes %}
+    <li>
+      <div class="footer-category-row">
+        <a href="{% url 'catalog' %}?category={{ node.category.slug|urlencode }}">{{ node.category.name }}</a>
+        {% if node.children %}
+          <button class="footer-category-toggle" type="button" hidden aria-expanded="false"
+                  aria-controls="footer-category-{{ node.category.pk }}" aria-label="Подкатегории: {{ node.category.name }}" data-footer-toggle>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+          </button>
+        {% endif %}
+      </div>
+      {% if node.children %}
+        <div class="footer-category-panel" id="footer-category-{{ node.category.pk }}" hidden inert>
+          <div>{% include "store/partials/footer_categories.html" with nodes=node.children only %}</div>
+        </div>
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>

@@ -220,7 +220,7 @@ def category_choices(field, excluded=()):
 class ProductForm(ContentValidationMixin, forms.ModelForm):
     sku = forms.CharField(label="Артикул", required=False, empty_value=None)
     volume_m3 = forms.DecimalField(label="Объём, м³ (автоматически)", required=False, disabled=True, max_digits=36, decimal_places=15)
-    new_variant_group = forms.CharField(label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
+    new_variant_group = forms.CharField(max_length=VariantGroup._meta.get_field("name").max_length, label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
     cost_price = PricingDecimalField(label="Базовая цена (себестоимость)", required=False, max_digits=12, decimal_places=2, min_value=0)
     price = PricingDecimalField(label="Ручная розничная цена", required=False, max_digits=12, decimal_places=2, min_value=0)
     retail_coefficient = PricingDecimalField(label="Коэффициент розницы", required=False, max_digits=10, decimal_places=4, min_value=0)
@@ -241,7 +241,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
         for name in ("min_quantity", "quantity_step"):
             self.fields[name].widget.attrs["min"] = 1
         if self.is_bound:
-            missing_fields = [name for name in ("vat_rate", "quantity_step", "image_url") if name not in self.data]
+            missing_fields = [name for name in ("vat_rate", "quantity_step", "image_url", "variant_sort_order") if name not in self.data]
             if missing_fields:
                 self.data = self.data.copy()
                 for name in missing_fields:
@@ -265,9 +265,13 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
         }
         for name, help_text in help_texts.items():
             self.fields[name].help_text = help_text
-        if self.instance.pk:
-            for name in ("recommended_products", "accessory_products"):
-                self.fields[name].queryset = self.fields[name].queryset.exclude(pk=self.instance.pk)
+        for name in ("recommended_products", "accessory_products"):
+            field = self.fields[name]
+            field.label_from_instance = lambda product: (
+                f"{product.name} · {product.sku}" if product.sku else product.name
+            )
+            if self.instance.pk:
+                field.queryset = field.queryset.exclude(pk=self.instance.pk)
 
     @property
     def groups(self):
@@ -276,7 +280,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             ("Цены", ["cost_price", "price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "old_price", "vat_rate"]),
             ("Остатки и продажа", ["unit", "min_quantity", "quantity_step", "stock_quantity", "availability", "is_hit", "is_new", "is_special"]),
             ("Связанные товары", ["recommended_products", "accessory_products"]),
-            ("Модификации товара", ["variant_group", "new_variant_group"]),
+            ("Модификации товара", ["variant_group", "new_variant_group", "variant_sort_order"]),
             ("Габариты и вес", ["length_mm", "width_mm", "height_mm", "weight_kg", "volume_m3"]),
             ("SEO страницы товара", ["slug", "h1", "seo_title", "meta_description", "canonical"]),
             ("Отображение ссылки в соцсетях", ["og_title", "og_description", "og_media"]),
@@ -297,6 +301,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             "keywords",
             "variant_group",
             "new_variant_group",
+            "variant_sort_order",
             "price",
             "old_price",
             "cost_price", "retail_coefficient", "wholesale_coefficient", "special_coefficient", "vat_rate", "length_mm", "width_mm", "height_mm", "weight_kg", "media",
@@ -342,6 +347,15 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
         from .pricing import MAX_UNIT_PRICE, calculate_unit_price
 
         data = super().clean()
+        if name := data.get("name"):
+            if "slug" in data:
+                if not data["slug"] and self.instance.pk and self.instance.slug:
+                    data["slug"] = self.instance.slug
+                elif not data["slug"] or self.data.get("auto_slug") == "1":
+                    data["slug"] = self.instance.available_slug(name)
+            for field in ("h1", "seo_title"):
+                if field in data and not data[field]:
+                    data[field] = getattr(self.instance, field) or name[:self.fields[field].max_length]
         if data.get("new_variant_group") and data.get("variant_group"):
             self.add_error("new_variant_group", "Выберите существующую группу или создайте новую.")
         minimum = data.get("min_quantity")
