@@ -231,6 +231,7 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
     def __init__(self, *args, gallery_editor=False, **kwargs):
         super().__init__(*args, **kwargs)
         category_choices(self.fields["category"])
+        self.fields["variant_group"].empty_label = "Без группы модификаций"
         if gallery_editor:
             media = self.fields["media"]
             media.queryset = media.queryset.exclude(Q(media_type=SiteMedia.TYPE_IMAGE) & ~Q(file__iendswith=".svg"))
@@ -1073,28 +1074,45 @@ class DynamicProductFieldsForm(forms.Form):
     def __init__(self, *args, product=None, definitions=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.product = product
-        if definitions is None:
-            definitions = AttributeDefinition.objects.filter(is_visible=True)
-            if product and product.pk:
-                definitions = definitions.exclude(excluded_products=product)
-        self.removed_definitions = (
-            AttributeDefinition.objects.filter(pk__in=[
-                int(value) for value in self.data.getlist("remove_attribute")
-                if value.isascii() and value.isdecimal() and len(value) <= 18
-            ]) if self.is_bound and hasattr(self.data, "getlist") else AttributeDefinition.objects.none()
-        )
-        self.definitions = definitions.exclude(pk__in=self.removed_definitions).order_by("sort_order", "name")
         values = {}
-
         if product and product.pk:
-            values = {value.attribute_id: value for value in product.attributes.select_related("attribute")}
+            values = {value.attribute_id: value for value in product.attributes.all()}
         self.existing_value_ids = values.keys()
+        posted = self.data if self.is_bound else None
+
+        def ids(items):
+            return {int(item) for item in map(str, items) if item.isascii() and item.isdecimal() and len(item) <= 18}
+
+        def posted_list(key):
+            if hasattr(posted, "getlist"):
+                return posted.getlist(key)
+            value = posted.get(key, [])
+            return value if isinstance(value, (tuple, list)) else [value]
+
+        self.removed_definitions = (
+            AttributeDefinition.objects.filter(pk__in=ids(posted_list("remove_attribute")))
+            if posted is not None else AttributeDefinition.objects.none()
+        )
+        if definitions is None:
+            selected = set(values)
+            if product and product.pk:
+                selected.update(product.selected_attribute_definitions.values_list("pk", flat=True))
+                selected.difference_update(product.excluded_attribute_definitions.values_list("pk", flat=True))
+            if posted is not None:
+                if "attribute_selection" in posted:
+                    selected = ids(posted_list("select_attribute"))
+                else:
+                    selected.update(ids(key[6:] for key in (*posted, *self.files) if key.startswith("field_")))
+            definitions = AttributeDefinition.objects.filter(pk__in=selected)
+        self.definitions = definitions.exclude(pk__in=self.removed_definitions).order_by("sort_order", "name")
 
         for definition in self.definitions:
             field_name = f"field_{definition.pk}"
-            initial = self._initial_value(definition, values.get(definition.pk))
+            stored = values.get(definition.pk)
+            initial = self._initial_value(definition, stored)
             field = self._build_field(definition, initial)
             field.product_attribute_order = definition.sort_order
+            field.product_attribute_has_saved_value = stored is not None and initial not in ("", None, [])
             if not getattr(field.widget, "allow_multiple_selected", False):
                 field.widget.attrs["aria-labelledby"] = f"id_{field_name}_label"
             self.fields[field_name] = field
@@ -1172,13 +1190,18 @@ class DynamicProductFieldsForm(forms.Form):
         if definition.value_type == AttributeDefinition.TYPE_URL:
             return forms.URLField(**kwargs)
 
-        return forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), **kwargs)
+        return forms.CharField(widget=forms.Textarea(attrs={"rows": 1, "data-attribute-text": ""}), **kwargs)
 
     def save(self, product):
         removed = list(self.removed_definitions.values_list("pk", flat=True))
         if removed:
+            product.selected_attribute_definitions.remove(*removed)
             product.excluded_attribute_definitions.add(*removed)
             product.attributes.filter(attribute_id__in=removed).delete()
+        selected = [definition.pk for definition in self.definitions]
+        if selected:
+            product.selected_attribute_definitions.add(*selected)
+            product.excluded_attribute_definitions.remove(*selected)
         for definition in self.definitions:
             field_name = f"field_{definition.pk}"
             value = self.cleaned_data.get(field_name)

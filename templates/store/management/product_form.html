@@ -3,6 +3,10 @@
 
 {% block heading %}{% if product %}Редактировать товар{% else %}Новый товар{% endif %}{% endblock %}
 
+{% block management_styles %}
+  <link rel="stylesheet" href="{% static 'store/css/product-editor.css' %}">
+{% endblock %}
+
 {% block content %}
   <form class="mgmt-form-grid" data-product-editor data-product-id="{{ product.pk|default_if_none:'' }}" data-bound="{{ form.is_bound|yesno:"1,0" }}" data-original-slug="{{ preview_slug }}" data-published="{{ published_url|yesno:"1,0" }}" method="post" enctype="multipart/form-data">
     {% csrf_token %}
@@ -48,16 +52,20 @@
     <section class="mgmt-card">
       <div class="card-header">
         <h2>Пользовательские поля</h2>
-        <button class="ghost-button" type="button" data-attribute-new data-url="{% url 'management_field_new' %}">+ Добавить поле</button>
+        <button class="ghost-button product-picker-toggle" type="button" data-attribute-picker>+ Добавить поле</button>
       </div>
-      <div class="form-grid" data-product-attributes data-product-id="{{ product.pk|default:'' }}">
+      <p class="mgmt-message error" data-attribute-draft-error role="alert" hidden></p>
+      <div class="form-grid" data-product-attributes data-product-id="{{ product.pk|default:'' }}" data-url="{% url 'management_field_new' %}">
+        <input type="hidden" name="attribute_selection" value="1">
+        <input type="hidden" name="select_attribute" value="">
+        <input type="hidden" name="remove_attribute" value="">
         {% for definition in removed_attributes %}
           <input type="hidden" name="remove_attribute" value="{{ definition.pk }}">
         {% endfor %}
         {% for field in dynamic_form %}
           {% include "store/management/product_attribute.html" %}
         {% endfor %}
-        <p class="muted" data-attributes-empty {% if dynamic_form.fields %}hidden{% endif %}>Пока нет пользовательских полей.</p>
+        <p class="muted" data-attributes-empty {% if dynamic_form.fields %}hidden{% endif %}>Пользовательские поля не добавлены</p>
       </div>
     </section>
 
@@ -167,12 +175,14 @@
 {% endblock %}
 
 {% block management_scripts %}
+  {{ attribute_catalog|json_script:"product-attribute-catalog" }}
+  <script src="{% static 'store/js/product-picker.js' %}"></script>
   {{ slug_transliteration|json_script:"product-slug-transliteration" }}
   {{ seo_modes|json_script:"product-seo-modes" }}
   <script src="{% static 'store/js/product-gallery.js' %}?v=3"></script>
   <script src="{% static 'store/js/product-pricing.js' %}?v=2"></script>
   <script src="{% static 'store/js/variant-groups.js' %}?v=5"></script>
   <script src="{% static 'store/js/product-editor.js' %}?v=6"></script>
-  <script src="{% static 'store/js/product-attributes.js' %}?v=1"></script>
+  <script src="{% static 'store/js/product-attributes.js' %}?v=2"></script>
   <script src="{% static 'store/js/customer-prices.js' %}?v=3"></script>
 {% endblock %}

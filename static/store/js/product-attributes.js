@@ -6,7 +6,74 @@
   const content = form.querySelector("[data-attribute-content]");
   const error = form.querySelector("[data-attribute-error]");
   const submit = form.querySelector("[type=submit]");
+  const editor = fields.closest("form");
+  const toggle = editor.querySelector("[data-attribute-picker]");
+  const catalog = new Map(JSON.parse(document.getElementById("product-attribute-catalog").textContent)
+    .map(item => [String(item.id), item.name]));
+  const rows = () => [...fields.querySelectorAll("[data-product-attribute]")];
+  const empty = fields.querySelector("[data-attributes-empty]");
   let row, url, trigger, busy = false;
+  let pending, applying = false;
+
+  function action(text, className) {
+    const button = document.createElement("button");
+    Object.assign(button, {type: "button", textContent: text, className});
+    return button;
+  }
+  const footer = document.createElement("div");
+  footer.className = "product-picker-footer";
+  const count = document.createElement("span");
+  count.setAttribute("role", "status");
+  const pickerError = document.createElement("p");
+  pickerError.setAttribute("role", "alert");
+  pickerError.hidden = true;
+  const create = action("+ Создать новое поле", "ghost-button");
+  create.dataset.attributeNew = "";
+  create.dataset.url = fields.dataset.url;
+  const cancel = action("Отмена", "ghost-button");
+  const apply = action("Применить", "primary-button");
+  footer.append(count, create, pickerError, cancel, apply);
+  function updateCount() {
+    count.textContent = "Выбрано: " + pending.size;
+  }
+  const picker = window.createProductPicker(toggle, {
+    label: "Пользовательские поля",
+    placeholder: "Поиск по названию поля",
+    footer,
+    onOpen() {
+      pending = new Set(rows().map(element => element.dataset.productAttribute));
+      pickerError.hidden = true;
+      updateCount();
+    },
+    items: query => [...catalog].filter(([, name]) => name.toLocaleLowerCase().includes(query))
+      .map(([id, name]) => {
+        const label = document.createElement("label");
+        const check = document.createElement("input");
+        Object.assign(check, {type: "checkbox", checked: pending.has(id), disabled: applying});
+        label.append(check, name);
+        check.addEventListener("change", () => {
+          if (check.checked) pending.add(id);
+          else pending.delete(id);
+          updateCount();
+        });
+        return label;
+      }),
+  });
+  cancel.addEventListener("click", () => picker.close(true));
+
+  function fitText(input) {
+    input.style.height = "auto";
+    input.style.height = input.scrollHeight + (input.offsetHeight - input.clientHeight) + "px";
+  }
+  fields.addEventListener("input", event => {
+    if (event.target.matches("[data-attribute-text]")) fitText(event.target);
+  });
+  function fitRows() {
+    fields.querySelectorAll("[data-attribute-text]").forEach(fitText);
+  }
+  fitRows();
+  window.addEventListener("resize", fitRows);
+  document.fonts?.ready.then(fitRows);
 
   function setBusy(value) {
     busy = value;
@@ -15,7 +82,7 @@
   }
 
   function updateEmpty() {
-    fields.querySelector("[data-attributes-empty]").hidden = Boolean(fields.querySelector("[data-product-attribute]"));
+    empty.hidden = rows().length > 0;
   }
 
   function valueControls(element) {
@@ -29,13 +96,115 @@
     for (const input of valueControls(fieldRow)) input.dispatchEvent(new Event("upload-reset"));
     fieldRow.remove();
     updateEmpty();
-    marker.dispatchEvent(new Event("change", {bubbles: true}));
   }
 
-  fields.closest("form").addEventListener("management-draft-restored", event => {
-    const removed = new Set(event.detail.remove_attribute || []);
-    for (const fieldRow of fields.querySelectorAll("[data-product-attribute]")) {
-      if (removed.has(fieldRow.dataset.productAttribute)) removeFromProduct(fieldRow);
+  function insertRow(html, previousRow) {
+    const template = document.createElement("template");
+    template.innerHTML = html.trim();
+    const replacement = template.content.firstElementChild;
+    const id = replacement.dataset.productAttribute;
+    fields.querySelector(`[name="remove_attribute"][value="${id}"]`)?.remove();
+    previousRow?.remove();
+    const order = Number(replacement.dataset.attributeOrder);
+    const name = catalog.get(id);
+    const next = rows().find(other => {
+      const otherOrder = Number(other.dataset.attributeOrder);
+      return order < otherOrder || (order === otherOrder && name.localeCompare(catalog.get(other.dataset.productAttribute)) < 0);
+    });
+    fields.insertBefore(replacement, next || empty);
+    window.enhanceStoreSelects?.(replacement);
+    window.initManagementUploads?.(replacement);
+    updateEmpty();
+    return replacement;
+  }
+
+  function endpoint(mode, base = fields.dataset.url) {
+    const path = new URL(base, location.href);
+    path.searchParams.set("editor", mode);
+    if (fields.dataset.productId) path.searchParams.set("product", fields.dataset.productId);
+    return path;
+  }
+
+  async function loadRows(ids) {
+    const result = {};
+    for (let start = 0; start < ids.length; start += 100) {
+      const path = endpoint("rows");
+      ids.slice(start, start + 100).forEach(id => path.searchParams.append("field", id));
+      const response = await fetch(path);
+      if (!response.ok || response.redirected) throw new Error("Не удалось загрузить поля. Попробуйте ещё раз.");
+      Object.assign(result, (await response.json()).rows);
+    }
+    if (ids.some(id => !result[id])) throw new Error("Некоторые поля больше недоступны. Обновите список после сохранения черновика.");
+    return result;
+  }
+
+  function filled(element) {
+    return element.hasAttribute("data-attribute-saved-value") || draftValues(valueControls(element)).length > 0;
+  }
+
+  apply.addEventListener("click", async () => {
+    if (applying) return;
+    const selected = new Set(pending);
+    const current = rows();
+    const removed = current.filter(element => !selected.has(element.dataset.productAttribute));
+    if (removed.some(filled) && !window.confirm("Убрать выбранные поля? Их значения будут удалены из товара при сохранении.")) return;
+    const added = [...selected].filter(id => !current.some(element => element.dataset.productAttribute === id));
+    applying = true;
+    apply.disabled = create.disabled = true;
+    picker.render();
+    pickerError.hidden = true;
+    try {
+      const html = await loadRows(added);
+      removed.forEach(removeFromProduct);
+      added.forEach(id => insertRow(html[id]));
+      updateEmpty();
+      fitRows();
+      fields.dispatchEvent(new Event("change", {bubbles: true}));
+      picker.close(true);
+    } catch (failure) {
+      pickerError.textContent = failure.message;
+      pickerError.hidden = false;
+    } finally {
+      applying = false;
+      apply.disabled = create.disabled = false;
+      picker.render();
+    }
+  });
+
+  editor.addEventListener("submit", event => { if (applying) event.preventDefault(); });
+  editor.addEventListener("management-draft-restored", async event => {
+    const data = event.detail;
+    const removed = new Set(data.remove_attribute || []);
+    const added = (data.select_attribute || []).filter(id =>
+      catalog.has(id) && !removed.has(id) && !rows().some(element => element.dataset.productAttribute === id));
+    applying = true;
+    toggle.disabled = true;
+    try {
+      const html = await loadRows(added);
+      for (const element of rows()) {
+        if (removed.has(element.dataset.productAttribute)) removeFromProduct(element);
+      }
+      for (const id of added) {
+        const replacement = insertRow(html[id]);
+        const values = data["field_" + id];
+        if (!values) continue;
+        for (const input of valueControls(replacement)) {
+          if (input.type === "checkbox" || input.type === "radio") {
+            input.checked = values.some(entry => entry[0] === input.value && entry[1] === true);
+          } else if (input.type !== "file" && values.length) {
+            input.value = values[0];
+          }
+          input.dispatchEvent(new Event("change", {bubbles: true}));
+        }
+      }
+      fitRows();
+    } catch (failure) {
+      const draftError = editor.querySelector("[data-attribute-draft-error]");
+      draftError.textContent = "Не удалось восстановить выбранные поля из черновика. " + failure.message;
+      draftError.hidden = false;
+    } finally {
+      applying = false;
+      toggle.disabled = false;
     }
   });
 
@@ -63,23 +232,22 @@
 
   document.addEventListener("click", async event => {
     const button = event.target.closest("[data-attribute-new], [data-attribute-edit], [data-attribute-remove]");
-    if (!button || dialog.open) return;
-    trigger = button;
+    if (!button || dialog.open || applying) return;
     row = button.closest("[data-product-attribute]");
-    error.textContent = "";
-    content.replaceChildren();
-    const removing = button.hasAttribute("data-attribute-remove");
-    dialog.querySelector("h2").textContent = removing ? "Убрать поле из товара" : row ? "Редактировать поле" : "Добавить поле";
-    submit.textContent = removing ? "Убрать из товара" : row ? "Сохранить изменения" : "Создать и добавить";
-    if (removing) {
-      url = null;
-      content.textContent = "Поле и его значение будут убраны из этой карточки при сохранении товара. Остальные карточки сохранят свои значения.";
-      dialog.showModal();
+    if (button.hasAttribute("data-attribute-remove")) {
+      if (filled(row) && !window.confirm("Убрать поле и его значение из этого товара при сохранении?")) return;
+      removeFromProduct(row);
+      fields.dispatchEvent(new Event("change", {bubbles: true}));
+      toggle.focus();
       return;
     }
-    url = new URL(button.dataset.url, location.href);
-    url.searchParams.set("editor", "product");
-    if (fields.dataset.productId) url.searchParams.set("product", fields.dataset.productId);
+    trigger = button;
+    error.textContent = "";
+    content.replaceChildren();
+    dialog.querySelector("h2").textContent = row ? "Редактировать поле" : "Создать поле";
+    submit.textContent = row ? "Сохранить изменения" : "Создать и добавить";
+    picker.close();
+    url = endpoint("product", button.dataset.url);
     setBusy(true);
     dialog.showModal();
     try {
@@ -97,11 +265,6 @@
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (busy || submit.disabled) return;
-    if (!url) {
-      removeFromProduct(row);
-      dialog.close();
-      return;
-    }
     const data = new FormData(form);
     const controls = row ? valueControls(row) : [];
     const values = draftValues(controls);
@@ -117,9 +280,8 @@
         return;
       }
       if (result.html) {
-        const template = document.createElement("template");
-        template.innerHTML = result.html.trim();
-        const replacement = template.content.firstElementChild;
+        catalog.set(String(result.id), result.name);
+        const replacement = insertRow(result.html, row);
         for (const input of valueControls(replacement)) {
           const previous = controls.find(old => old.name === input.name);
           if (!previous) continue;
@@ -131,27 +293,15 @@
             input.value = values[0] ?? "";
           }
         }
-        const order = Number(replacement.dataset.attributeOrder);
-        const name = replacement.querySelector(".product-attribute-title > span").textContent;
-        const next = [...fields.querySelectorAll("[data-product-attribute]")].find(other => {
-          if (other === row) return false;
-          const otherOrder = Number(other.dataset.attributeOrder);
-          const otherName = other.querySelector(".product-attribute-title > span").textContent;
-          return order < otherOrder || (order === otherOrder && name.localeCompare(otherName) < 0);
-        });
-        row?.remove();
-        fields.insertBefore(replacement, next || fields.querySelector("[data-attributes-empty]"));
-        window.enhanceStoreSelects?.(replacement);
-        window.initManagementUploads?.(replacement);
         for (const input of valueControls(replacement)) {
-          if (input.type === "file" && input.files.length) input.dispatchEvent(new Event("change", {bubbles: true}));
+          if (input.type === "select-one" || (input.type === "file" && input.files.length)) input.dispatchEvent(new Event("change", {bubbles: true}));
         }
         trigger = replacement.querySelector("[data-attribute-edit]");
-      } else if (row) {
-        row.remove();
       }
       for (const input of controls) input.dispatchEvent(new Event("upload-reset"));
       updateEmpty();
+      fitRows();
+      fields.dispatchEvent(new Event("change", {bubbles: true}));
       dialog.close();
     } catch (failure) {
       error.textContent = failure.message;
@@ -166,7 +316,7 @@
     button.addEventListener("click", () => { if (!busy) dialog.close(); });
   });
   dialog.addEventListener("close", () => {
-    (trigger?.isConnected ? trigger : document.querySelector("[data-attribute-new]"))?.focus();
+    (trigger?.isConnected && trigger !== create ? trigger : toggle)?.focus();
     submit.disabled = false;
   });
 })();

@@ -137,6 +137,9 @@ PRODUCT_SLUG_TRANSLITERATION = str.maketrans(dict(zip(
 
 
 class Product(models.Model):
+    selected_attribute_definitions = models.ManyToManyField(
+        "AttributeDefinition", blank=True, related_name="+", editable=False,
+    )
     excluded_attribute_definitions = models.ManyToManyField(
         "AttributeDefinition", blank=True, related_name="excluded_products",
     )

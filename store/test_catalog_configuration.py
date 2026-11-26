@@ -32,7 +32,7 @@ class CatalogConfigurationTests(TestCase):
         field = AttributeDefinition.objects.get(name="Оттенок")
         first = AttributeDefinition.objects.create(name="Материал", sort_order=1)
         key = f"field_{field.pk}"
-        self.assertEqual(list(DynamicProductFieldsForm(product=self.product).fields), [f"field_{first.pk}", key])
+        self.assertFalse(DynamicProductFieldsForm(product=self.product).fields)
 
         for product, choice in ((self.product, "Белый"), (self.other, "Крафт")):
             product_url = reverse("management_product_edit", args=[product.pk])
@@ -40,6 +40,7 @@ class CatalogConfigurationTests(TestCase):
                 "category": self.category.pk, "name": product.name, "slug": product.slug, "sku": product.sku,
                 "price": str(product.price), "unit": "шт", "min_quantity": 1, "stock_quantity": 10,
                 "availability": "in_stock", "status": Product.STATUS_PUBLISHED, "vat_rate": "22.00",
+                "attribute_selection": "1", "select_attribute": [first.pk, field.pk],
             }
             invalid = self.client.post(product_url, payload)
             self.assertIn(key, invalid.context["dynamic_form"].errors)

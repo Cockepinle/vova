@@ -220,7 +220,7 @@
   window.enhanceStoreSelects = root => {
     root.querySelectorAll("select[multiple]").forEach(enhance);
     if (document.body.hasAttribute("data-management-user") && !CSS.supports("selector(::picker(select))")) {
-      root.querySelectorAll("select:not([multiple], [size], .media-picker-select)").forEach(enhanceSingle);
+      root.querySelectorAll("select:not([multiple], [size], .media-picker-select, [data-product-editor] #id_variant_group)").forEach(enhanceSingle);
     }
   };
   window.enhanceStoreSelects(document);

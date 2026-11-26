@@ -9,6 +9,7 @@
     <title>{% block title %}Панель управления{% endblock %} · PakLine</title>
     <link rel="stylesheet" href="{% static 'store/css/management.css' %}?v=56">
     <link rel="stylesheet" href="{% static 'store/css/store-selects.css' %}?v=2">
+    {% block management_styles %}{% endblock %}
   </head>
   <body data-management-user="{{ request.user.pk }}" data-management-post="{{ request.method }}" data-media-api="{% url 'management_media_api' %}" data-media-upload-api="{% url 'management_media_upload_api' %}" data-missing-image="{% static 'store/images/no-photo.svg' %}">
     <div class="mgmt-shell">
@@ -138,9 +139,9 @@
     <script src="{% static 'store/js/media-upload-request.js' %}"></script>
     <script src="{% static 'store/js/media-picker.js' %}?v=6"></script>
     <script src="{% static 'store/js/management.js' %}?v=43"></script>
-    <script src="{% static 'store/js/store-selects.js' %}?v=3"></script>
+    <script src="{% static 'store/js/store-selects.js' %}?v=4"></script>
     <script src="{% static 'store/js/management-options.js' %}"></script>
     {% block management_scripts %}{% endblock %}
-    <script src="{% static 'store/js/management-drafts.js' %}?v=6"></script>
+    <script src="{% static 'store/js/management-drafts.js' %}?v=7"></script>
   </body>
 </html>

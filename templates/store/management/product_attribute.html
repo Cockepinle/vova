@@ -1,4 +1,5 @@
-<div class="product-attribute" data-product-attribute="{{ field.name|slice:'6:' }}" data-attribute-order="{{ field.field.product_attribute_order }}">
+<div class="product-attribute" data-product-attribute="{{ field.name|slice:'6:' }}" data-attribute-order="{{ field.field.product_attribute_order }}"{% if field.field.product_attribute_has_saved_value %} data-attribute-saved-value{% endif %}>
+  <input type="hidden" name="select_attribute" value="{{ field.name|slice:'6:' }}">
   <div class="product-attribute-title">
     <span id="{{ field.auto_id }}_label">{{ field.label }}{% if field.field.required %} *{% endif %}</span>
     <div class="product-attribute-actions">

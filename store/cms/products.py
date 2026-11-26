@@ -222,6 +222,7 @@ def product_form(request, product_id=None):
             "product": product,
             "form": form,
             "dynamic_form": dynamic_form,
+            "attribute_catalog": list(AttributeDefinition.objects.order_by("sort_order", "name").values("id", "name")),
             "removed_attributes": dynamic_form.removed_definitions,
             "price_formset": price_formset,
             "product_gallery": gallery,

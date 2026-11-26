@@ -120,6 +120,38 @@ class ProductEditorTests(TestCase):
         self.assertIn("recommended_products", response.context["form"].errors)
         self.assertEqual(list(product.recommended_products.all()), [self.other])
 
+    def test_explicit_attribute_selection_keeps_empty_fields_and_supports_reattaching(self):
+        material = AttributeDefinition.objects.create(name="Материал")
+        finish = AttributeDefinition.objects.create(name="Покрытие")
+        self.other.attributes.create(attribute=material, value_text="Бумага")
+        url = reverse("management_product_new")
+        self.assertNotContains(self.client.get(url), f'name="field_{material.pk}"')
+        response = self.client.get(reverse("management_field_new"), {
+            "editor": "rows", "field": [material.pk, finish.pk],
+        })
+        self.assertEqual(set(response.json()["rows"]), {str(material.pk), str(finish.pk)})
+        key = f"field_{material.pk}"
+        payload = self.product_data(name="Выбор полей", attribute_selection="1")
+        self.assertEqual(self.client.post(url, {
+            **payload, "select_attribute": [material.pk, finish.pk], key: "Картон",
+        }).status_code, 302)
+        product = Product.objects.get(name=payload["name"])
+        edit = reverse("management_product_edit", args=[product.pk])
+        self.assertContains(self.client.get(edit), f'name="field_{finish.pk}"')
+        self.assertFalse(product.attributes.filter(attribute=finish).exists())
+        self.assertRedirects(self.client.post(edit, {
+            **payload, "remove_attribute": [material.pk, finish.pk],
+        }), edit)
+        self.assertFalse(product.selected_attribute_definitions.exists())
+        self.assertFalse(product.attributes.exists())
+        self.assertTrue(product.excluded_attribute_definitions.filter(pk=material.pk).exists())
+        self.assertRedirects(self.client.post(edit, {
+            **payload, "select_attribute": [material.pk], key: "Пластик",
+        }), edit)
+        self.assertFalse(product.excluded_attribute_definitions.filter(pk=material.pk).exists())
+        self.assertEqual(product.attributes.get(attribute=material).value_text, "Пластик")
+        self.assertEqual(self.other.attributes.get(attribute=material).value_text, "Бумага")
+
     def test_cyrillic_slug_matches_editor_transliteration(self):
         title = "Архивный короб 330 × 250 × 350 мм"
         response = self.client.post(reverse("management_product_new"), self.product_data(name=title))

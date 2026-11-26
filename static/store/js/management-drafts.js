@@ -136,6 +136,7 @@
       const checkedValues = new Map();
       const changed = [];
       for (const control of controls()) {
+        if (form.hasAttribute("data-product-editor") && ["select_attribute", "remove_attribute"].includes(control.name)) continue;
         const index = indices[control.name] ?? 0;
         indices[control.name] = index + 1;
         const value = data[control.name]?.[index];

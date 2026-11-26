@@ -1041,6 +1041,8 @@ def page_builder_restore(request, page_id, revision_id):
 
 @management_required
 def field_form(request, field_id=None):
+    if field_id is None and request.GET.get("editor") == "rows" and request.method == "GET":
+        return product_attribute_rows(request)
     if request.GET.get("editor") == "product":
         return product_attribute_definition(request, field_id)
     field = get_object_or_404(AttributeDefinition, pk=field_id) if field_id else None
@@ -1067,6 +1069,24 @@ def field_form(request, field_id=None):
     )
 
 
+def product_attribute_rows(request):
+    from store.cms_forms import DynamicProductFieldsForm
+
+    product_id = request.GET.get("product")
+    ids = request.GET.getlist("field")
+    if any(not key.isascii() or not key.isdecimal() or len(key) > 18
+           for key in [*ids, *([product_id] if product_id else [])]):
+        return JsonResponse({"error": "Некорректный идентификатор."}, status=400)
+    product = get_object_or_404(Product, pk=product_id) if product_id else None
+    dynamic = DynamicProductFieldsForm(
+        product=product, definitions=AttributeDefinition.objects.filter(pk__in=ids),
+    )
+    return JsonResponse({"rows": {
+        field.name[6:]: render_to_string("store/management/product_attribute.html", {"field": field}, request=request)
+        for field in dynamic
+    }})
+
+
 @transaction.atomic
 def product_attribute_definition(request, field_id):
     from store.cms_forms import DynamicProductFieldsForm
@@ -1082,8 +1102,6 @@ def product_attribute_definition(request, field_id):
         form = AttributeDefinitionForm(request.POST, prefix="definition", instance=field)
         same_type = field.value_type if field else None
         valid = form.is_valid()
-        if valid and not field_id and not form.cleaned_data["is_visible"]:
-            form.add_error("is_visible", "Чтобы добавить поле в карточку товара, включите его отображение.")
         if field_id and request.POST.get("confirm_global") != "1":
             form.add_error(None, "Подтвердите изменение для всех товаров.")
         draft_values = request.POST.getlist("draft_value")
@@ -1105,15 +1123,13 @@ def product_attribute_definition(request, field_id):
                 form.add_error("name", "Не удалось сохранить поле. Проверьте, свободно ли название.")
             else:
                 log_change(request, field, CHANGE if field_id else ADDITION, "Поле сохранено из карточки товара")
-                html = ""
-                if field.is_visible:
-                    dynamic = DynamicProductFieldsForm(
-                        product=product, definitions=AttributeDefinition.objects.filter(pk=field.pk),
-                    )
-                    html = render_to_string(
-                        "store/management/product_attribute.html", {"field": dynamic[f"field_{field.pk}"]}, request=request,
-                    )
-                return JsonResponse({"id": field.pk, "html": html})
+                dynamic = DynamicProductFieldsForm(
+                    product=product, definitions=AttributeDefinition.objects.filter(pk=field.pk),
+                )
+                html = render_to_string(
+                    "store/management/product_attribute.html", {"field": dynamic[f"field_{field.pk}"]}, request=request,
+                )
+                return JsonResponse({"id": field.pk, "name": field.name, "html": html})
     else:
         return JsonResponse({"error": "Метод запроса не поддерживается."}, status=405)
     html = render_to_string(
