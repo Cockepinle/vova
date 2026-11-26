@@ -21,24 +21,12 @@ window.initVariantGroup = (root) => {
     row.querySelector("input").focus();
   });
 
-  const productSearch = root.querySelector("[data-product-search]");
-  const productOptions = [...root.querySelectorAll("[data-product-option]")];
-  const selection = root.querySelector("[data-variant-selection]");
-  const noResults = root.querySelector("[data-variant-no-results]");
-
-  if (productSearch) {
-    function updateSelection() {
-      selection.textContent = "Выбрано товаров: " + productOptions.filter(option => option.querySelector("input").checked).length;
-    }
-    productSearch.addEventListener("input", () => {
-      const query = productSearch.value.trim().toLocaleLowerCase();
-      productOptions.forEach(option => {
-        option.hidden = !option.querySelector("label").textContent.toLocaleLowerCase().includes(query);
-      });
-      noResults.hidden = !query || productOptions.length === 0 || productOptions.some(option => !option.hidden);
-    });
-    productOptions.forEach(option => option.addEventListener("change", updateSelection));
-    updateSelection();
+  for (const order of root.querySelectorAll(".variant-order-input input")) {
+    const check = order.closest("[data-option]").querySelector('input[type="checkbox"]');
+    const sync = () => { order.disabled = !check.checked; };
+    check.addEventListener("change", sync);
+    sync();
   }
+  window.initManagementOptions(root);
 };
 window.initVariantGroup(document);

@@ -190,21 +190,10 @@
         data.set("file", file);
         data.set("kind", current.kind);
         try {
-          const response = await fetch(document.body.dataset.mediaUploadApi, {
-            method: "POST", mode: "same-origin", headers: {"X-CSRFToken": csrf}, body: data,
-          });
-          if (response.status === 413) throw new Error("Размер файла превышает допустимые 4 МБ");
-          if (response.redirected || response.status === 401) throw new Error("Срок действия сессии истёк. Войдите в систему повторно");
-          const item = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(item.error || (response.status === 403 ? "Недостаточно прав для загрузки файла" : "Не удалось сохранить файл на сервере"));
-          if (!item.id) throw new Error("Не удалось получить данные файла. Проверьте вход в панель управления.");
+          const item = await window.uploadManagementMedia(data, csrf);
           if (session !== current) return;
-          if (!current.multiple) {
-            finish([item]);
-            return;
-          }
           current.items.set(String(item.id), item);
-          current.selected.set(String(item.id), item);
+          if (current.multiple) current.selected.set(String(item.id), item);
         } catch (error) {
           queued.push(file);
           failures.push(file.name + " — " + (error instanceof TypeError
@@ -212,8 +201,10 @@
         }
       }
       if (session !== current) return;
+      if (failures.length < files.length) search.value = "";
       render();
-      announce(failures.length ? failures.join(" · ") : "Файлы загружены и отмечены для выбора.", failures.length > 0);
+      announce(failures.length ? failures.join(" · ") : current.multiple
+        ? "Файлы загружены и отмечены для выбора." : "Файл загружен. Нажмите на его миниатюру для выбора.", failures.length > 0);
     } finally {
       current.uploading = false;
       upload.disabled = false;

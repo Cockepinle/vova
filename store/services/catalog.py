@@ -354,11 +354,13 @@ def variant_selectors(variants):
     current = next(item for item in variants if item["current"])
     params = current["options"]
     selectors = []
+    previous = []
     for name in params:
         buckets = {}
         for item in variants:
-            if label := item["options"].get(name):
+            if (label := item["options"].get(name)) and all(item["options"].get(key) == params[key] for key in previous):
                 buckets.setdefault(label, []).append(item)
+        previous.append(name)
         if len(buckets) < 2:
             continue
         choices = []
@@ -369,11 +371,13 @@ def variant_selectors(variants):
                 not item["unavailable"],
             ))
             choices.append({**target, "value_label": label})
-        selectors.append({"name": name, "choices": choices})
+        selectors.append({"name": name, "selected": params[name], "choices": choices})
     combinations = [tuple(sorted(item["options"].items())) for item in variants]
     if not selectors or any(item["options"].keys() != params.keys() for item in variants) or len(set(combinations)) != len(variants):
-        selectors.append({"name": "Вариант товара", "choices": [
-            {**item, "value_label": item["sku"] or item["name"]} for item in variants
+        selectors.append({"name": "Вариант товара", "selected": current["label"], "choices": [
+            {**item, "value_label": item["label"] + (
+                f" · {item['sku'] or item['name']}" if item["show_identity"] else ""
+            )} for item in variants
         ]})
     return selectors
 

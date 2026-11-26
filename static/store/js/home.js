@@ -124,7 +124,10 @@ function openProductModal(product) {
   const minimum = Math.max(1, Number(modalInput ? modalInput.getAttribute("min") : product.min_quantity || 1));
 
   modalInput.value = String(Math.max(minimum, cartQuantity || Number(cardInput ? cardInput.value : minimum) || minimum));
-  modal.querySelector(".modal-favorite").classList.toggle("is-active", favoriteButton ? favoriteButton.classList.contains("is-active") : false);
+  const modalFavorite = modal.querySelector(".modal-favorite");
+  const isFavorite = window.isProductFavorite?.(product.id) ?? Boolean(favoriteButton?.classList.contains("is-active"));
+  modalFavorite.classList.toggle("is-active", isFavorite);
+  modalFavorite.setAttribute("aria-pressed", String(isFavorite));
   modal.querySelector(".modal-add").textContent = cartQuantity > 0 || (productCard && productCard.classList.contains("is-in-cart")) ? "В корзине" : "В корзину";
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");

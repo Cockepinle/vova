@@ -7,7 +7,9 @@
   <section class="mgmt-card">
     <div class="card-header">
       <form class="toolbar" method="get">
-        <input type="search" data-category-search aria-label="Поиск категорий" placeholder="Поиск категорий…">
+        <input type="search" name="q" data-category-search aria-label="Поиск категорий" placeholder="Поиск категорий…">
+        <button class="ghost-button" type="button" data-category-expand>Развернуть всё</button>
+        <button class="ghost-button" type="button" data-category-collapse>Свернуть всё</button>
       </form>
       <a class="primary-button" href="{% url 'management_category_new' %}">+ Добавить категорию</a>
     </div>
@@ -33,13 +35,14 @@
                 <td data-label="Выбрать"><input type="checkbox" name="ids" value="{{ category.id }}"></td>
                 <td data-label="Название">
                   <div class="category-tree-name" style="--depth: {{ category.tree_depth }}">
-                    {% if category.has_children %}<button class="ghost-button" type="button" data-category-branch aria-expanded="false" aria-label="Подкатегории {{ category.name }}">+</button>{% endif %}
-                    <strong>{{ category.name }}</strong>
+                    {% if category.has_children %}<button class="ghost-button" type="button" data-category-branch aria-expanded="false" aria-label="Подкатегории {{ category.name }}">▸</button>{% else %}<span class="category-branch-spacer" aria-hidden="true"></span>{% endif %}
+                    {% if category.tree_image %}<img src="{{ category.tree_image }}" alt="" loading="lazy" data-media-fallback>{% endif %}
+                    <strong title="{{ category.tree_label }}">{{ category.name }}</strong>
                   </div>
                 </td>
                 <td data-label="Товары">
                   <button class="ghost-button" type="button" data-category-products data-url="{% url 'management_category_products' category.pk %}" aria-expanded="false"
-                          aria-controls="category-products-{{ category.pk }}" title="Просмотреть товары этой категории">{{ category.product_count }}</button>
+                          aria-controls="category-products-{{ category.pk }}" aria-label="Товары категории {{ category.name }}: {{ category.product_count }}" title="Просмотреть товары этой категории">{{ category.product_count }}</button>
                   {% if category.has_children %}<small title="Товары во всех подкатегориях">Во вложенных: <span data-category-descendants>{{ category.descendant_count }}</span></small>{% endif %}
                 </td>
                 <td data-label="Статус">
@@ -72,27 +75,29 @@
     <section class="category-products-panel">
       <div class="toolbar">
         <label>Поиск товаров<input type="search" data-member-search placeholder="Название или артикул"></label>
-        <label>Список<select data-member-mode><option value="linked">В этой категории</option><option value="available">В других категориях</option></select></label>
+        <button class="ghost-button" type="button" data-member-add aria-pressed="false">+ Добавить товары</button>
         <label>Куда переместить снятые товары
           <select data-member-destination><option value="">Выберите категорию</option>
           {% for category in tree %}<option value="{{ category.pk }}">{{ category.tree_label }}</option>{% endfor %}
           </select>
         </label>
       </div>
+      <p class="section-help" data-member-help>У товара одна основная категория. Чтобы снять привязку, выберите другую категорию.</p>
       <p class="muted" data-member-status role="status"></p>
-      <div class="table-wrap"><table class="mgmt-table">
+      <div class="table-wrap category-member-list"><table class="mgmt-table">
         <thead><tr><th>Привязка</th><th>Товар</th><th>Артикул</th><th>Статус</th><th>Цена</th><th>Действия</th></tr></thead>
         <tbody data-member-rows></tbody>
       </table></div>
       <div class="toolbar-actions">
         <button class="ghost-button" type="button" data-member-prev>Назад</button>
         <button class="ghost-button" type="button" data-member-next>Вперёд</button>
-        <button class="primary-button" type="button" data-member-save>Сохранить изменения</button>
+        <button class="ghost-button" type="button" data-member-reset hidden>Отменить изменения</button>
+        <button class="primary-button" type="button" data-member-save disabled>Сохранить изменения</button>
       </div>
     </section>
   </template>
 {% endblock %}
 
 {% block management_scripts %}
-  <script src="{% static 'store/js/category-tree.js' %}?v=2"></script>
+  <script src="{% static 'store/js/category-tree.js' %}?v=4"></script>
 {% endblock %}

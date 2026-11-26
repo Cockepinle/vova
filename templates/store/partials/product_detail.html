@@ -31,30 +31,11 @@
       {% if detail_product.h1 and detail_product.h1 != detail_product.name %}<p class="product-detail-category">{{ detail_product.name }}</p>{% endif %}
       <p class="product-sku" data-detail-sku>Артикул: {{ detail_product.sku|default:"—" }}</p>
       <p class="product-availability" data-detail-availability>{{ detail_product.get_availability_display }}</p>
-      <p class="product-detail-category" data-detail-category>
-        {% if detail_product.category.parent %}<a href="{% url 'catalog' %}?category={{ detail_product.category.parent.slug }}">{{ detail_product.category.parent.name }}</a> / {% endif %}
-        <a href="{% url 'catalog' %}?category={{ detail_product.category.slug }}">{{ detail_product.category.name }}</a>
-      </p>
-      <p class="price product-detail-price" data-detail-price>{{ detail_data.price }} ₽ <span>/ {{ detail_product.unit }}</span></p>
-      {% if detail_variant_selectors %}
-        <div class="variant-selectors">
-          {% for selector in detail_variant_selectors %}
-            <label>
-              <span>{{ selector.name }}</span>
-              <select data-detail-variant-select aria-label="{{ selector.name }}">
-                {% for item in selector.choices %}
-                  <option value="{{ item.url }}" data-product-url="{{ item.data_url }}" title="{{ item.name }}" aria-label="{{ item.label }}" {% if item.current %}selected{% endif %}>{{ item.value_label }}{% if item.availability != 'in_stock' %} · {{ item.availability_label }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </label>
-          {% endfor %}
-          <noscript>
-            {% for selector in detail_variant_selectors %}{% for item in selector.choices %}
-              {% if not item.current %}<a href="{{ item.url }}">{{ item.label }}</a>{% endif %}
-            {% endfor %}{% endfor %}
-          </noscript>
-        </div>
+      {% if detail_product.availability == "in_stock" and detail_data.stock_quantity %}
+        <p class="product-detail-category" data-detail-stock>В наличии: {{ detail_data.stock_quantity }} {{ detail_product.unit }}</p>
       {% endif %}
+      <p class="price product-detail-price" data-detail-price>{{ detail_data.price }} ₽ <span>/ {{ detail_product.unit }}</span></p>
+      {% include "store/partials/product_variant_picker.html" with selectors=detail_variant_selectors only %}
       <div class="detail-buy-actions">
         <div class="quantity-control" role="group" aria-label="Количество">
           <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not detail_can_purchase %}disabled{% endif %}>−</button>
@@ -66,14 +47,14 @@
                 {% if not detail_can_purchase %}data-purchase-disabled disabled{% endif %}>{% if detail_is_hidden %}Предпросмотр{% elif not detail_can_purchase %}Нет в наличии{% elif detail_cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
       </div>
       <small id="detail-quantity-rules">Минимум {{ detail_data.min_quantity }} {{ detail_product.unit }} · кратность {{ detail_data.quantity_step }} {{ detail_product.unit }}</small>
+      {% if detail_product.description %}
+        <section class="product-detail-description">
+          <h2>Описание товара</h2>
+          <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
+        </section>
+      {% endif %}
     </div>
   </div>
-  {% if detail_product.description %}
-    <section class="product-detail-section">
-      <h2>Описание</h2>
-      <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>
-    </section>
-  {% endif %}
   {% if detail_specs %}
     <section class="product-detail-section">
       <h2>Характеристики</h2>
@@ -101,8 +82,8 @@
       <h2>Рекомендуем к этому товару</h2>
       <div class="product-detail-recommendation-grid">
         {% for item in recommended_items %}
-          <article class="product-detail-recommendation">
-            <a href="{{ item.url }}"><img src="{{ item.image }}" alt="{{ item.name }}" loading="lazy" decoding="async"></a>
+          <article class="product-detail-recommendation" data-product-id="{{ item.id }}">
+            {% include "store/partials/recommendation_image.html" %}
             <span class="product-sku">{{ item.sku }}</span>
             <h3><a href="{{ item.url }}">{{ item.name }}</a></h3>
             <p class="price">{{ item.price }} ₽ <span>/ {{ item.unit }}</span></p>
@@ -117,8 +98,8 @@
       <h2>С этим товаром покупают</h2>
       <div class="product-detail-recommendation-grid">
         {% for item in accessory_items %}
-          <article class="product-detail-recommendation">
-            <a href="{{ item.url }}"><img src="{{ item.image }}" alt="{{ item.name }}" loading="lazy" decoding="async"></a>
+          <article class="product-detail-recommendation" data-product-id="{{ item.id }}">
+            {% include "store/partials/recommendation_image.html" %}
             <h3><a href="{{ item.url }}">{{ item.name }}</a></h3>
             <p class="price">{{ item.price }} ₽ <span>/ {{ item.unit }}</span></p>
             {% if item.can_purchase and item.min_quantity > 1 %}<small class="product-detail-minimum">Минимум {{ item.min_quantity }} {{ item.unit }}</small>{% endif %}

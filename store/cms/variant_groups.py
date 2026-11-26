@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch
 from django.http import JsonResponse
@@ -43,7 +45,18 @@ def variant_group_form(request, group_id=None):
         prefix="parameters",
     )
 
-    if request.method == "POST" and all((form.is_valid(), parameter_forms.is_valid())):
+    orders = {}
+    valid = request.method == "POST" and all((form.is_valid(), parameter_forms.is_valid()))
+    if valid:
+        order_field = forms.IntegerField(min_value=0, max_value=2147483647)
+        for product in form.cleaned_data["products"]:
+            key = f"variant_order_{product.pk}"
+            if key in request.POST:
+                try:
+                    orders[product.pk] = order_field.clean(request.POST[key] or "0")
+                except ValidationError:
+                    form.add_error("products", f"Проверьте порядок товара «{product.name}».")
+    if valid and not form.errors:
         is_new = group is None
         try:
             with transaction.atomic():
@@ -79,6 +92,13 @@ def variant_group_form(request, group_id=None):
                 members = {product.pk for product in products}
                 removed = set(group.products.exclude(pk__in=members).values_list("pk", flat=True))
                 group.products.set(products)
+                reordered = []
+                for product in products:
+                    if product.pk in orders and product.variant_sort_order != orders[product.pk]:
+                        product.variant_sort_order = orders[product.pk]
+                        reordered.append(product)
+                if reordered:
+                    Product.objects.bulk_update(reordered, ["variant_sort_order"])
                 log_change(
                     request,
                     group,
@@ -88,7 +108,7 @@ def variant_group_form(request, group_id=None):
             if embedded:
                 return JsonResponse({
                     "id": group.pk, "name": group.name, "created": is_new,
-                    "members": sorted(members), "removed": sorted(removed),
+                    "members": sorted(members), "removed": sorted(removed), "orders": orders,
                 })
             messages.success(request, "Группа модификаций сохранена.")
             return redirect("management_variant_group_edit", group_id=group.pk)
@@ -101,7 +121,7 @@ def variant_group_form(request, group_id=None):
     linked_products = []
     if group:
         values = ProductAttribute.objects.filter(attribute__variant_groups=group).select_related("attribute")
-        linked_products = group.products.order_by("name", "pk").prefetch_related(
+        linked_products = group.products.order_by("variant_sort_order", "name", "pk").prefetch_related(
             Prefetch("attributes", queryset=values, to_attr="variant_values")
         )
     return render(

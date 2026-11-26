@@ -1,0 +1,24 @@
+{% if selectors %}
+  <div class="variant-selectors">
+    {% for selector in selectors %}
+      <div class="variant-field">
+        <span class="variant-field-label">{{ selector.name }}</span>
+        <details class="variant-dropdown" data-variant-dropdown>
+          <summary aria-label="{{ selector.name }}: {{ selector.selected }}"><span>{{ selector.selected }}</span></summary>
+          <ul class="variant-dropdown-list">
+            {% for item in selector.choices %}
+              <li>
+                <a href="{{ item.url }}" title="{{ item.name }}"
+                   aria-label="{{ selector.name }}: {{ item.value_label }}{% if item.availability != 'in_stock' %} · {{ item.availability_label }}{% endif %}"{% if item.current %} aria-current="page"{% endif %}
+                   {% if item.unavailable %}class="variant-unavailable"{% endif %}>
+                  <span>{{ item.value_label }}{% if item.availability != 'in_stock' %}<small>{{ item.availability_label }}</small>{% endif %}</span>
+                  {% if item.current %}<span aria-hidden="true">✓</span>{% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </details>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

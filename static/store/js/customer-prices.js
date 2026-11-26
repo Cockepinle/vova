@@ -21,8 +21,15 @@
   let timer;
 
   function restore() {
-    try { edits = JSON.parse(draft.value || "{}"); }
-    catch { edits = {}; }
+    edits = {};
+    try {
+      const stored = JSON.parse(draft.value || "{}");
+      for (const [id, entry] of Object.entries(stored)) {
+        if (/^\d{1,18}$/.test(id) && entry &&
+            (entry.value === null || typeof entry.value === "string") &&
+            (entry.original === null || typeof entry.original === "string")) edits[id] = entry;
+      }
+    } catch {}
     load();
   }
   function announce() {
@@ -50,6 +57,11 @@
       return option;
     }));
     preview.dispatchEvent(new Event("change"));
+    if (!data.rows.length) {
+      const cell = body.insertRow().insertCell();
+      cell.colSpan = 5;
+      cell.textContent = "Покупатели не найдены.";
+    }
     for (const row of data.rows) {
       const current = edits[row.id] ? edits[row.id].value : row.price;
       const line = body.insertRow();
@@ -94,6 +106,7 @@
       data = result;
       page = data.page;
       render();
+      return true;
     } catch (error) {
       if (error.name !== "AbortError") status.textContent = "Не удалось загрузить покупателей. Повторите поиск.";
     }
@@ -117,7 +130,11 @@
       edits = {};
       draft.value = "";
       draft.dispatchEvent(new Event("change", {bubbles: true}));
-      await load();
+      if (await load()) {
+        status.textContent = "Индивидуальные цены сохранены. " + status.textContent;
+      } else {
+        status.textContent = "Индивидуальные цены сохранены. Не удалось обновить список.";
+      }
     } catch (error) {
       status.textContent = error instanceof SyntaxError ? "Не удалось сохранить цены. Проверьте вход в панель." : error.message;
     } finally {

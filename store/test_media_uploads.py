@@ -43,9 +43,18 @@ class MediaUploadTests(TestCase):
                 self.assertEqual(response.status_code, 200, response.content)
                 item = response.json()
                 stored = SiteMedia.objects.get(pk=item["id"])
+                self.assertEqual(stored.original_filename, f"photo.{extension}")
                 with stored.file.open("rb") as saved:
                     self.assertEqual(saved.read(), original)
                 self.assertContains(self.client.get(self.library_url), f'href="{item["url"]}"')
+
+    def test_library_upload_returns_card_and_persists_filename_separately_from_title(self):
+        response = self.client.post(self.upload_url, {
+            "file": image_file("original.png"), "title": "Другое название", "library": "1",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-file-name="original.png"', response.json()["html"])
+        self.assertContains(self.client.get(self.library_url), 'data-file-name="original.png"')
 
     def test_rejects_svg_wrong_extension_corrupt_images_and_large_files(self):
         for upload in (

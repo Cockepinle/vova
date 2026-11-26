@@ -1,0 +1,4 @@
+<div class="product-detail-recommendation-image">
+  <a href="{{ item.url }}"><img src="{{ item.image }}" alt="{{ item.name }}" loading="lazy" decoding="async"></a>
+  {% include "store/partials/image_favorite.html" with product_id=item.id %}
+</div>

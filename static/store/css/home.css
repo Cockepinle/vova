@@ -470,7 +470,8 @@ svg {
   color: #fff;
 }
 
-.footer-main h3 {
+.footer-main h3,
+.footer-categories > summary {
   margin: 0 0 20px;
   color: #747b86;
   font-size: 11px;
@@ -1403,21 +1404,12 @@ body.cart-open {
 
 .modal-controls {
   display: grid;
-  grid-template-columns: 105px 1fr 40px;
+  grid-template-columns: 105px 1fr;
   gap: 12px;
 }
 
 .modal-controls .add-to-cart {
   height: 40px;
-}
-
-.modal-favorite {
-  display: grid;
-  height: 40px;
-  place-items: center;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
 }
 
 .modal-note {
@@ -2016,10 +2008,6 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .modal-favorite {
-    width: 100%;
-  }
-
   .advantages-section {
     padding: 38px 16px 34px;
   }
@@ -2211,13 +2199,32 @@ input:focus-visible {
 .managed-page-copy h2, .managed-page-copy h3 { margin: 0 0 10px; }
 
 .footer-category-scroll {
-  block-size: 10rem;
+  max-block-size: min(16rem, 45vh);
   overflow: hidden auto;
   scrollbar-width: thin;
   scrollbar-color: #747b86 transparent;
   padding-inline-end: 4px;
 }
-.footer-category-scroll:not(:has(li)) { block-size: auto; }
+.footer-categories { min-width: 0; }
+.footer-categories > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  list-style: none;
+  cursor: pointer;
+}
+.footer-categories:not([open]) > summary { margin-bottom: 0; }
+.footer-categories > summary::-webkit-details-marker { display: none; }
+.footer-categories > summary svg {
+  width: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.footer-categories[open] > summary svg { transform: rotate(180deg); }
 .footer-category-list { list-style: none; padding: 0; margin: 0; }
 .footer-category-list .footer-category-list {
   padding-inline-start: min(12px, 4%);
@@ -2272,6 +2279,7 @@ input:focus-visible {
   outline-offset: -2px;
 }
 @media (pointer: coarse), (max-width: 720px) {
+  .footer-categories > summary { min-height: 44px; }
   .footer-category-toggle { flex-basis: 44px; inline-size: 44px; block-size: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {

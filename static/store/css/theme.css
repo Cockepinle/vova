@@ -94,15 +94,21 @@ body .image-favorite {
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--muted);
-  box-shadow: 0 2px 8px rgb(0 0 0 / .12);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
 }
 body .image-favorite.is-active { color: var(--danger); }
-body .image-favorite:hover { border-color: currentColor; }
-body .image-favorite svg { display: block; width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+body .image-favorite svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; transition: transform .18s ease, color .18s ease; }
+@media (hover: hover) {
+  body .image-favorite:hover svg { transform: scale(1.1); color: var(--danger); }
+}
+body .image-favorite:active svg { transform: scale(.9); }
+@media (prefers-reduced-motion: reduce) {
+  body .image-favorite svg { transition: none; }
+}
 body .image-favorite.is-active svg { fill: currentColor; }
 body .image-favorite[aria-busy="true"] svg { display: block; }
 body .image-favorite > .store-action-spinner { display: none; }

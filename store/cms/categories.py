@@ -6,11 +6,11 @@ from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef
 from django.http import JsonResponse
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from ..cms_forms import CategoryFilterForm
 from ..models import AttributeDefinition, Product
+from ..uploads import local_media_missing
 from .common import ADDITION, CHANGE, Category, CategoryForm, Count, DELETION, Paginator, Q, get_object_or_404, log_change
 from .common import management_required, messages, redirect, render, require_POST
 
@@ -72,6 +72,8 @@ def category_form(request, category_id=None):
     if form.is_valid():
         try:
             with transaction.atomic():
+                if category and "parent" in form.changed_data:
+                    list(Category.objects.order_by("pk").select_for_update().values_list("pk", flat=True))
                 saved = form.save()
                 log_change(request, saved, ADDITION if is_new else CHANGE, "Категория сохранена через CMS")
         except (IntegrityError, ValidationError, OSError):
@@ -253,10 +255,13 @@ def category_bulk_action(request):
 
 @management_required
 def category_list(request):
-    rows = Category.tree_rows()
+    rows = Category.tree_rows(with_images=True)
     by_id = {row.pk: row for row in rows}
     counts = dict(Product.objects.values("category_id").annotate(total=Count("pk")).values_list("category_id", "total"))
     for row in rows:
+        media_file = row.image_media.file if row.image_media_id else None
+        row.tree_image = next((file.url for file in (media_file, row.image)
+                               if file and not local_media_missing(file)), row.image_url)
         row.product_count = counts.get(row.pk, 0)
         row.descendant_count = 0
         row.has_children = False
@@ -291,19 +296,19 @@ def category_products(request, category_id):
             return JsonResponse({"error": "Проверьте товары и выберите категорию назначения."}, status=400)
         with transaction.atomic():
             targets = {destination for _, destination in changes.values()}
-            if Category.objects.filter(pk__in=targets).count() != len(targets):
+            existing = set(Category.objects.filter(pk__in=targets).order_by("pk")
+                           .select_for_update(no_key=True).values_list("pk", flat=True))
+            if existing != targets:
                 return JsonResponse({"error": "Категория назначения больше не существует."}, status=409)
             products = list(Product.objects.select_for_update().filter(pk__in=changes).order_by("pk"))
             if len(products) != len(changes) or any(item.category_id != changes[item.pk][0] for item in products):
                 return JsonResponse({"error": "Категории товаров изменились. Обновите список и повторите операцию."}, status=409)
             affected = {category.pk}
-            timestamp = timezone.now()
             for item in products:
-                item.updated_at = timestamp
                 source, item.category_id = changes[item.pk]
                 affected.update((source, item.category_id))
                 log_change(request, item, CHANGE, f"Категория товара изменена с {source} на {item.category_id}")
-            Product.objects.bulk_update(products, ["category_id", "updated_at"])
+            Product.objects.bulk_update(products, ["category_id"])
             totals = dict(Product.objects.filter(category_id__in=affected).values("category_id")
                           .annotate(total=Count("pk")).values_list("category_id", "total"))
         return JsonResponse({"counts": {key: totals.get(key, 0) for key in affected}})

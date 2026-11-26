@@ -64,6 +64,7 @@ function setFavoriteState(productId, isFavorite) {
   }
 
   document.querySelectorAll(`[data-product-id="${productId}"] .favorite-button`).forEach((button) => {
+    if (button.closest("[data-product-id]").dataset.productId !== String(productId)) return;
     button.classList.toggle("is-active", isFavorite);
     if (button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", String(isFavorite));
     if (button.classList.contains("cart-favorite")) {
@@ -78,6 +79,7 @@ function setFavoriteState(productId, isFavorite) {
 
   if (modal && modal.dataset.productId === productId && modalFavorite) {
     modalFavorite.classList.toggle("is-active", isFavorite);
+    modalFavorite.setAttribute("aria-pressed", String(isFavorite));
   }
 }
 

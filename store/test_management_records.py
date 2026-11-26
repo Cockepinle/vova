@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import CustomerRequest, Employee
+from .models import CustomerRequest, Employee, Order
 from .test_media_uploads import image_file
 
 
@@ -40,6 +40,18 @@ class ManagementRecordTests(TestCase):
             "status": self.quote.status, "admin_comment": self.quote.admin_comment,
             "version": self.quote.updated_at.isoformat(), **changes,
         }
+
+    def test_order_comment_can_be_updated_and_cleared_without_changing_order(self):
+        order = Order.objects.create(user=self.customer, status=Order.STATUS_DONE, total=50, comment="До изменения")
+        url = reverse("management_order_detail", args=[order.pk])
+        timestamp = order.updated_at
+        for comment in ("Комментарий после проверки", ""):
+            response = self.client.post(url, {"comment": comment, "status": Order.STATUS_CANCELED}, follow=True)
+            self.assertContains(response, "Комментарий заказчика сохранён.")
+            self.assertContains(response, f'rows="4">{comment}</textarea>')
+            order.refresh_from_db()
+            self.assertEqual((order.comment, order.status, order.total, order.updated_at),
+                             (comment, Order.STATUS_DONE, 50, timestamp))
 
     def test_employee_card_search_and_existing_actions(self):
         listing = reverse("management_employees")

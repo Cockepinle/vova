@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import Category, CustomerPrice, CustomerProfile, Product
@@ -62,6 +62,28 @@ class ManagementWorkflowTests(TestCase):
         self.assertEqual(self.product.individual_prices.count(), 2)
         self.assertEqual(self.client.post(url, {"moves": json.dumps([payload])}).status_code, 409)
         self.assertEqual(self.client.get(url, {"mode": "available"}).json()["rows"][0]["id"], self.product.pk)
+
+    def test_category_move_requires_destination_and_permissions(self):
+        url = reverse("management_category_products", args=[self.leaf.pk])
+        move = {"id": self.product.pk, "source": self.leaf.pk, "destination": self.other.pk}
+        for moves in [[{**move, "destination": None}], [move, move]]:
+            self.assertEqual(self.client.post(url, {"moves": json.dumps(moves)}).status_code, 400)
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.staff)
+        self.assertEqual(csrf_client.post(url, {"moves": json.dumps([move])}).status_code, 403)
+        self.client.force_login(self.buyer)
+        self.assertEqual(self.client.post(url, {"moves": json.dumps([move])}).status_code, 302)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.category_id, self.leaf.pk)
+
+    def test_cannot_move_category_under_its_descendant(self):
+        url = reverse("management_category_edit", args=[self.root.pk])
+        response = self.client.post(url, {
+            "name": self.root.name, "parent": self.other.pk, "sort_order": "0", "is_active": "on",
+        })
+        self.assertIn("parent", response.context["form"].errors)
+        self.root.refresh_from_db()
+        self.assertIsNone(self.root.parent_id)
 
     def test_draft_acknowledgement_requires_successful_save(self):
         url = reverse("management_category_new")

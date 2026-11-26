@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from django.db import IntegrityError
 from django.db.models import Count
+from django.template.loader import render_to_string
 from django.utils.encoding import filepath_to_uri
 
 from ..models import Category, Employee, Product, ProductAttribute, ProductImage
@@ -191,7 +192,7 @@ def media_library_api(request):
             items.append({
                 "id": media.pk,
                 "title": media.title,
-                "filename": media.file.name.rsplit("/", 1)[-1],
+                "filename": media.filename,
                 "alt": media.alt,
                 "url": media.file.url,
                 "type": media.media_type,
@@ -224,13 +225,20 @@ def media_library_upload_api(request):
         logger.exception("Could not store media uploaded from picker")
         return JsonResponse({"error": "Не удалось сохранить файл на сервере"}, status=503)
     log_change(request, media, ADDITION, "Медиафайл загружен через выборщик")
-    return JsonResponse({
+    result = {
         "id": media.pk,
         "title": media.title,
+        "filename": media.filename,
         "alt": media.alt,
         "url": media.file.url,
         "type": media.media_type,
-    })
+    }
+    if request.POST.get("library") == "1":
+        result["html"] = render_to_string(
+            "store/management/media_library_item.html",
+            {"row": media_library_row(media, usage=[])}, request=request,
+        )
+    return JsonResponse(result)
 
 @management_required
 def field_list(request):
@@ -354,19 +362,22 @@ def site_media_replace(request, media_id):
             return redirect("management_media")
     return media_library(request, replacement_form=form)
 
+def media_library_row(media, *, form=None, usage=None):
+    missing = not media.file or local_media_missing(media.file)
+    return {
+        "item": media, "url": media.file.url if not missing else "", "missing": missing,
+        "usage": media_usage(media) if usage is None else usage,
+        "form": form if form is not None else SiteMediaForm(instance=media, auto_id=f"replace_{media.pk}_%s"),
+    }
+
+
 @management_required
 def media_library(request, form=None, replacement_form=None):
-    rows = []
-    for media in SiteMedia.objects.all():
-        missing = not media.file or local_media_missing(media.file)
-        rows.append({
-            "item": media,
-            "url": media.file.url if not missing else "",
-            "missing": missing,
-            "usage": media_usage(media),
-            "form": replacement_form if replacement_form and replacement_form.instance.pk == media.pk else
-                    SiteMediaForm(instance=media, auto_id=f"replace_{media.pk}_%s"),
-        })
+    rows = [
+        media_library_row(media, form=replacement_form if replacement_form is not None and
+                          replacement_form.instance.pk == media.pk else None)
+        for media in SiteMedia.objects.all()
+    ]
     return render(request, "store/management/media_library.html", {"section": "media", "media": rows, "media_form": form or SiteMediaForm()})
 
 @management_required

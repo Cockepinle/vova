@@ -52,10 +52,11 @@ class Category(models.Model):
             parent_id = Category.objects.filter(pk=parent_id).values_list("parent_id", flat=True).first()
 
     @classmethod
-    def tree_rows(cls, visible_only=False):
+    def tree_rows(cls, visible_only=False, *, with_images=False):
         """One query, arbitrary depth; a hidden ancestor hides its entire branch."""
         children = {}
-        for category in cls.objects.all():
+        categories = cls.objects.select_related("image_media") if with_images else cls.objects.all()
+        for category in categories:
             children.setdefault(category.parent_id, []).append(category)
         stack = [(item, 0, "") for item in reversed(children.get(None, []))]
         result, seen = [], set()
@@ -131,7 +132,7 @@ class VariantGroup(models.Model):
 PRODUCT_SLUG_TRANSLITERATION = str.maketrans(dict(zip(
     "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
     ("a", "b", "v", "g", "d", "e", "yo", "zh", "z", "i", "y", "k", "l", "m", "n",
-     "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"),
+     "o", "p", "r", "s", "t", "u", "f", "h", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"),
 )))
 
 

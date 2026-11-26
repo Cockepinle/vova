@@ -6,5 +6,8 @@
 
 {% block content %}
   {% include "store/management/variant_group_fields.html" %}
-  <script src="{% static 'store/js/variant-groups.js' %}?v=3"></script>
+{% endblock %}
+
+{% block management_scripts %}
+  <script src="{% static 'store/js/variant-groups.js' %}?v=5"></script>
 {% endblock %}

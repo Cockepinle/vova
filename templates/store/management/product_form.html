@@ -16,7 +16,9 @@
         {% if group_title == "SEO страницы товара" %}<p class="section-help">SEO влияет на заголовок и описание страницы в поиске. Все поля можно оставить пустыми — сайт подставит название и описание.</p>{% endif %}
         <div class="form-grid">
         {% for field in fields %}
-          {% if field.name == "variant_group" %}
+          {% if field.name == "recommended_products" or field.name == "accessory_products" %}
+            {% include "store/management/product_choices.html" %}
+          {% elif field.name == "variant_group" %}
             <label>
               <span>{{ field.label }}</span>
               {{ field }}
@@ -46,7 +48,7 @@
     <section class="mgmt-card">
       <div class="card-header">
         <h2>Пользовательские поля</h2>
-        <a class="ghost-button" href="{% url 'management_field_new' %}">+ Добавить поле</a>
+        <a class="ghost-button" data-draft-related="attributes" href="{% url 'management_field_new' %}">+ Добавить поле</a>
       </div>
       <div class="form-grid">
         {% for field in dynamic_form %}
@@ -95,7 +97,7 @@
             <button class="ghost-button" type="button" data-buyer-step="1">Вперёд</button>
             <button class="primary-button" type="button" data-buyer-save>Сохранить цены</button>
           </div>
-          <input type="hidden" name="customer_price_draft" data-buyer-edits>
+          <input type="hidden" name="customer_price_draft" value="{{ customer_price_draft }}" data-buyer-edits>
         </div>
       {% else %}<p class="muted">Сначала сохраните товар, чтобы назначить индивидуальные цены.</p>{% endif %}
     </section>
@@ -154,9 +156,11 @@
       <button type="button" class="ghost-button" data-close-variant>Закрыть</button>
     </div>
     <div class="toolbar-actions">
+      <label><span>Поиск группы</span><input type="search" data-variant-search placeholder="Название группы"></label>
       <label><span>Группа для редактирования</span><select data-dialog-group></select></label>
       <button type="button" class="ghost-button" data-load-variant>Открыть форму</button>
       <button type="button" class="ghost-button" data-new-variant>Новая группа</button>
+      <button type="button" class="primary-button" data-use-variant disabled>Выбрать для товара</button>
     </div>
     <p class="mgmt-message" data-variant-status role="status" hidden></p>
     <div data-variant-content></div>
@@ -164,9 +168,11 @@
 {% endblock %}
 
 {% block management_scripts %}
+  {{ slug_transliteration|json_script:"product-slug-transliteration" }}
+  {{ seo_modes|json_script:"product-seo-modes" }}
   <script src="{% static 'store/js/product-gallery.js' %}?v=3"></script>
   <script src="{% static 'store/js/product-pricing.js' %}?v=2"></script>
-  <script src="{% static 'store/js/variant-groups.js' %}?v=3"></script>
-  <script src="{% static 'store/js/product-editor.js' %}?v=3"></script>
-  <script src="{% static 'store/js/customer-prices.js' %}?v=1"></script>
+  <script src="{% static 'store/js/variant-groups.js' %}?v=5"></script>
+  <script src="{% static 'store/js/product-editor.js' %}?v=6"></script>
+  <script src="{% static 'store/js/customer-prices.js' %}?v=3"></script>
 {% endblock %}

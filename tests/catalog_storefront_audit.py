@@ -6,10 +6,208 @@ from responsive_routes import ResponsiveAudit, DiscoverRunner, expect, reverse, 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image
-from store.models import Category, PageContent, Product
+from store.models import AttributeDefinition, Category, CustomerPrice, PageContent, Product, VariantGroup
 
 
 class CatalogStorefrontAudit(ResponsiveAudit):
+    def test_public_detail_footer_and_favorites(self):
+        child = Category.objects.create(name="Вложенная упаковка", parent=self.category)
+        related = [
+            Product.objects.create(category=child, name=name, status=Product.STATUS_PUBLISHED, price=41)
+            for name in ("Рекомендуемый короб", "Сопутствующий короб")
+        ]
+        self.product.recommended_products.set(related[:1])
+        self.product.accessory_products.set(related[1:])
+        self.product.description = "Описание для проверки."
+        self.product.save(update_fields=["description"])
+        self.client.force_login(self.customer)
+        cookie = self.client.cookies[settings.SESSION_COOKIE_NAME]
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            context = browser.new_context(viewport={"width": 1440, "height": 900}, color_scheme="light")
+            context.add_cookies([{"name": cookie.key, "value": cookie.value, "url": self.live_server_url}])
+            page = context.new_page()
+            detail = reverse("product_detail", args=[self.product.slug])
+            for path in ("/", reverse("catalog"), reverse("catalog") + f"?category={child.slug}", detail):
+                page.goto(self.live_server_url + path)
+                expect(page.locator(".catalog-breadcrumbs")).to_have_count(0)
+            description = page.locator("#detail-quantity-rules + .product-detail-description")
+            expect(description.get_by_role("heading", name="Описание товара")).to_be_visible()
+            expect(page.locator("[data-detail-description]")).to_have_count(1)
+            assert description.bounding_box()["x"] > page.locator("[data-detail-gallery]").bounding_box()["x"]
+
+            main = page.locator(".product-detail-gallery-stage .image-favorite")
+            buttons = [page.locator(f'.product-detail-recommendation[data-product-id="{item.pk}"] .image-favorite') for item in related]
+            for button in [main, *buttons]:
+                expect(button).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+                expect(button).to_have_css("border-top-width", "0px")
+                expect(button).to_have_css("box-shadow", "none")
+                expect(button).to_have_css("width", "44px")
+                expect(button.locator("svg")).to_have_css("fill", "none")
+            for button in (main, buttons[0], buttons[1], buttons[0]):
+                with page.expect_response(lambda response: response.url.endswith("/favorites/toggle/")) as response:
+                    button.click()
+                assert response.value.ok
+            expect(main).to_have_attribute("aria-pressed", "true")
+            expect(buttons[0]).to_have_attribute("aria-pressed", "false")
+            expect(buttons[1]).to_have_attribute("aria-pressed", "true")
+            assert buttons[1].locator("svg").evaluate("(svg) => getComputedStyle(svg).fill !== 'none'")
+            quick_data = page.request.get(self.live_server_url + reverse("api_product_detail", args=[self.product.pk])).json()
+            page.evaluate("(product) => window.openProductDetails(product)", quick_data["product"])
+            quick_favorite = page.locator(".modal-image-frame .modal-favorite")
+            expect(quick_favorite).to_be_visible()
+            expect(quick_favorite).to_have_attribute("aria-pressed", "true")
+            expect(quick_favorite).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+            page.locator(".modal-close").click()
+
+            footer = page.locator(".footer-categories")
+            expect(footer.locator("[data-footer-categories]")).to_be_hidden()
+            footer.locator("summary").click()
+            expect(footer.get_by_role("link", name=self.category.name)).to_be_visible()
+            footer.get_by_role("button", name=f"Подкатегории: {self.category.name}").click()
+            expect(footer.get_by_role("link", name=child.name)).to_be_visible()
+            assert footer.locator("[data-footer-categories]").evaluate("(el) => el.clientHeight <= 256")
+            tops = page.locator(".footer-main > *").evaluate_all("(cols) => cols.map(col => col.getBoundingClientRect().top)")
+            assert max(tops) - min(tops) <= 1
+            footer.locator("summary").press("Escape")
+            expect(footer.locator("[data-footer-categories]")).to_be_hidden()
+            expect(footer.locator("summary")).to_be_focused()
+
+            page.set_viewport_size({"width": 320, "height": 844})
+            page.emulate_media(color_scheme="dark")
+            expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+            expect(description).to_be_visible()
+            expect(main).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+            footer.locator("summary").click()
+            expect(footer.get_by_role("link", name=child.name)).to_be_visible()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 2")
+            footer.get_by_role("link", name=child.name).click()
+            expect(page).to_have_url(re.compile(r"[?&]category="))
+            expect(page.locator(".catalog-breadcrumbs")).to_have_count(0)
+            browser.close()
+
+    def test_category_tree_and_product_membership(self):
+        middle = Category.objects.create(name="Вложенная категория", parent=self.category)
+        leaf = Category.objects.create(name="Категория третьего уровня", parent=middle)
+        destination = Category.objects.create(name="Другая основная категория")
+        self.product.category = leaf
+        self.product.save(update_fields=["category"])
+        self.client.force_login(self.staff)
+        cookie = self.client.cookies[settings.SESSION_COOKIE_NAME]
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            context = browser.new_context(viewport={"width": 390, "height": 844}, color_scheme="dark")
+            context.add_cookies([{"name": cookie.key, "value": cookie.value, "url": self.live_server_url}])
+            page = context.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(self.live_server_url + reverse("management_categories"))
+            root_row, middle_row, leaf_row = (
+                page.locator(f'[data-category-id="{item.pk}"]') for item in (self.category, middle, leaf)
+            )
+            expect(middle_row).to_be_hidden()
+            root_row.locator("[data-category-branch]").click()
+            expect(middle_row).to_be_visible()
+            middle_row.locator("[data-category-branch]").click()
+            expect(leaf_row).to_be_visible()
+            page.reload()
+            expect(leaf_row).to_be_visible()
+            root_row.locator("[data-category-branch]").click()
+            expect(leaf_row).to_be_hidden()
+            page.locator("[data-category-search]").fill(leaf.name)
+            expect(leaf_row).to_be_visible()
+            expect(root_row).to_be_visible()
+            page.get_by_role("button", name="Развернуть всё").click()
+            leaf_row.locator("[data-category-products]").click()
+            panel = page.locator(f"#category-products-{leaf.pk}")
+            panel.locator("[data-member-search]").fill(self.product.sku)
+            checkbox = panel.locator("input[type=checkbox]")
+            expect(checkbox).to_be_checked()
+            checkbox.uncheck()
+            panel.locator("[data-member-save]").click()
+            expect(panel.locator("[data-member-status]")).to_contain_text("Выберите категорию")
+            panel.locator("[data-member-destination]").select_option(str(destination.pk))
+            panel.locator("[data-member-save]").click()
+            expect(panel.locator("[data-member-status]")).to_contain_text("Привязки сохранены")
+            expect(panel.locator("[data-member-search]")).to_have_value(self.product.sku)
+            expect(leaf_row.locator("[data-category-products]")).to_have_text("0")
+            expect(checkbox).to_have_count(0)
+            panel.locator("[data-member-add]").click()
+            panel.locator("[data-member-search]").fill(self.product.sku)
+            expect(checkbox).to_be_visible()
+            checkbox.check()
+            panel.locator("[data-member-save]").click()
+            expect(panel.locator("[data-member-status]")).to_contain_text("Привязки сохранены")
+            expect(leaf_row.locator("[data-category-products]")).to_have_text("1")
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 2")
+            page.get_by_role("button", name="Свернуть всё").click()
+            expect(leaf_row).to_be_hidden()
+            page.get_by_role("button", name="Развернуть всё").click()
+            leaf_row.locator(".status-select").select_option("hidden")
+            page.get_by_role("button", name="Сохранить статусы").click()
+            expect(leaf_row).to_be_visible()
+            expect(leaf_row.locator(".status-select")).to_have_value("hidden")
+            leaf_row.locator(".status-select").select_option("published")
+            page.get_by_role("button", name="Сохранить статусы").click()
+            page.goto(self.live_server_url + reverse("catalog") + f"?category={leaf.slug}")
+            expect(page.locator(f'.catalog-card[data-product-id="{self.product.pk}"]')).to_be_visible()
+            self.assertFalse(errors, errors)
+            browser.close()
+
+    def test_sparse_variant_dropdown_and_customer_cart(self):
+        color = AttributeDefinition.objects.create(name="Цвет", value_type="text", sort_order=0)
+        size = AttributeDefinition.objects.create(name="Размер", value_type="text", sort_order=1)
+        group = VariantGroup.objects.create(name="Варианты коробки")
+        group.attributes.set([color, size])
+        items = []
+        for idx, (shade, measure, availability) in enumerate((
+            ("Крафт", "330 мм", Product.AVAILABILITY_IN_STOCK),
+            ("Белая", "330 мм", Product.AVAILABILITY_IN_STOCK),
+            ("Белая", "500 мм", Product.AVAILABILITY_PREORDER),
+            ("Белая", "700 мм", Product.AVAILABILITY_OUT_OF_STOCK),
+        )):
+            product = Product.objects.create(
+                category=self.category, variant_group=group, variant_sort_order=idx,
+                name=f"Коробка {shade} {measure}", sku=f"VARIANT-{idx}",
+                price=120 + idx, status=Product.STATUS_PUBLISHED, availability=availability,
+                description=f"Описание {shade} {measure}", min_quantity=3, quantity_step=2,
+            )
+            product.attributes.create(attribute=color, value_text=shade)
+            product.attributes.create(attribute=size, value_text=measure)
+            items.append(product)
+        kraft, white, preorder, _ = items
+        CustomerPrice.objects.create(user=self.customer, product=preorder, price=83.25)
+        self.client.force_login(self.customer)
+        cookie = self.client.cookies[settings.SESSION_COOKIE_NAME]
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            context = browser.new_context(viewport={"width": 320, "height": 844}, has_touch=True, is_mobile=True)
+            context.add_cookies([{"name": cookie.key, "value": cookie.value, "url": self.live_server_url}])
+            page = context.new_page()
+            page.goto(self.live_server_url + reverse("product_detail", args=[kraft.slug]))
+            color_menu = page.locator("[data-variant-dropdown]").filter(has=page.locator('summary[aria-label^="Цвет:"]'))
+            expect(page.locator('summary[aria-label^="Размер:"]')).to_have_count(0)
+            color_menu.locator("summary").tap()
+            page.locator("h1").tap()
+            expect(color_menu).not_to_have_attribute("open", "")
+            color_menu.locator("summary").tap()
+            color_menu.get_by_role("link", name="Белая").tap()
+            expect(page.locator("h1")).to_have_text(white.h1)
+            size_menu = page.locator("[data-variant-dropdown]").filter(has=page.locator('summary[aria-label^="Размер:"]'))
+            size_menu.locator("summary").tap()
+            expect(size_menu.get_by_role("link", name=re.compile("700 мм"))).to_contain_text("Нет в наличии")
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 2")
+            size_menu.get_by_role("link", name=re.compile("500 мм")).tap()
+            expect(page.locator("h1")).to_have_text(preorder.h1)
+            expect(page).to_have_title(preorder.seo_title)
+            expect(page.locator("[data-detail-availability]")).to_have_text("Под заказ")
+            expect(page.locator("[data-detail-price]")).to_contain_text("83.25")
+            expect(page.locator("[data-detail-sku]")).to_contain_text(preorder.sku)
+            expect(page.locator("[data-detail-description]")).to_have_text(preorder.description)
+            page.locator(".product-detail-add").tap()
+            expect(page.locator(f'.cart-item[data-product-id="{preorder.pk}"] .cart-quantity')).to_contain_text("3")
+            browser.close()
+
     def test_storefront(self):
         demo_subtitle = "Демонстрационные размеры и цены. Подтвердите параметры, наличие и стоимость перед оформлением заказа."
         PageContent.objects.update_or_create(page="catalog", defaults={"subtitle": demo_subtitle})
@@ -98,10 +296,15 @@ class CatalogStorefrontAudit(ResponsiveAudit):
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), width
                 expect(page.locator(".product-back")).to_be_visible()
                 expect(page.locator(".product-detail-gallery-stage .image-favorite")).to_be_visible()
-            selector = page.get_by_role("combobox", name="Вариант товара")
+            selector = page.locator("[data-variant-dropdown] summary").first
             expect(selector).to_be_visible()
-            option = selector.locator(f'option[data-product-url="{reverse("api_product_detail", args=[selected.pk])}"]')
-            selector.select_option(value=option.get_attribute("value"))
+            selector.press("Enter")
+            option = page.locator(f'[data-variant-dropdown][open] a[href="{reverse("product_detail", args=[selected.slug])}"]')
+            expect(option).to_be_visible()
+            option.press("Escape")
+            expect(selector).to_be_focused()
+            selector.click()
+            option.click()
             expect(page.locator("h1")).to_have_text(selected.name)
             expect(page.locator("[data-detail-sku]")).to_contain_text(selected.sku)
             expect(page.locator("[data-detail-price]")).to_contain_text(str(selected.price))
@@ -183,5 +386,8 @@ class CatalogStorefrontAudit(ResponsiveAudit):
 
 if __name__ == "__main__":
     raise SystemExit(bool(DiscoverRunner(debug_mode=True, interactive=False).run_tests(
-        ["__main__.CatalogStorefrontAudit.test_storefront"]
+        ["__main__.CatalogStorefrontAudit.test_storefront",
+         "__main__.CatalogStorefrontAudit.test_category_tree_and_product_membership",
+         "__main__.CatalogStorefrontAudit.test_sparse_variant_dropdown_and_customer_cart",
+         "__main__.CatalogStorefrontAudit.test_public_detail_footer_and_favorites"]
     )))

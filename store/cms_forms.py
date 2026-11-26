@@ -267,9 +267,8 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             self.fields[name].help_text = help_text
         for name in ("recommended_products", "accessory_products"):
             field = self.fields[name]
-            field.label_from_instance = lambda product: (
-                f"{product.name} · {product.sku}" if product.sku else product.name
-            )
+            field.widget = forms.CheckboxSelectMultiple(choices=field.choices)
+            field.queryset = field.queryset.prefetch_related("images__media").order_by("name", "pk")
             if self.instance.pk:
                 field.queryset = field.queryset.exclude(pk=self.instance.pk)
 

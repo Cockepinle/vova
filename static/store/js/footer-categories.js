@@ -1,5 +1,12 @@
 document.querySelectorAll("[data-footer-categories]").forEach(tree => {
+  const disclosure = tree.closest("details");
   let openRoot = null;
+  disclosure.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !disclosure.open) return;
+    event.preventDefault();
+    disclosure.open = false;
+    disclosure.firstElementChild.focus();
+  });
 
   function setExpanded(button, expanded) {
     const panel = document.getElementById(button.getAttribute("aria-controls"));

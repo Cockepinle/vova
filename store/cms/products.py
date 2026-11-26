@@ -13,6 +13,7 @@ from .common import HttpResponse, Paginator, Product, ProductExcelImportForm, Pr
 from .common import get_object_or_404, get_user_model, import_products, log_change, management_required, messages, redirect, render, require_POST, transaction
 from ..pricing import PRICE_LEVELS, price_for_level, quote_for_level
 from ..cms_forms import COEFFICIENT_HELP, parse_individual_price
+from ..models.catalog import PRODUCT_SLUG_TRANSLITERATION
 from ..uploads import validate_upload
 from .product_gallery import gallery_rows, initial_gallery, parse_gallery, public_gallery, save_gallery
 
@@ -139,6 +140,8 @@ def product_form(request, product_id=None):
     gallery = initial_gallery(current_gallery)
     gallery_revision = product.updated_at.isoformat() if product else ""
     gallery_error = ""
+    customer_price_draft = ""
+    price_edits = {}
     if request.method == "POST":
         has_gallery = "gallery_manifest" in request.POST
         has_editor = "gallery_revision" in request.POST
@@ -165,6 +168,14 @@ def product_form(request, product_id=None):
             request.POST if "prices-TOTAL_FORMS" in request.POST else None,
             instance=form.instance, prefix="prices",
         )
+        if product and (customer_price_draft := request.POST.get("customer_price_draft", "")):
+            try:
+                staged = json.loads(customer_price_draft)
+                if not isinstance(staged, dict) or len(staged) > 5000:
+                    raise ValueError
+                price_edits = validate_price_edits({key: change["value"] for key, change in staged.items()})
+            except (KeyError, TypeError, ValueError, ValidationError):
+                form.add_error(None, PRICE_EDIT_ERROR)
         if form.is_valid() and dynamic_form.is_valid() and (not price_formset.is_bound or price_formset.is_valid()) and not gallery_error:
             is_new = product is None
             try:
@@ -174,6 +185,7 @@ def product_form(request, product_id=None):
                     if price_formset.is_bound:
                         price_formset.instance = saved
                         price_formset.save()
+                    save_price_edits(saved, price_edits)
                     if has_gallery:
                         save_gallery(saved, current_gallery, rows, primary)
                     else:
@@ -217,6 +229,9 @@ def product_form(request, product_id=None):
             "coefficient_help": COEFFICIENT_HELP,
             "preview_slug": preview_slug,
             "published_url": published_url,
+            "slug_transliteration": PRODUCT_SLUG_TRANSLITERATION,
+            "seo_modes": {name: form.data.get(f"draft_seo_{name}", "") for name in ("slug", "h1", "seo_title")},
+            "customer_price_draft": customer_price_draft,
         },
     )
 
@@ -324,6 +339,33 @@ def product_excel_import(request):
     return render(request, "store/management/product_import.html", {"section": "products", "form": form, "result": result})
 
 
+PRICE_EDIT_ERROR = "Проверьте покупателей и цены. Цена должна быть неотрицательной, с точностью до копеек."
+
+
+def validate_price_edits(edits):
+    if not isinstance(edits, dict) or len(edits) > 5000:
+        raise ValueError
+    entries = {}
+    for key, value in edits.items():
+        if not key.isascii() or not key.isdecimal() or len(key) > 18:
+            raise ValueError
+        if value is not None and not isinstance(value, str):
+            raise ValueError
+        entries[int(key)] = None if value is None else parse_individual_price(value)
+    customers = get_user_model().objects.filter(is_staff=False, is_active=True, pk__in=entries)
+    if customers.count() != len(entries):
+        raise ValueError
+    return entries
+
+
+def save_price_edits(product, entries):
+    for buyer, price in entries.items():
+        if price is None:
+            CustomerPrice.objects.filter(product=product, user_id=buyer).delete()
+        else:
+            CustomerPrice.objects.update_or_create(product=product, user_id=buyer, defaults={"price": price})
+
+
 @management_required
 @require_http_methods(["GET", "POST"])
 def product_customer_prices(request, product_id):
@@ -332,27 +374,12 @@ def product_customer_prices(request, product_id):
     prices = CustomerPrice.objects.filter(product=product, user__in=customers)
     if request.method == "POST":
         try:
-            edits = json.loads(request.POST["edits"])
-            if not isinstance(edits, dict) or len(edits) > 5000:
-                raise ValueError
-            entries = {}
-            for key, value in edits.items():
-                if not key.isascii() or not key.isdecimal() or len(key) > 18:
-                    raise ValueError
-                if value is not None and not isinstance(value, str):
-                    raise ValueError
-                entries[int(key)] = None if value is None else parse_individual_price(value)
-            if customers.filter(pk__in=entries).count() != len(entries):
-                raise ValueError
+            entries = validate_price_edits(json.loads(request.POST["edits"]))
         except (KeyError, ValueError, ValidationError):
-            return JsonResponse({"error": "Проверьте покупателей и цены. Цена должна быть указана с точностью до копеек."}, status=400)
+            return JsonResponse({"error": PRICE_EDIT_ERROR}, status=400)
         with transaction.atomic():
             Product.objects.select_for_update().get(pk=product.pk)
-            for buyer, price in entries.items():
-                if price is None:
-                    prices.filter(user_id=buyer).delete()
-                else:
-                    CustomerPrice.objects.update_or_create(product=product, user_id=buyer, defaults={"price": price})
+            save_price_edits(product, entries)
         return JsonResponse({"saved": True})
 
     total_selected = prices.count()

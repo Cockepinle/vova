@@ -1,8 +1,11 @@
+import json
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Category, Product, VariantGroup
+from .models import Category, CustomerPrice, Product, VariantGroup
 
 
 class ProductEditorTests(TestCase):
@@ -46,9 +49,13 @@ class ProductEditorTests(TestCase):
         saved = Product.objects.get(slug="tovar-2")
         self.assertEqual(saved.variant_group, group)
         url = reverse("management_variant_group_edit", args=[group.pk])
-        response = self.client.post(url, {**data, "name": "Цвета", "products": [self.other.pk]}, headers=headers)
+        response = self.client.post(url, {
+            **data, "name": "Цвета", "products": [self.other.pk], f"variant_order_{self.other.pk}": "12",
+        }, headers=headers)
         self.assertEqual(response.json()["removed"], [saved.pk])
         self.assertEqual(list(group.products.all()), [self.other])
+        self.other.refresh_from_db()
+        self.assertEqual(self.other.variant_sort_order, 12)
 
     def test_automatic_slug_collision_and_manual_titles(self):
         response = self.client.post(reverse("management_product_new"), self.product_data(
@@ -69,3 +76,29 @@ class ProductEditorTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("recommended_products", response.context["form"].errors)
         self.assertEqual(list(product.recommended_products.all()), [self.other])
+
+    def test_cyrillic_slug_matches_editor_transliteration(self):
+        title = "Архивный короб 330 × 250 × 350 мм"
+        response = self.client.post(reverse("management_product_new"), self.product_data(name=title))
+        product = Product.objects.get(slug="arhivnyy-korob-330-250-350-mm")
+        self.assertRedirects(response, reverse("management_product_edit", args=[product.pk]))
+        self.assertEqual(product.h1, title)
+        self.assertEqual(product.seo_title, title)
+
+    def test_product_save_includes_staged_price_changes_without_removing_others(self):
+        buyer = get_user_model().objects.create_user("buyer")
+        hidden_buyer = get_user_model().objects.create_user("hidden-buyer")
+        hidden_price = CustomerPrice.objects.create(product=self.other, user=hidden_buyer, price=15)
+        url = reverse("management_product_edit", args=[self.other.pk])
+        for value, status in [("-1", 200), ("42,50", 302)]:
+            with self.subTest(value=value):
+                response = self.client.post(url, self.product_data(
+                    customer_price_draft=json.dumps({str(buyer.pk): {"value": value, "original": None}}),
+                ))
+                self.assertEqual(response.status_code, status)
+                if status == 200:
+                    self.assertIn("Цена должна быть неотрицательной", str(response.context["form"].non_field_errors()))
+                    self.assertFalse(CustomerPrice.objects.filter(product=self.other, user=buyer).exists())
+        self.assertEqual(CustomerPrice.objects.get(product=self.other, user=buyer).price, Decimal("42.50"))
+        hidden_price.refresh_from_db()
+        self.assertEqual(hidden_price.price, 15)

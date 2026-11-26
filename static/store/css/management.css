@@ -1764,7 +1764,7 @@ textarea { padding: 9px 11px; }
 }
 
 .variant-attribute-options input,
-.variant-product-options input,
+.variant-product-options input[type="checkbox"],
 .variant-checkbox input {
   width: 18px;
   height: 18px;
@@ -1833,15 +1833,6 @@ textarea { padding: 9px 11px; }
 .variant-parameter-delete input {
   width: 18px;
   height: 18px;
-}
-
-.variant-product-search {
-  max-width: 520px;
-  margin-top: 16px;
-}
-
-.variant-product-option[hidden] {
-  display: none;
 }
 
 .variant-chip {
@@ -2088,7 +2079,7 @@ body.management-modal-open { overflow: hidden; }
   border-radius: var(--radius-control);
 }
 .draft-bar[hidden], tr[data-category-id][hidden], .category-products-row[hidden] { display: none !important; }
-.category-tree-name { display: flex; align-items: center; gap: 8px; padding-inline-start: min(calc(var(--depth) * 12px), 48px); }
+.category-tree-name { display: flex; align-items: center; gap: 8px; padding-inline-start: min(calc(var(--depth) * 12px), clamp(32px, 7vw, 120px)); }
 .category-tree-name button { min-width: 36px; }
 .category-products-panel { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-control); width: 100%; }
 .category-products-panel .toolbar, [data-customer-prices] .toolbar { flex-wrap: wrap; align-items: end; }
@@ -2096,3 +2087,58 @@ body.management-modal-open { overflow: hidden; }
 .category-member-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
 .category-member-name img { width: 36px; height: 36px; object-fit: contain; }
 [data-buyer-rows] input[inputmode=decimal] { width: 9rem; }
+.management-options { min-width: 0; margin: 0; border: 0; padding: 0; }
+.management-options-list, .variant-product-options, .variant-attribute-options {
+  max-height: 22rem;
+  overflow: auto;
+  scrollbar-width: thin;
+  display: grid;
+  gap: .4rem;
+}
+.management-option, .media-list article {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .55rem .75rem;
+  border: 1px solid var(--line, #d5dde3);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+.management-option { cursor: pointer; }
+.management-option:hover, .management-option:has(input:checked) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.management-option img { flex: none; object-fit: cover; border-radius: 7px; }
+.management-option small { display: block; }
+.management-options-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-block: .5rem; }
+.management-options-chips .ghost-button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+[data-management-options] .toolbar-actions { flex-wrap: wrap; }
+[data-management-options] .toolbar-actions label:has(input[type="checkbox"]) { display: flex; align-items: center; }
+.variant-product-option.management-option { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem auto; }
+.variant-product-option .variant-order-input { min-width: 0; display: grid; gap: .2rem; }
+.variant-order-input input { width: 100%; }
+.management-option[hidden], [data-management-options] [hidden] { display: none; }
+.media-list article { align-items: flex-start; }
+[data-library-item][hidden] { display: none; }
+[data-customer-prices] .mgmt-table td { overflow-wrap: anywhere; }
+[data-customer-prices] .mgmt-table input[inputmode="decimal"] { width: min(100%, 9rem); }
+[data-category-filter-status]:empty { display: none; }
+.category-tree-name .category-branch-spacer { flex: 0 0 36px; }
+.category-tree-name img { width: 38px; height: 38px; object-fit: cover; border-radius: var(--radius-control); flex: none; }
+.category-tree-name strong { min-width: 0; overflow-wrap: anywhere; }
+[data-category-branch] { padding-inline: .4rem; flex: 0 0 36px; }
+.category-member-list { max-height: 27rem; overflow: auto; scrollbar-width: thin; }
+.category-member-list tr:has(input:checked) { background: var(--section); }
+[data-member-reset][hidden] { display: none; }
+[data-category-search] { min-width: 0; }
+.card-header .toolbar:has([data-category-search]) { flex-wrap: wrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .category-products-row:not([hidden]) .category-products-panel { animation: category-panel-in .16s ease-out; }
+  @keyframes category-panel-in { from { opacity: .4; transform: translateY(-3px); } }
+}

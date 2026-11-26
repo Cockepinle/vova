@@ -322,6 +322,7 @@ class SiteMedia(models.Model):
 
     title = models.CharField("Название", max_length=160)
     file = models.FileField("Файл", upload_to="site_media/")
+    original_filename = models.CharField("Исходное имя файла", max_length=255, blank=True, db_default="", editable=False)
     alt = models.CharField("Alt / описание", max_length=180, blank=True)
     description = models.TextField("Описание", blank=True)
     media_type = models.CharField("Тип", max_length=20, choices=TYPE_CHOICES, default=TYPE_OTHER)
@@ -334,6 +335,10 @@ class SiteMedia(models.Model):
 
     def save(self, *args, **kwargs):
         from pathlib import PurePosixPath
+        if self.file and not self.file._committed:
+            self.original_filename = PurePosixPath(self.file.name).name
+            if kwargs.get("update_fields") and "file" in kwargs["update_fields"]:
+                kwargs["update_fields"] = {*kwargs["update_fields"], "original_filename", "media_type"}
         extension = PurePosixPath(self.file.name).suffix.lower() if self.file else ""
         if extension in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico", ".svg"}:
             self.media_type = self.TYPE_IMAGE
@@ -344,6 +349,10 @@ class SiteMedia(models.Model):
         elif not self.media_type:
             self.media_type = self.TYPE_OTHER
         super().save(*args, **kwargs)
+
+    @property
+    def filename(self):
+        return self.original_filename or self.file.name.rsplit("/", 1)[-1]
 
     def __str__(self):
         return self.title

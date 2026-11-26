@@ -77,7 +77,11 @@
 
     <section class="mgmt-card">
       <h2>Комментарий клиента</h2>
-      <p class="order-comment">{{ order.comment|default:"Комментарий не указан." }}</p>
+      <form method="post" class="mgmt-form" data-no-draft data-warn-unsaved>
+        {% csrf_token %}
+        <label><span>Комментарий заказчика</span><textarea name="comment" rows="4">{{ order.comment }}</textarea></label>
+        <button type="submit" class="primary-button">Сохранить комментарий</button>
+      </form>
     </section>
 
     <section class="mgmt-card">

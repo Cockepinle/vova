@@ -1,6 +1,12 @@
+import logging
+
+from django.db import DatabaseError
+
 from .common import CHANGE, DeliveryMethod, HttpResponse, Order, Paginator, PaymentMethod, Q, apply_provider_result, date, get_object_or_404
 from .common import get_order_exporter, log_change, management_required, messages, redirect, render, require_POST, transaction
 from ..services.orders import apply_order_stock_adjustment
+
+logger = logging.getLogger(__name__)
 
 @management_required
 def order_list(request):
@@ -89,6 +95,22 @@ def order_detail(request, order_id):
     order = get_object_or_404(Order.objects.select_related("user", "payment_method", "delivery_method").prefetch_related("items", "payments", "status_history"), pk=order_id)
 
     if request.method == "POST":
+        if "comment" in request.POST:
+            comment = request.POST["comment"].strip()
+            if "\x00" in comment:
+                messages.error(request, "Комментарий содержит недопустимый символ.")
+            else:
+                try:
+                    with transaction.atomic():
+                        order.comment = comment
+                        order.save(update_fields=["comment"])
+                        log_change(request, order, CHANGE, "Изменён комментарий заказчика")
+                except DatabaseError:
+                    logger.exception("Unable to save customer comment for order %s", order.pk)
+                    messages.error(request, "Не удалось сохранить комментарий. Повторите попытку.")
+                else:
+                    messages.success(request, "Комментарий заказчика сохранён.")
+            return redirect("management_order_detail", order_id=order.pk)
         if order.status in [Order.STATUS_DONE, Order.STATUS_CANCELED]:
             messages.error(request, "Заказ в финальном статусе больше нельзя редактировать.")
             return redirect("management_order_detail", order_id=order.pk)

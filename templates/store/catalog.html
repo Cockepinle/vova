@@ -7,10 +7,10 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=40">
-    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=56">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=48">
-    <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=41">
+    <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=58">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=50">
+    <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=6">
     <link rel="stylesheet" href="{% static 'store/css/store-selects.css' %}?v=1">
     {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
@@ -122,19 +122,6 @@
             <a class="catalog-clear-filters" href="{{ filter_reset_url }}">Сбросить</a>
           </div>
         {% endif %}
-        {% if breadcrumbs %}
-          <nav class="catalog-breadcrumbs" aria-label="Хлебные крошки">
-            <a href="{% url 'catalog' %}">Каталог</a>
-            {% for category in breadcrumbs %}
-              <span aria-hidden="true">/</span>
-              {% if not forloop.last %}
-                <a href="{% url 'catalog' %}?category={{ category.slug|urlencode }}">{{ category.name }}</a>
-              {% else %}
-                <span aria-current="page">{{ category.name }}</span>
-              {% endif %}
-            {% endfor %}
-          </nav>
-        {% endif %}
         {% if catalog_filters %}
           <aside class="catalog-mobile-filter-panel" id="catalog-mobile-filter-panel" role="dialog" aria-modal="true" aria-labelledby="catalog-mobile-filter-title" aria-hidden="true">
             <button class="catalog-mobile-panel-backdrop" type="button" data-close-catalog-panel aria-label="Закрыть фильтры"></button>
@@ -239,6 +226,7 @@
           <span class="hit-badge modal-badge">ХИТ</span>
           <div class="modal-image-frame">
             <img class="modal-main-image" src="" alt="">
+            {% include "store/partials/image_favorite.html" with modal=True %}
             <button class="gallery-arrow modal-image-arrow modal-image-previous" type="button" data-modal-image-step="-1" aria-label="Предыдущее фото" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
             </button>
@@ -265,9 +253,6 @@
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
               <button class="add-to-cart modal-add" type="button">В корзину</button>
-              <button class="modal-favorite" type="button" aria-label="Добавить в избранное">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-              </button>
             </div>
           </div>
           <p class="modal-note">Доставка в день заказа при оформлении до 14:00 · Самовывоз со склада в Москве</p>
@@ -291,8 +276,8 @@
     </script>
     <script src="{% static 'store/js/cart.js' %}?v=43"></script>
     <script src="{% static 'store/js/account.js' %}?v=8"></script>
-    <script src="{% static 'store/js/catalog.js' %}?v=57"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=23"></script>
+    <script src="{% static 'store/js/catalog.js' %}?v=59"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=24"></script>
     {% include "store/partials/mobile_actions.html" %}
     <script src="{% static 'store/js/responsive.js' %}?v=42"></script>
   </body>

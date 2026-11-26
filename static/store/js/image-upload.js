@@ -15,8 +15,10 @@
   }
 
   function setup(input) {
+    if (input.dataset.uploadReady) return;
     const label = input.closest("label");
     if (!label) return;
+    input.dataset.uploadReady = "1";
     const hint = document.createElement("small");
     hint.className = "upload-hint";
     hint.textContent = input.dataset.uploadHint;
@@ -83,7 +85,7 @@
       const previews = files.map(file => {
         const tile = document.createElement("span");
         const caption = document.createElement("span");
-        caption.textContent = file.name;
+        caption.textContent = file.name + " · " + new Intl.NumberFormat("ru", {style: "unit", unit: "kilobyte", maximumFractionDigits: 1}).format(file.size / 1000);
         if ([".jpg", ".jpeg", ".png", ".webp", ".gif", ".ico"].includes(extension(file))) {
           const image = document.createElement("img");
           image.className = "current-image-preview";
@@ -123,7 +125,10 @@
     input.form?.addEventListener("reset", reset);
   }
 
-  document.querySelectorAll("[data-media-fallback]").forEach(fallback);
-  document.querySelectorAll("input[type=file][data-upload-limit]").forEach(setup);
+  window.initManagementUploads = (scope = document) => {
+    scope.querySelectorAll("[data-media-fallback]").forEach(fallback);
+    scope.querySelectorAll("input[type=file][data-upload-limit]").forEach(setup);
+  };
+  window.initManagementUploads();
   window.setManagementImageFallback = fallback;
 })();

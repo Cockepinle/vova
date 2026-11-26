@@ -318,7 +318,6 @@ def catalog(request, slug=None):
     else:
         page_title = safe_site_setting(settings, "catalog_title")
 
-    category_by_id = {category["id"]: category for category in categories}
     category_nodes = {
         category["id"]: {
             **category,
@@ -342,13 +341,10 @@ def catalog(request, slug=None):
         for category in categories
         if category["parent_id"] == (str(selected.pk) if selected else None)
     ] if not active_category or selected else []
-    breadcrumbs = []
     ancestor = selected
     while ancestor:
         category_nodes[str(ancestor.pk)]["is_expanded"] = True
-        breadcrumbs.append(category_by_id[str(ancestor.pk)])
         ancestor = ancestor.parent
-    breadcrumbs.reverse()
 
     content_page = PageContent.objects.filter(page="catalog", is_visible=True).first()
     if detail_product:
@@ -396,7 +392,6 @@ def catalog(request, slug=None):
         "categories": categories,
         "category_tree": category_roots,
         "category_tiles": category_tiles if not slug and not only_hits and not search_query else [],
-        "breadcrumbs": breadcrumbs,
         "selected_category": selected,
         "products": product_items,
         "detail_product": detail_product,
@@ -586,7 +581,11 @@ def api_product_suggestions(request):
 @require_GET
 def api_product_detail(request, product_id):
     product = get_object_or_404(get_store_products(), pk=product_id)
-    return JsonResponse({"product": serialize_product(product, request)})
+    data = serialize_product(product, request)
+    data["variant_picker_html"] = render_to_string("store/partials/product_variant_picker.html", {
+        "selectors": variant_selectors(data["variants"]),
+    })
+    return JsonResponse({"product": data})
 
 @require_GET
 def promotions(request):

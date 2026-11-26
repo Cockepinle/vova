@@ -765,7 +765,7 @@ class CatalogFeaturesTests(TestCase):
         self.assertEqual(kraft_data['image'], 'https://example.test/kraft.jpg')
 
         detail = self.client.get(reverse('product_detail', args=[white.slug]))
-        self.assertContains(detail, f'data-product-url="{reverse("api_product_detail", args=[kraft.pk])}"')
+        self.assertContains(detail, f'href="{reverse("product_detail", args=[kraft.slug])}"')
         self.assertContains(detail, 'data-product-detail')
 
         cart_response = self.post_json(

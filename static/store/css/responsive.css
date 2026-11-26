@@ -106,7 +106,6 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
   .modal-price-row { position: fixed; z-index: 94; right: 0; bottom: 0; left: 0; margin: 0; border-top: 1px solid var(--line); background: var(--surface); padding: 10px 16px calc(10px + env(safe-area-inset-bottom,0px)); }
   .modal-price { margin-bottom: 10px; }
   .modal-controls { grid-template-columns: 140px minmax(0,1fr); gap: 10px; }
-  .modal-controls .modal-favorite { grid-column: 1/-1; width: 100%; }
   .modal-controls .add-to-cart { height: 44px; padding: 4px; font-size: 13px; letter-spacing: 0; }
   .cookie-panel { padding: 20px 16px; }
   .cookie-header h2 { font-size: 22px; }
@@ -348,10 +347,6 @@ body.overlay-active .mobile-actions, body.keyboard-open .mobile-actions { visibi
 .gallery-dot { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 28px; padding: 0; border: 0; background: transparent; box-shadow: none; }
 .gallery-dot::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: var(--muted); box-shadow: 0 0 0 2px var(--surface); transition: width .18s ease, background .18s ease; }
 .gallery-dot[aria-current="true"]::before { width: 16px; background: var(--blue); }
-.product-card .favorite-button, .catalog-card .favorite-button { top: 6px; right: 6px; width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 0; background: transparent; color: var(--text); box-shadow: none; }
-.product-card .favorite-button svg, .catalog-card .favorite-button svg { width: 24px; height: 24px; stroke-width: 1.7; transition: transform .18s ease, color .18s ease; }
-.product-card .favorite-button:hover svg, .catalog-card .favorite-button:hover svg { transform: scale(1.1); color: var(--danger); }
-.product-card .favorite-button.is-active, .catalog-card .favorite-button.is-active { color: var(--danger); }
 .site-footer, .work-cta, .b2b-box { --blue: #a3b7ff; }
 .site-footer p, .work-cta p, .b2b-box p, .footer-bottom, .footer-bottom a { color: #b8c0d0; }
 @media (min-width: 921px) {

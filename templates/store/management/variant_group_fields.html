@@ -81,30 +81,30 @@
       </section>
     {% endif %}
 
-    <section class="mgmt-card form-section">
+    <section class="mgmt-card form-section" data-management-options>
       <div class="card-header">
         <div>
           <h2>Товары группы</h2>
-          <p class="muted">Выбирайте уже существующие товары. Добавление или исключение из группы не создаёт и не удаляет товары.</p>
+          <p class="muted">Отметьте товары группы. Варианты с меньшим номером выводятся в первую очередь.</p>
         </div>
       </div>
-      <label class="variant-product-search">
-        <span>Найти товар</span>
-        <input type="search" data-product-search placeholder="Название или артикул">
-      </label>
-      <p class="muted" data-variant-selection role="status"></p>
+      <div class="toolbar-actions" data-options-toolbar hidden>
+        <label><span>Найти товар</span><input type="search" data-options-search placeholder="Название или артикул"></label>
+        <label><input type="checkbox" data-options-selected> Только выбранные</label>
+      </div>
+      <p class="muted" data-options-count role="status" hidden></p>
+      <div class="management-options-chips" data-options-chips hidden></div>
       {{ form.products.errors }}
       <div class="variant-product-options">
         {% for checkbox in form.products %}
-          <div class="variant-product-option" data-product-option>
-            <label for="{{ checkbox.id_for_label }}">{{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span></label>
+          <div class="variant-product-option management-option" data-option data-option-search="{{ checkbox.choice_label }}">
+            <label for="{{ checkbox.id_for_label }}">{{ checkbox.tag }}<span data-option-title>{{ checkbox.choice_label }}</span></label>
+            <label class="variant-order-input"><span>Порядок</span><input type="number" name="variant_order_{{ checkbox.data.value }}" min="0" max="2147483647" value="{{ checkbox.data.value.instance.variant_sort_order }}"></label>
             <a href="{% url 'management_product_edit' checkbox.data.value %}" target="_blank" rel="noopener">Значения</a>
           </div>
-        {% empty %}
-          <p class="muted">Нет товаров, доступных для добавления в эту группу.</p>
         {% endfor %}
       </div>
-      <p class="muted" data-variant-no-results hidden>Товары не найдены.</p>
+      <p class="muted" data-options-empty {% if form.products.field.queryset %}hidden{% endif %}>Товары не найдены.</p>
     </section>
 
     <div class="form-actions">

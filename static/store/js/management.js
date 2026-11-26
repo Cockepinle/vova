@@ -76,30 +76,48 @@ document.querySelectorAll('.mgmt-table').forEach(table => {
 document.querySelectorAll('.toolbar input, .toolbar select, .bulk-bar select').forEach(input => {
   if (!input.hasAttribute('aria-label')) input.setAttribute('aria-label', input.placeholder || input.options?.[0]?.text || 'Фильтр');
 });
-document.querySelectorAll("[data-filter-library]").forEach((library) => {
-  const search = library.querySelector("[data-filter-search]");
-  const empty = library.querySelector("[data-filter-no-results]");
-  const items = [...library.querySelectorAll("[data-filter-name]")];
-  search?.addEventListener("input", () => {
+const categoryFilters = document.querySelector("[data-category-filters]");
+if (categoryFilters) {
+  categoryFilters.addEventListener("input", event => {
+    const search = event.target.closest("[data-filter-search]");
+    if (!search) return;
+    const library = search.closest("[data-filter-library]");
+    const items = [...library.querySelectorAll("[data-filter-name]")];
     const query = search.value.trim().toLocaleLowerCase();
     items.forEach(item => { item.hidden = !item.dataset.filterName.includes(query); });
-    empty.hidden = items.some(item => !item.hidden);
+    library.querySelector("[data-filter-no-results]").hidden = items.some(item => !item.hidden);
   });
-});
-
-const categorySettings = document.querySelector("[data-category-settings]");
-if (categorySettings) {
-  const snapshot = () => JSON.stringify([...new FormData(categorySettings)].map(([name, value]) => [
-    name, value instanceof File ? [value.name, value.size, value.lastModified] : value,
-  ]));
-  const savedSettings = snapshot();
-  document.querySelector("[data-category-filters]")?.addEventListener("submit", event => {
-    if (snapshot() !== savedSettings && !window.confirm("Изменения категории ещё не сохранены. Продолжить работу с фильтрами?")) {
-      event.preventDefault();
-      return;
+  categoryFilters.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.target;
+    if (categoryFilters.inert || (form.dataset.filterConfirm && !window.confirm(form.dataset.filterConfirm))) return;
+    const status = categoryFilters.querySelector("[data-category-filter-status]");
+    categoryFilters.inert = true;
+    status.textContent = "Сохранение фильтра…";
+    try {
+      const response = await fetch(form.action, {method: "POST", body: new FormData(form)});
+      const html = new DOMParser().parseFromString(await response.text(), "text/html");
+      const next = html.querySelector("[data-category-filters]");
+      if (!response.ok || !next) throw new Error();
+      const currentForms = [...categoryFilters.querySelectorAll("details[open] form")];
+      for (const current of currentForms) {
+        if (current === form) continue;
+        const replacement = [...next.querySelectorAll("details form")].find(other =>
+          other.getAttribute("action") === current.getAttribute("action"));
+        if (!replacement) continue;
+        replacement.closest("details").open = true;
+        replacement.replaceWith(current);
+      }
+      categoryFilters.replaceChildren(...next.childNodes);
+      const feedback = categoryFilters.querySelector("[data-category-filter-status]");
+      feedback.textContent = html.querySelector(".mgmt-messages")?.textContent.trim() || "Фильтры обновлены.";
+      categoryFilters.inert = false;
+      feedback.focus();
+    } catch {
+      status.textContent = "Не удалось обновить фильтры. Проверьте соединение и повторите действие.";
+    } finally {
+      categoryFilters.inert = false;
     }
-    const message = event.target.dataset.filterConfirm;
-    if (message && !window.confirm(message)) event.preventDefault();
   });
 }
 
@@ -109,11 +127,13 @@ document.querySelector('[data-add-link]')?.addEventListener('click', () => {
   document.querySelector('[data-link-forms]').insertAdjacentHTML('beforeend', template.innerHTML.replaceAll('__prefix__', total.value));
   total.value = String(Number(total.value) + 1);
 });
-document.querySelectorAll('[data-copy-url]').forEach(button => button.addEventListener('click', async () => {
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-copy-url]');
+  if (!button) return;
   const url = new URL(button.dataset.copyUrl, location.origin).href;
   try { await navigator.clipboard.writeText(url); button.textContent = 'Ссылка скопирована'; }
   catch { window.prompt('Скопируйте ссылку', url); }
-}));
+});
 
 document.querySelectorAll('.js-customer-price-toggle').forEach(checkbox => {
   const priceInput = checkbox.closest('.customer-price-row')?.querySelector('input[type="number"]');

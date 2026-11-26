@@ -294,24 +294,43 @@ function setDetailGalleryImage(gallery, index) {
   }
 }
 
-function renderQuickVariantSelect(variants) {
-  if (!variants || variants.length < 2) return "";
-  return `<div class="variant-selectors"><label><span>Вариант товара</span><select data-detail-variant-select>${variants.map(variant => {
-    const identity = variant.show_identity ? " · " + (variant.sku || variant.name) : "";
-    const availability = variant.availability === "in_stock" ? "" : " · " + variant.availability_label;
-    return `<option value="${escapeCatalogHtml(variant.url)}" ${variant.current ? "selected" : ""}>${escapeCatalogHtml(variant.label + identity + availability)}</option>`;
-  }).join("")}</select></label></div>`;
+function closeVariantDropdowns(except) {
+  for (const picker of document.querySelectorAll("[data-variant-dropdown][open]")) {
+    if (picker !== except) picker.open = false;
+  }
 }
 
-document.addEventListener("change", event => {
-  if (event.target.matches("[data-detail-variant-select]")) location.assign(event.target.value);
+document.addEventListener("click", event => {
+  const picker = event.target.closest("[data-variant-dropdown]");
+  closeVariantDropdowns(picker);
+  const link = event.target.closest("[data-variant-dropdown] a");
+  if (!link) return;
+  if (link.getAttribute("aria-current") === "page") event.preventDefault();
+  picker.open = false;
+  picker.querySelector("summary").focus();
 });
 
-window.addEventListener("pageshow", () => {
-  document.querySelectorAll("[data-detail-variant-select]").forEach(select => {
-    select.selectedIndex = [...select.options].findIndex(option => option.defaultSelected);
-  });
-});
+document.addEventListener("keydown", event => {
+  const picker = event.target.closest("[data-variant-dropdown]");
+  if (!picker) return;
+  if (event.key === "Escape" && picker.open) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    picker.open = false;
+    picker.querySelector("summary").focus();
+  } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    closeVariantDropdowns(picker);
+    picker.open = true;
+    const links = [...picker.querySelectorAll("a")];
+    const index = links.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? links.length - 1
+      : event.key === "ArrowDown" ? Math.min(index + 1, links.length - 1) : index <= 0 ? links.length - 1 : index - 1;
+    links[next]?.focus();
+  }
+}, true);
+
+window.addEventListener("pageshow", () => closeVariantDropdowns());
 
 document.addEventListener("click", (event) => {
   const panelOpen = event.target.closest(".catalog-filter-open, .catalog-sort-open");
@@ -719,7 +738,7 @@ function openProductModal(product) {
   modalBadge.style.display = product.badge ? "inline-block" : "none";
   modalMeta.textContent = `${product.sku} · ${product.category}`;
   modalTitle.textContent = product.name;
-  modalVariants.innerHTML = renderQuickVariantSelect(product.variants);
+  modalVariants.innerHTML = product.variant_picker_html || "";
   modalDescription.textContent = product.description;
   modalPrice.innerHTML = `${escapeCatalogHtml(product.price)} ₽ <span>/ ${escapeCatalogHtml(product.unit)}</span>`;
   modalSpecs.innerHTML = product.specs
@@ -750,7 +769,10 @@ function openProductModal(product) {
     modalInput.min,
     modalInput.step,
   ));
-  modal.querySelector(".modal-favorite").classList.toggle("is-active", favoriteButton ? favoriteButton.classList.contains("is-active") : false);
+  const modalFavorite = modal.querySelector(".modal-favorite");
+  const isFavorite = window.isProductFavorite?.(product.id) ?? Boolean(favoriteButton?.classList.contains("is-active"));
+  modalFavorite.classList.toggle("is-active", isFavorite);
+  modalFavorite.setAttribute("aria-pressed", String(isFavorite));
   const modalAdd = modal.querySelector(".modal-add");
   modalAdd.disabled = product.can_purchase === false;
   modalAdd.textContent = product.can_purchase === false
@@ -761,6 +783,26 @@ function openProductModal(product) {
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  if (!product.variant_picker_html && product.variants?.length > 1) {
+    const current = product.variants.find(variant => variant.current);
+    if (current?.data_url) {
+      fetch(current.data_url)
+        .then(response => {
+          if (!response.ok) throw new Error();
+          return response.json();
+        })
+        .then(({product: loaded}) => {
+          if (modal.dataset.productId === String(product.id)) modalVariants.innerHTML = loaded.variant_picker_html || "";
+        })
+        .catch(() => {
+          if (modal.dataset.productId !== String(product.id)) return;
+          const link = document.createElement("a");
+          link.href = product.url;
+          link.textContent = "Выбрать модификацию в карточке товара";
+          modalVariants.replaceChildren(link);
+        });
+    }
+  }
 }
 
 function closeProductModal() {

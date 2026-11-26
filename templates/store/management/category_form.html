@@ -3,7 +3,7 @@
 {% block heading %}{% if category %}Редактировать категорию{% elif form.parent.value %}Новая подкатегория{% else %}Новая категория{% endif %}{% endblock %}
 
 {% block content %}
-  <form class="mgmt-form-grid" data-category-settings method="post" enctype="multipart/form-data"
+  <form class="mgmt-form-grid" data-category-settings data-bound="{{ form.is_bound|yesno:'1,0' }}" method="post" enctype="multipart/form-data"
         action="{% if category %}{% url 'management_category_edit' category.pk %}{% else %}{% url 'management_category_new' %}{% if request.GET.parent %}?parent={{ request.GET.parent|urlencode }}{% endif %}{% endif %}">
     {% csrf_token %}
     {{ form.non_field_errors }}
@@ -77,6 +77,7 @@
         {% if category %}<p class="section-help">Фильтры сохраняются отдельно от настроек категории.</p>{% endif %}
       </div>
     </header>
+    <p class="muted" data-category-filter-status role="status" tabindex="-1"></p>
 
     {% if not category %}
       <p class="section-help">Сохраните категорию, чтобы создать или привязать фильтры.</p>
@@ -86,7 +87,7 @@
         {% if not filter_limit_reached or create_filter_form.errors %}
           <details class="filter-create" {% if create_filter_form.errors %}open{% endif %}>
             <summary class="primary-button">Создать фильтр</summary>
-            <form method="post" action="{% url 'management_category_filter_create' category.pk %}" class="filter-edit-form" data-draft-form>
+            <form method="post" action="{% url 'management_category_filter_create' category.pk %}" class="filter-edit-form">
               {% csrf_token %}
               {% include "store/management/category_filter_fields.html" with filter_form=create_filter_form only %}
               <button class="primary-button" type="submit">Создать и привязать</button>
@@ -152,7 +153,7 @@
               {% if not row.can_delete %}<p class="section-help">Фильтр используется в других категориях, товарах или модификациях. Здесь его можно отвязать.</p>{% endif %}
               <details class="filter-edit-details" {% if row.edit_form.errors %}open{% endif %}>
                 <summary class="ghost-button">Редактировать</summary>
-                <form method="post" action="{% url 'management_category_filter_edit' category.pk row.field.pk %}" class="filter-edit-form" data-draft-form
+                <form method="post" action="{% url 'management_category_filter_edit' category.pk row.field.pk %}" class="filter-edit-form"
                       {% if row.category_count > 1 %}data-filter-confirm="Сохранить изменения для всех категорий, использующих этот фильтр?"{% endif %}>
                   {% csrf_token %}
                   {% if row.category_count > 1 %}<p class="section-help">Параметры изменятся во всех связанных категориях.</p>{% endif %}

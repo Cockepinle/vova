@@ -1,0 +1,25 @@
+<fieldset class="management-options" data-management-options>
+  <legend>{{ field.label }}</legend>
+  <p class="section-help">{{ field.help_text }}</p>
+  {{ field.errors }}
+  <div class="toolbar-actions" data-options-toolbar hidden>
+    <label><span>Поиск товара</span><input type="search" placeholder="Название или артикул" data-options-search></label>
+    <label><input type="checkbox" data-options-selected> Только выбранные</label>
+  </div>
+  <p class="muted" data-options-count role="status" hidden></p>
+  <div class="management-options-chips" data-options-chips hidden></div>
+  <div class="management-options-list">
+    {% for checkbox in field %}
+      {% with item=checkbox.data.value.instance %}
+        <label class="management-option" data-option data-option-search="{{ item.name }} {{ item.sku|default:'' }}">
+          {{ checkbox.tag }}
+          {% with photo=item.display_image_url %}
+            {% if photo %}<img src="{{ photo }}" alt="" width="44" height="44" loading="lazy" data-media-fallback>{% endif %}
+          {% endwith %}
+          <span><strong data-option-title>{{ item.name }}</strong>{% if item.sku %}<small>{{ item.sku }}</small>{% endif %}</span>
+        </label>
+      {% endwith %}
+    {% endfor %}
+  </div>
+  <p class="muted" data-options-empty {% if field.field.queryset %}hidden{% endif %}>Товары не найдены.</p>
+</fieldset>
