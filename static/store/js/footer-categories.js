@@ -16,6 +16,12 @@ document.querySelectorAll("[data-footer-categories]").forEach(tree => {
     panel.classList.toggle("is-open", expanded);
   }
 
+  disclosure.addEventListener("toggle", () => {
+    if (disclosure.open) return;
+    for (const button of tree.querySelectorAll('[aria-expanded="true"]')) setExpanded(button, false);
+    openRoot = null;
+  });
+
   for (const button of tree.querySelectorAll("[data-footer-toggle]")) {
     const panel = document.getElementById(button.getAttribute("aria-controls"));
     panel.hidden = false;

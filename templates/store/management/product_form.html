@@ -48,32 +48,16 @@
     <section class="mgmt-card">
       <div class="card-header">
         <h2>Пользовательские поля</h2>
-        <a class="ghost-button" data-draft-related="attributes" href="{% url 'management_field_new' %}">+ Добавить поле</a>
+        <button class="ghost-button" type="button" data-attribute-new data-url="{% url 'management_field_new' %}">+ Добавить поле</button>
       </div>
-      <div class="form-grid">
-        {% for field in dynamic_form %}
-          {% if field.field.widget.allow_multiple_selected %}
-            <fieldset class="full dynamic-multiple-field">
-              <legend>{{ field.label }}{% if field.field.required %} *{% endif %}</legend>
-              {{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
-              {{ field.errors }}
-            </fieldset>
-          {% else %}
-            <label>
-              <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-              {{ field }}
-              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
-              {{ field.errors }}
-              {% if field.name == 'slug' or field.name == 'h1' or field.name == 'seo_title' %}
-                <button class="ghost-button seo-reset" type="button" data-seo-reset="{{ field.name }}">Восстановить автоматически</button>
-                {% if field.name == 'slug' and published_url %}<small>При смене адреса сохранённые ссылки на товар перестанут работать.</small>{% endif %}
-              {% endif %}
-            </label>
-          {% endif %}
-        {% empty %}
-          <p class="muted">Пока нет пользовательских полей.</p>
+      <div class="form-grid" data-product-attributes data-product-id="{{ product.pk|default:'' }}">
+        {% for definition in removed_attributes %}
+          <input type="hidden" name="remove_attribute" value="{{ definition.pk }}">
         {% endfor %}
+        {% for field in dynamic_form %}
+          {% include "store/management/product_attribute.html" %}
+        {% endfor %}
+        <p class="muted" data-attributes-empty {% if dynamic_form.fields %}hidden{% endif %}>Пока нет пользовательских полей.</p>
       </div>
     </section>
 
@@ -165,6 +149,21 @@
     <p class="mgmt-message" data-variant-status role="status" hidden></p>
     <div data-variant-content></div>
   </dialog>
+  <dialog class="variant-dialog attribute-dialog" data-attribute-dialog aria-labelledby="attribute-dialog-title">
+    <form class="mgmt-form" data-attribute-form>
+      {% csrf_token %}
+      <div class="card-header">
+        <h2 id="attribute-dialog-title"></h2>
+        <button class="ghost-button" type="button" data-attribute-close aria-label="Закрыть">×</button>
+      </div>
+      <div data-attribute-content></div>
+      <p role="alert" data-attribute-error></p>
+      <div class="form-actions">
+        <button class="primary-button" type="submit"></button>
+        <button class="ghost-button" type="button" data-attribute-close>Отмена</button>
+      </div>
+    </form>
+  </dialog>
 {% endblock %}
 
 {% block management_scripts %}
@@ -174,5 +173,6 @@
   <script src="{% static 'store/js/product-pricing.js' %}?v=2"></script>
   <script src="{% static 'store/js/variant-groups.js' %}?v=5"></script>
   <script src="{% static 'store/js/product-editor.js' %}?v=6"></script>
+  <script src="{% static 'store/js/product-attributes.js' %}?v=1"></script>
   <script src="{% static 'store/js/customer-prices.js' %}?v=3"></script>
 {% endblock %}

@@ -137,6 +137,9 @@ PRODUCT_SLUG_TRANSLITERATION = str.maketrans(dict(zip(
 
 
 class Product(models.Model):
+    excluded_attribute_definitions = models.ManyToManyField(
+        "AttributeDefinition", blank=True, related_name="excluded_products",
+    )
     seo_title = models.CharField("Заголовок в поиске", max_length=220, blank=True)
     meta_description = models.TextField("Описание в поиске", blank=True)
     h1 = models.CharField("Заголовок страницы", max_length=220, blank=True)

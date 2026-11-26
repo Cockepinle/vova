@@ -13,7 +13,7 @@ from django.template.loader import render_to_string
 from django.utils.encoding import filepath_to_uri
 
 from ..models import Category, Employee, Product, ProductAttribute, ProductImage
-from ..uploads import MediaStorageUnavailable, local_media_missing
+from ..uploads import MediaProviderError, MediaStorageUnavailable, local_media_missing
 from .common import ADDITION, AttributeDefinition, AttributeDefinitionForm, BuilderRevision, CHANGE, DELETION, PageContent, PageContentForm, SiteLinkFormSet, SiteMedia
 from .common import SiteMediaForm, SiteSettings, SiteSettingsForm, delete_unreferenced_file, get_object_or_404, log_change, management_required, messages, redirect, render
 from .common import require_POST, transaction
@@ -157,10 +157,19 @@ def site_media_upload(request):
     if not form.is_valid():
         return media_library(request, form=form)
     try:
-        media = form.save()
+        with transaction.atomic():
+            media = form.save()
     except MediaStorageUnavailable:
         logger.exception("Persistent media storage is not configured")
         form.add_error("file", "На сервере не настроено постоянное хранилище файлов.")
+        return media_library(request, form=form)
+    except MediaProviderError as error:
+        logger.exception("Cloudinary could not store media uploaded from library")
+        form.add_error("file", error.public_message)
+        return media_library(request, form=form)
+    except IntegrityError:
+        logger.exception("Database rejected the media library record")
+        form.add_error("file", "Файл принят, но запись медиатеки не удалось сохранить в базе данных.")
         return media_library(request, form=form)
     except (OSError, ValueError):
         logger.exception("Could not store media uploaded from library")
@@ -217,10 +226,17 @@ def media_library_upload_api(request):
         return JsonResponse({"error": error or "Проверьте данные файла."}, status=400)
     media = form.save(commit=False)
     try:
-        media.save()
+        with transaction.atomic():
+            media.save()
     except MediaStorageUnavailable:
         logger.exception("Persistent media storage is not configured")
         return JsonResponse({"error": "На сервере не настроено постоянное хранилище файлов."}, status=503)
+    except MediaProviderError as error:
+        logger.exception("Cloudinary could not store media uploaded from picker")
+        return JsonResponse({"error": error.public_message}, status=503)
+    except IntegrityError:
+        logger.exception("Database rejected the media library record")
+        return JsonResponse({"error": "Файл принят, но запись медиатеки не удалось сохранить в базе данных."}, status=503)
     except (OSError, ValueError):
         logger.exception("Could not store media uploaded from picker")
         return JsonResponse({"error": "Не удалось сохранить файл на сервере"}, status=503)
@@ -1025,6 +1041,8 @@ def page_builder_restore(request, page_id, revision_id):
 
 @management_required
 def field_form(request, field_id=None):
+    if request.GET.get("editor") == "product":
+        return product_attribute_definition(request, field_id)
     field = get_object_or_404(AttributeDefinition, pk=field_id) if field_id else None
 
     if request.method == "POST":
@@ -1047,3 +1065,58 @@ def field_form(request, field_id=None):
             "form": form,
         },
     )
+
+
+@transaction.atomic
+def product_attribute_definition(request, field_id):
+    from store.cms_forms import DynamicProductFieldsForm
+
+    field = get_object_or_404(AttributeDefinition.objects.select_for_update(), pk=field_id) if field_id else None
+    product_id = request.GET.get("product")
+    if product_id and (not product_id.isascii() or not product_id.isdecimal() or len(product_id) > 18):
+        return JsonResponse({"error": "Некорректный идентификатор товара."}, status=400)
+    product = get_object_or_404(Product, pk=product_id) if product_id else None
+    if request.method == "GET":
+        form = AttributeDefinitionForm(prefix="definition", instance=field)
+    elif request.method == "POST":
+        form = AttributeDefinitionForm(request.POST, prefix="definition", instance=field)
+        same_type = field.value_type if field else None
+        valid = form.is_valid()
+        if valid and not field_id and not form.cleaned_data["is_visible"]:
+            form.add_error("is_visible", "Чтобы добавить поле в карточку товара, включите его отображение.")
+        if field_id and request.POST.get("confirm_global") != "1":
+            form.add_error(None, "Подтвердите изменение для всех товаров.")
+        draft_values = request.POST.getlist("draft_value")
+        if draft_values and valid:
+            if form.cleaned_data["value_type"] != same_type:
+                form.add_error("value_type", "Сначала очистите черновое значение поля в форме товара.")
+            elif same_type == AttributeDefinition.TYPE_CHOICE:
+                choices = {choice.strip() for choice in form.cleaned_data["choices_text"].splitlines()}
+                if any(value not in choices for value in draft_values):
+                    form.add_error("choices_text", "Сохраните варианты, выбранные в текущей форме товара.")
+                if len(draft_values) > 1 and form.cleaned_data["filter_type"] != AttributeDefinition.FILTER_MULTIPLE:
+                    form.add_error("filter_type", "Оставьте один выбранный вариант в форме товара.")
+        if not form.errors:
+            try:
+                with transaction.atomic():
+                    field = form.save()
+            except IntegrityError:
+                logger.warning("Attribute definition could not be saved from product editor", exc_info=True)
+                form.add_error("name", "Не удалось сохранить поле. Проверьте, свободно ли название.")
+            else:
+                log_change(request, field, CHANGE if field_id else ADDITION, "Поле сохранено из карточки товара")
+                html = ""
+                if field.is_visible:
+                    dynamic = DynamicProductFieldsForm(
+                        product=product, definitions=AttributeDefinition.objects.filter(pk=field.pk),
+                    )
+                    html = render_to_string(
+                        "store/management/product_attribute.html", {"field": dynamic[f"field_{field.pk}"]}, request=request,
+                    )
+                return JsonResponse({"id": field.pk, "html": html})
+    else:
+        return JsonResponse({"error": "Метод запроса не поддерживается."}, status=405)
+    html = render_to_string(
+        "store/management/product_attribute_definition.html", {"field": field, "form": form}, request=request,
+    )
+    return JsonResponse({"html": html}, status=400 if form.is_bound else 200)

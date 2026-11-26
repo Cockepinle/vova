@@ -2142,3 +2142,14 @@ body.management-modal-open { overflow: hidden; }
   .category-products-row:not([hidden]) .category-products-panel { animation: category-panel-in .16s ease-out; }
   @keyframes category-panel-in { from { opacity: .4; transform: translateY(-3px); } }
 }
+
+.product-attribute { min-width: 0; }
+.product-attribute-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.product-attribute-actions { display: flex; gap: 4px; }
+.product-attribute-actions .ghost-button { min-width: 40px; min-height: 40px; padding: 7px; }
+.product-attribute-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.attribute-dialog .form-grid { margin-block: 12px; }
+.attribute-dialog .form-grid > div { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.attribute-dialog [role="alert"]:empty { display: none; }
+
+[data-library-status] { display: block; white-space: pre-line; }

@@ -17,6 +17,12 @@ class MediaStorageUnavailable(OSError):
     pass
 
 
+class MediaProviderError(OSError):
+    def __init__(self, public_message):
+        super().__init__(public_message)
+        self.public_message = public_message
+
+
 class ReadOnlyMediaStorage(FileSystemStorage):
     def save(self, name, content, max_length=None):
         raise MediaStorageUnavailable(

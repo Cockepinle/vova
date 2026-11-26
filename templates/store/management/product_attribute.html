@@ -1,0 +1,18 @@
+<div class="product-attribute" data-product-attribute="{{ field.name|slice:'6:' }}" data-attribute-order="{{ field.field.product_attribute_order }}">
+  <div class="product-attribute-title">
+    <span id="{{ field.auto_id }}_label">{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+    <div class="product-attribute-actions">
+      <button class="ghost-button" type="button" data-attribute-edit data-url="{% url 'management_field_edit' field.name|slice:'6:' %}" aria-label="Редактировать: {{ field.label }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16 12-12 4 4L8 20H4Zm9-9 4 4"/></svg>
+      </button>
+      <button class="ghost-button" type="button" data-attribute-remove aria-label="Убрать: {{ field.label }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>
+      </button>
+    </div>
+  </div>
+  <div role="group" aria-labelledby="{{ field.auto_id }}_label" data-attribute-value>
+    {% if field.field.widget.allow_multiple_selected %}{{ field }}{% else %}<label>{{ field }}</label>{% endif %}
+    {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+    {{ field.errors }}
+  </div>
+</div>

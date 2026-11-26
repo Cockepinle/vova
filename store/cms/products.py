@@ -23,6 +23,7 @@ from .product_gallery import gallery_rows, initial_gallery, parse_gallery, publi
 def product_duplicate(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
     attributes = list(product.attributes.all())
+    excluded_definitions = list(product.excluded_attribute_definitions.all())
     suffix = uuid4().hex
     product.pk = None
     product.name = f"{product.name[:212]} — копия"
@@ -30,6 +31,7 @@ def product_duplicate(request, product_id):
     product.slug = f"{product.slug[:202]}-copy-{suffix}"
     product.status = Product.STATUS_DRAFT
     product.save()
+    product.excluded_attribute_definitions.set(excluded_definitions)
     log_change(request, product, ADDITION, "Создана копия товара")
 
     for attribute in attributes:
@@ -220,6 +222,7 @@ def product_form(request, product_id=None):
             "product": product,
             "form": form,
             "dynamic_form": dynamic_form,
+            "removed_attributes": dynamic_form.removed_definitions,
             "price_formset": price_formset,
             "product_gallery": gallery,
             "gallery_revision": gallery_revision,

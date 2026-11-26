@@ -27,15 +27,18 @@
       <h3>Навигация</h3>
       {% for link in footer_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
     </div>
-    <details class="footer-categories">
-      <summary>Категории <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
-      <div class="footer-category-scroll" {% if footer_categories %}tabindex="0"{% endif %} role="region" aria-label="Категории каталога" data-footer-categories>
-        <a href="{% url 'catalog' %}">Все категории</a>
-        {% if footer_categories %}
-          {% include "store/partials/footer_categories.html" with nodes=footer_categories root=True only %}
-        {% endif %}
-      </div>
-    </details>
+    <div class="footer-category-section">
+      <h3>Категории</h3>
+      <details class="footer-categories">
+        <summary>Все категории <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
+        <div class="footer-category-content" role="region" aria-label="Категории каталога" data-footer-categories>
+          <a href="{% url 'catalog' %}">Перейти в каталог</a>
+          {% if footer_categories %}
+            {% include "store/partials/footer_categories.html" with nodes=footer_categories root=True only %}
+          {% endif %}
+        </div>
+      </details>
+    </div>
     <div>
       <h3>Контакты</h3>
       <p><a href="tel:{{ site_settings.footer_phone|default:site_settings.contact_phone|default:'+7 (800) 555-38-22'|phone_href }}">{{ site_settings.footer_phone|default:site_settings.contact_phone|default:"+7 (800) 555-38-22" }}</a></p>
@@ -55,4 +58,4 @@
     </nav>
   </section>
 </footer>
-<script src="{% static 'store/js/footer-categories.js' %}?v=2" defer></script>
+<script src="{% static 'store/js/footer-categories.js' %}?v=3" defer></script>

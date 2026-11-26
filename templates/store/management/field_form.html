@@ -8,6 +8,7 @@
     {% csrf_token %}
     <input type="hidden" name="table_settings" value="1">
     {{ form.non_field_errors }}
+    {% if field %}<p class="muted">Изменения применятся ко всем товарам и фильтрам, использующим это поле.</p>{% endif %}
     <section class="mgmt-card form-section">
       <h2>Что вводится в поле</h2>
       <div class="form-grid">

@@ -1070,10 +1070,20 @@ VariantParameterFormSet = formset_factory(
 
 
 class DynamicProductFieldsForm(forms.Form):
-    def __init__(self, *args, product=None, **kwargs):
+    def __init__(self, *args, product=None, definitions=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.product = product
-        self.definitions = AttributeDefinition.objects.filter(is_visible=True).order_by("sort_order", "name")
+        if definitions is None:
+            definitions = AttributeDefinition.objects.filter(is_visible=True)
+            if product and product.pk:
+                definitions = definitions.exclude(excluded_products=product)
+        self.removed_definitions = (
+            AttributeDefinition.objects.filter(pk__in=[
+                int(value) for value in self.data.getlist("remove_attribute")
+                if value.isascii() and value.isdecimal() and len(value) <= 18
+            ]) if self.is_bound and hasattr(self.data, "getlist") else AttributeDefinition.objects.none()
+        )
+        self.definitions = definitions.exclude(pk__in=self.removed_definitions).order_by("sort_order", "name")
         values = {}
 
         if product and product.pk:
@@ -1084,6 +1094,9 @@ class DynamicProductFieldsForm(forms.Form):
             field_name = f"field_{definition.pk}"
             initial = self._initial_value(definition, values.get(definition.pk))
             field = self._build_field(definition, initial)
+            field.product_attribute_order = definition.sort_order
+            if not getattr(field.widget, "allow_multiple_selected", False):
+                field.widget.attrs["aria-labelledby"] = f"id_{field_name}_label"
             self.fields[field_name] = field
 
     def _initial_value(self, definition, value):
@@ -1162,6 +1175,10 @@ class DynamicProductFieldsForm(forms.Form):
         return forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), **kwargs)
 
     def save(self, product):
+        removed = list(self.removed_definitions.values_list("pk", flat=True))
+        if removed:
+            product.excluded_attribute_definitions.add(*removed)
+            product.attributes.filter(attribute_id__in=removed).delete()
         for definition in self.definitions:
             field_name = f"field_{definition.pk}"
             value = self.cleaned_data.get(field_name)

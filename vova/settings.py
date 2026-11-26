@@ -18,6 +18,7 @@ if not os.environ.get("VERCEL") and not os.environ.get("DJANGO_SKIP_DOTENV") and
 
 
 IS_VERCEL = bool(os.environ.get("VERCEL"))
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
 DEBUG = not IS_VERCEL and os.environ.get("DEBUG", "0") == "1"
 database_url = os.environ.get("DATABASE_URL", "")
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -47,7 +48,7 @@ INSTALLED_APPS = [
 if not DEBUG and not IS_VERCEL:
     INSTALLED_APPS.insert(-1, "whitenoise.runserver_nostatic")
 
-if os.environ.get("CLOUDINARY_URL"):
+if CLOUDINARY_URL:
     INSTALLED_APPS.insert(-1, "cloudinary")
     INSTALLED_APPS.insert(-1, "cloudinary_storage")
 
@@ -127,7 +128,6 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = DEBUG
 MEDIA_URL = os.environ.get("MEDIA_URL") or "/media/"
 MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media").resolve()
-CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
 PERSISTENT_MEDIA_VOLUME = bool(os.environ.get("MEDIA_ROOT")) and not MEDIA_ROOT.is_relative_to(BASE_DIR)
 # Leave space for multipart overhead within the Vercel request limit.
 CMS_UPLOAD_MAX_BYTES = 4 * 1024 * 1024
@@ -136,7 +136,7 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
-if os.environ.get("CLOUDINARY_URL"):
+if CLOUDINARY_URL:
     CLOUDINARY_STORAGE = {"PREFIX": "media/"}
     STORAGES["default"]["BACKEND"] = "store.media_storage.StoreCloudinaryStorage"
 elif IS_VERCEL or (not DEBUG and not PERSISTENT_MEDIA_VOLUME):

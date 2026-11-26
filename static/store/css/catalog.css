@@ -1399,7 +1399,7 @@ body.modal-open {
 .product-detail-purchase .quantity-control input { min-height: 48px; }
 .product-detail-purchase .product-detail-add { min-height: 50px; }
 .product-detail-purchase small { color: var(--muted); line-height: 1.5; }
-.product-detail-description { padding-top: 12px; overflow-wrap: anywhere; }
+.product-detail-description { margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
 .product-detail-description h2 { margin: 0 0 8px; font-size: clamp(18px, 2vw, 22px); }
 .product-detail-description p { margin: 0; line-height: 1.65; }
 .product-detail-section {
@@ -1513,6 +1513,7 @@ body.modal-open {
   border-bottom: 2px solid currentColor;
   transform: rotate(45deg);
 }
+.variant-dropdown summary::after { transition: transform .18s ease; }
 .variant-dropdown[open] summary::after { transform: rotate(225deg); }
 .variant-dropdown-list {
   position: absolute;
@@ -1534,3 +1535,14 @@ body.modal-open {
 .variant-dropdown a[aria-current] { font-weight: 700; }
 .variant-dropdown a.variant-unavailable, .variant-dropdown a small { color: var(--muted); }
 .variant-dropdown a small { display: block; }
+
+.variant-dropdown :is(summary, a):focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .variant-dropdown[open] .variant-dropdown-list {
+    animation: variant-dropdown-enter .18s ease-out;
+  }
+  @keyframes variant-dropdown-enter {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

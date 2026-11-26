@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from PIL import Image
 from store.models import AttributeDefinition, Category, CustomerPrice, PageContent, Product, VariantGroup
+from store.test_media_uploads import image_file
 
 
 class CatalogStorefrontAudit(ResponsiveAudit):
@@ -66,7 +67,7 @@ class CatalogStorefrontAudit(ResponsiveAudit):
             expect(footer.get_by_role("link", name=self.category.name)).to_be_visible()
             footer.get_by_role("button", name=f"Подкатегории: {self.category.name}").click()
             expect(footer.get_by_role("link", name=child.name)).to_be_visible()
-            assert footer.locator("[data-footer-categories]").evaluate("(el) => el.clientHeight <= 256")
+            expect(footer.locator("[data-footer-categories]")).to_have_css("overflow-y", "visible")
             tops = page.locator(".footer-main > *").evaluate_all("(cols) => cols.map(col => col.getBoundingClientRect().top)")
             assert max(tops) - min(tops) <= 1
             footer.locator("summary").press("Escape")
@@ -79,6 +80,9 @@ class CatalogStorefrontAudit(ResponsiveAudit):
             expect(description).to_be_visible()
             expect(main).to_have_css("background-color", "rgba(0, 0, 0, 0)")
             footer.locator("summary").click()
+            branch = footer.get_by_role("button", name=f"Подкатегории: {self.category.name}")
+            expect(branch).to_have_attribute("aria-expanded", "false")
+            branch.click()
             expect(footer.get_by_role("link", name=child.name)).to_be_visible()
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 2")
             footer.get_by_role("link", name=child.name).click()
@@ -120,7 +124,9 @@ class CatalogStorefrontAudit(ResponsiveAudit):
             page.get_by_role("button", name="Развернуть всё").click()
             leaf_row.locator("[data-category-products]").click()
             panel = page.locator(f"#category-products-{leaf.pk}")
-            panel.locator("[data-member-search]").fill(self.product.sku)
+            with page.expect_response(lambda response: f"mode=linked&q={self.product.sku}" in response.url):
+                panel.locator("[data-member-search]").fill(self.product.sku)
+            expect(panel.locator("[data-member-status]")).to_contain_text("Найдено:")
             checkbox = panel.locator("input[type=checkbox]")
             expect(checkbox).to_be_checked()
             checkbox.uncheck()
@@ -207,6 +213,127 @@ class CatalogStorefrontAudit(ResponsiveAudit):
             page.locator(".product-detail-add").tap()
             expect(page.locator(f'.cart-item[data-product-id="{preorder.pk}"] .cart-quantity')).to_contain_text("3")
             browser.close()
+
+    def test_product_fields_and_media_batch(self):
+        self.client.force_login(self.staff)
+        cookie = self.client.cookies[settings.SESSION_COOKIE_NAME]
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 390, "height": 844})
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.context.add_cookies([{"name": cookie.key, "value": cookie.value, "url": self.live_server_url}])
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            library = reverse("management_media")
+            page.goto(self.live_server_url + library)
+            uploads = page.locator("[data-library-upload]")
+            files = uploads.locator("input[type=file]")
+            files.set_input_files([
+                {"name": name, "mimeType": "image/png", "buffer": image_file(name).read()}
+                for name in ("first-test.png", "second-test.png")
+            ])
+            expect(uploads.get_by_role("button", name="Загрузить")).to_be_enabled()
+            uploads.get_by_role("button", name="Загрузить").click()
+            expect(page.locator("[data-library-status]")).to_contain_text("2 из 2")
+            page.locator("[data-library-search]").fill("second-test.png")
+            media_row = page.locator('[data-file-name="second-test.png"]')
+            expect(media_row).to_be_visible()
+            expect(media_row.locator("img").first).to_be_visible()
+            assert media_row.locator("img").first.evaluate("img => img.naturalWidth") > 0
+            expect(page.locator('[data-file-name="first-test.png"]')).to_be_hidden()
+            items = page.request.get(self.live_server_url + reverse("management_media_api")).json()["items"]
+            media = next(item for item in items if item["filename"] == "second-test.png")
+            media_id, media_url = media["id"], media["url"]
+            self.assertEqual(page.request.get(self.live_server_url + media_url).status, 200)
+
+            upload_endpoint = "**" + reverse("management_media_upload_api")
+            def fail_one_upload(route):
+                if b'filename="retry-test.png"' in (route.request.post_data_buffer or b""):
+                    route.fulfill(status=503, json={"error": "Временная ошибка хранилища"})
+                else:
+                    route.continue_()
+
+            page.route(upload_endpoint, fail_one_upload)
+            files.set_input_files([
+                {"name": name, "mimeType": "image/png", "buffer": image_file(name).read()}
+                for name in ("kept-test.png", "retry-test.png")
+            ])
+            uploads.get_by_role("button", name="Загрузить").click()
+            expect(page.locator("[data-library-status]")).to_contain_text("retry-test.png — Временная ошибка хранилища")
+            assert files.evaluate("input => Array.from(input.files, file => file.name)") == ["retry-test.png"]
+            page.unroute(upload_endpoint)
+            uploads.get_by_role("button", name="Загрузить").click()
+            expect(page.locator("[data-library-status]")).to_contain_text("1 из 1")
+            expect(page.locator('[data-file-name="kept-test.png"]')).to_have_count(1)
+            expect(page.locator('[data-file-name="retry-test.png"]')).to_have_count(1)
+
+            for path in (reverse("management_product_new"), reverse("management_product_edit", args=[self.product.pk])):
+                page.goto(self.live_server_url + path)
+                product = page.locator("[data-product-editor]")
+                product.locator('[name="name"]').fill("Коробка с черновиком")
+                product.locator('[name="sku"]').fill("CHECK-SKU")
+                product.locator('[name="description"]').fill("Описание в черновике")
+                product.locator('[name="price"]').fill("150")
+                product.locator('[name="category"]').select_option(str(self.category.pk))
+                product.locator('[name="variant_group"]').select_option(str(self.group.pk))
+                product.locator("[data-gallery-pick]").click()
+                page.locator("[data-media-picker-search]").fill("second-test.png")
+                page.locator(".media-picker-item").filter(has_text="second-test.png").click()
+                page.locator("[data-media-picker-apply]").click()
+                tile = product.locator(f'[data-key="media:{media_id}"]')
+                primary = tile.locator("[data-gallery-primary]")
+                if primary.is_visible():
+                    primary.click()
+                gallery = product.locator("[data-gallery-manifest]").input_value()
+                self.assertIn(f"media:{media_id}", gallery)
+
+                dialog = page.locator("[data-attribute-dialog]")
+                product.locator("[data-attribute-new]").click()
+                label = "Проверка " + ("нового" if path.endswith("/new/") else "редактируемого")
+                dialog.locator('[name="definition-name"]').fill(label)
+                dialog.get_by_role("button", name="Создать и добавить").click()
+                row = product.locator("[data-product-attribute]").filter(has_text=label)
+                value = row.locator("textarea")
+                value.fill("Сохранить в черновике")
+                row.locator("[data-attribute-edit]").click()
+                expect(dialog).to_contain_text("для всех товаров")
+                dialog.locator('[name="definition-unit"]').fill("мм")
+                dialog.locator('[name="confirm_global"]').check()
+                dialog.get_by_role("button", name="Сохранить изменения").click()
+                expect(row).to_contain_text("мм")
+                expect(value).to_have_value("Сохранить в черновике")
+                row.locator("[data-attribute-remove]").click()
+                dialog.get_by_role("button", name="Убрать из товара").click()
+                expect(row).to_have_count(0)
+                expect(product.locator('[name="name"]')).to_have_value("Коробка с черновиком")
+                expect(product.locator('[name="sku"]')).to_have_value("CHECK-SKU")
+                expect(product.locator('[name="description"]')).to_have_value("Описание в черновике")
+                expect(product.locator('[name="price"]')).to_have_value("150")
+                expect(product.locator('[name="variant_group"]')).to_have_value(str(self.group.pk))
+                expect(product.locator("[data-gallery-manifest]")).to_have_value(gallery)
+
+            product.get_by_role("button", name="Сохранить", exact=True).click()
+            expect(page.get_by_text("Товар сохранён.")).to_be_visible()
+            page.goto(self.live_server_url + reverse("product_detail", args=[self.product.slug]))
+            expect(page.locator(f'[data-detail-gallery] img[src="{media_url}"]').first).to_be_visible()
+            fallback = browser.new_page(viewport={"width": 390, "height": 844})
+            fallback.context.add_cookies([{"name": cookie.key, "value": cookie.value, "url": self.live_server_url}])
+            fallback.on("pageerror", lambda error: errors.append(str(error)))
+            fallback.add_init_script("""const supports = CSS.supports.bind(CSS);
+                CSS.supports = (...args) => args[0] === "selector(::picker(select))" ? false : supports(...args);""")
+            fallback.goto(self.live_server_url + reverse("management_product_new"))
+            selector = fallback.locator('[name="variant_group"] + details')
+            summary = selector.locator("summary")
+            summary.press("End")
+            expect(selector.get_by_role("button", name=self.group.name)).to_be_focused()
+            fallback.keyboard.press("Enter")
+            expect(fallback.locator('[name="variant_group"]')).to_have_value(str(self.group.pk))
+            summary.click()
+            fallback.locator("h1").click()
+            expect(selector).not_to_have_attribute("open", "")
+            self.assertFalse(errors, errors)
+            browser.close()
+        self.assertTrue(self.product.images.filter(media_id=media_id).exists())
 
     def test_storefront(self):
         demo_subtitle = "Демонстрационные размеры и цены. Подтвердите параметры, наличие и стоимость перед оформлением заказа."
@@ -389,5 +516,6 @@ if __name__ == "__main__":
         ["__main__.CatalogStorefrontAudit.test_storefront",
          "__main__.CatalogStorefrontAudit.test_category_tree_and_product_membership",
          "__main__.CatalogStorefrontAudit.test_sparse_variant_dropdown_and_customer_cart",
-         "__main__.CatalogStorefrontAudit.test_public_detail_footer_and_favorites"]
+         "__main__.CatalogStorefrontAudit.test_public_detail_footer_and_favorites",
+         "__main__.CatalogStorefrontAudit.test_product_fields_and_media_batch"]
     )))

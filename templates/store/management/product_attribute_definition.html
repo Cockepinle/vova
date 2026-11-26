@@ -1,0 +1,8 @@
+{% if field %}
+  <p class="muted">Изменения вступят в силу сразу для всех товаров, использующих это поле.</p>
+  <label><input type="checkbox" name="confirm_global" value="1" {% if form.data.confirm_global %}checked{% endif %} required> Применить изменения ко всем товарам</label>
+{% else %}
+  <p class="muted">Новое поле появится в карточках товаров как общее поле каталога.</p>
+{% endif %}
+<input type="hidden" name="definition-table_settings" value="1">
+<div class="form-grid">{{ form.as_div }}</div>

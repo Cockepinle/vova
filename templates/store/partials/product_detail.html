@@ -47,7 +47,7 @@
                 {% if not detail_can_purchase %}data-purchase-disabled disabled{% endif %}>{% if detail_is_hidden %}Предпросмотр{% elif not detail_can_purchase %}Нет в наличии{% elif detail_cart_quantity %}В корзине{% else %}В корзину{% endif %}</button>
       </div>
       <small id="detail-quantity-rules">Минимум {{ detail_data.min_quantity }} {{ detail_product.unit }} · кратность {{ detail_data.quantity_step }} {{ detail_product.unit }}</small>
-      {% if detail_product.description %}
+      {% if detail_product.description.strip %}
         <section class="product-detail-description">
           <h2>Описание товара</h2>
           <p data-detail-description>{{ detail_product.description|linebreaksbr }}</p>

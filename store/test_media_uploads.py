@@ -85,6 +85,43 @@ class MediaUploadTests(TestCase):
         self.assertEqual(response.json()["error"], "Не удалось сохранить файл на сервере")
         self.assertFalse(SiteMedia.objects.exists())
 
+    def test_cloudinary_upload_preserves_link_and_exposes_safe_provider_errors(self):
+        from cloudinary.exceptions import AuthorizationRequired
+        from django.conf import settings
+        from django.core.files.storage import storages
+
+        cloud = "cloudinary://fake-key:fake-secret@test-cloud"
+        storage_settings = {
+            **settings.STORAGES, "default": {"BACKEND": "store.media_storage.StoreCloudinaryStorage"},
+        }
+        with patch.dict("os.environ", CLOUDINARY_URL=cloud):
+            from cloudinary import config
+            with patch.object(config(), "cloud_name", "test-cloud"), override_settings(
+                CLOUDINARY_STORAGE={"PREFIX": "media/"}, STORAGES=storage_settings,
+            ):
+                with patch("store.media_storage.uploader.upload") as provider:
+                    provider.side_effect = AuthorizationRequired("technical detail")
+                    with self.assertLogs("store.cms.content", level="ERROR") as logs:
+                        rejected = self.upload(image_file("pngtree-empty-box-open-box-png-image_20409962.png"))
+                    self.assertEqual(rejected.status_code, 503)
+                    self.assertIn("CLOUDINARY_URL", rejected.json()["error"])
+                    self.assertNotIn("technical detail", rejected.json()["error"])
+                    self.assertIn("technical detail", "\n".join(logs.output))
+
+                    def save_on_provider(content, **options):
+                        self.assertEqual(content.read(8), b"\x89PNG\r\n\x1a\n")
+                        self.assertEqual(options["resource_type"], "image")
+                        self.assertTrue(options["filename"].endswith(".png"))
+                        return {"public_id": options["public_id"], "format": "png"}
+
+                    provider.side_effect = save_on_provider
+                    accepted = self.upload(image_file("pngtree-empty-box-open-box-png-image_20409962.png"))
+                    self.assertEqual(accepted.status_code, 200, accepted.content)
+                    media = SiteMedia.objects.get(pk=accepted.json()["id"])
+                    self.assertTrue(media.file.name.startswith("media/site_media/"))
+                    self.assertEqual(type(storages["default"])().url(media.file.name), accepted.json()["url"])
+                    self.assertContains(self.client.get(self.library_url), accepted.json()["url"])
+
     def test_attachment_rejects_content_disguised_by_extension(self):
         for extension in ("pdf", "mp4", "webm"):
             with self.subTest(extension=extension):

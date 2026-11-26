@@ -2,9 +2,12 @@ from pathlib import PurePosixPath
 from uuid import uuid4
 
 from cloudinary import CloudinaryResource, uploader
-from cloudinary.exceptions import Error
+from cloudinary.exceptions import AuthorizationRequired, BadRequest, Error, NotAllowed, RateLimited
 from cloudinary_storage.storage import MediaCloudinaryStorage
 from django.core.files.storage import FileSystemStorage
+from urllib3.exceptions import HTTPError
+
+from .uploads import MediaProviderError
 
 
 class StoreCloudinaryStorage(MediaCloudinaryStorage):
@@ -61,11 +64,22 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
             resource_type = self._get_resource_type(name)
             extension = PurePosixPath(name).suffix
             public_id = name if resource_type == "raw" else name.removesuffix(extension)
-            result = uploader.upload((PurePosixPath(name).name, content.read()), public_id=public_id,
-                                     resource_type=resource_type, tags=self.TAG, overwrite=False, timeout=30)
-        except Error as error:
-            raise OSError("Cloudinary could not store the file.") from error
-        public_id = result["public_id"]
+            content.seek(0)
+            result = uploader.upload(
+                content, filename=PurePosixPath(name).name, public_id=public_id,
+                resource_type=resource_type, tags=self.TAG, overwrite=False, timeout=30,
+            )
+        except (AuthorizationRequired, NotAllowed, ValueError) as error:
+            raise MediaProviderError("Cloudinary отклонил авторизацию. Проверьте CLOUDINARY_URL и права ключа.") from error
+        except RateLimited as error:
+            raise MediaProviderError("Cloudinary ограничил частоту загрузок. Повторите попытку позже.") from error
+        except BadRequest as error:
+            raise MediaProviderError("Cloudinary отклонил файл или параметры загрузки. Подробности в журнале сервера.") from error
+        except (Error, HTTPError, TimeoutError) as error:
+            raise MediaProviderError("Cloudinary не подтвердил запись. Проверьте доступность хранилища и повторите попытку.") from error
+        public_id = result.get("public_id")
+        if not isinstance(public_id, str) or not public_id.startswith(self._get_prefix().strip("/") + "/"):
+            raise MediaProviderError("Cloudinary вернул неожиданный идентификатор файла. Проверьте настройки хранилища.")
         if self._get_resource_type(name) == "raw":
             return public_id
         extension = result.get("format") or PurePosixPath(name).suffix.lstrip(".")

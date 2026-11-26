@@ -2198,13 +2198,8 @@ input:focus-visible {
 }
 .managed-page-copy h2, .managed-page-copy h3 { margin: 0 0 10px; }
 
-.footer-category-scroll {
-  max-block-size: min(16rem, 45vh);
-  overflow: hidden auto;
-  scrollbar-width: thin;
-  scrollbar-color: #747b86 transparent;
-  padding-inline-end: 4px;
-}
+.footer-category-content { padding-block-start: 4px; }
+.footer-category-section { min-width: 0; }
 .footer-categories { min-width: 0; }
 .footer-categories > summary {
   display: flex;
@@ -2223,6 +2218,7 @@ input:focus-visible {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
+  transition: transform .2s ease;
 }
 .footer-categories[open] > summary svg { transform: rotate(180deg); }
 .footer-category-list { list-style: none; padding: 0; margin: 0; }
@@ -2234,7 +2230,7 @@ input:focus-visible {
   align-items: flex-start;
   gap: 2px;
 }
-.footer-category-scroll a {
+.footer-category-content a {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2242,7 +2238,7 @@ input:focus-visible {
   padding-block: 4px;
   transition: color 160ms ease;
 }
-.footer-category-scroll a:hover, .footer-category-toggle:hover { color: #fff; }
+.footer-category-content a:hover, .footer-category-toggle:hover { color: #fff; }
 .footer-category-toggle {
   flex: 0 0 32px;
   inline-size: 32px;
@@ -2274,7 +2270,7 @@ input:focus-visible {
 }
 .footer-category-panel.is-open { grid-template-rows: 1fr; }
 .footer-category-panel > div { min-height: 0; overflow: hidden; }
-.footer-category-scroll:focus-visible, .footer-category-scroll :is(a, button):focus-visible {
+.footer-category-content:focus-visible, .footer-category-content :is(a, button):focus-visible {
   outline: 2px solid #b7bdc8;
   outline-offset: -2px;
 }
@@ -2283,5 +2279,21 @@ input:focus-visible {
   .footer-category-toggle { flex-basis: 44px; inline-size: 44px; block-size: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .footer-category-scroll *, .footer-category-scroll *::before { transition: none; }
+  .footer-category-content *, .footer-category-content *::before { transition: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .footer-categories[open] .footer-category-content { animation: footer-categories-enter .2s ease; }
+  @keyframes footer-categories-enter { from { opacity: 0; } }
+  @supports selector(details::details-content) {
+    .footer-categories::details-content {
+      block-size: 0;
+      opacity: 0;
+      overflow: clip;
+      interpolate-size: allow-keywords;
+      transition: block-size .24s ease, opacity .2s ease, content-visibility .24s allow-discrete;
+    }
+    .footer-categories[open]::details-content { block-size: auto; opacity: 1; }
+    .footer-categories[open] .footer-category-content { animation: none; }
+  }
 }

@@ -2,10 +2,10 @@ import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import Category, CustomerPrice, Product, VariantGroup
+from .models import AttributeDefinition, Category, CustomerPrice, Product, VariantGroup
 
 
 class ProductEditorTests(TestCase):
@@ -56,6 +56,49 @@ class ProductEditorTests(TestCase):
         self.assertEqual(list(group.products.all()), [self.other])
         self.other.refresh_from_db()
         self.assertEqual(self.other.variant_sort_order, 12)
+
+    def test_inline_fields_create_edit_and_unlink_without_affecting_other_products(self):
+        definition = {
+            "definition-name": "Покрытие", "definition-value_type": "text",
+            "definition-is_visible": "on", "definition-table_settings": "1",
+        }
+        create = reverse("management_field_new") + "?editor=product"
+        self.assertContains(self.client.get(create), "definition-name")
+        strict = Client(enforce_csrf_checks=True)
+        strict.force_login(self.staff)
+        self.assertEqual(strict.post(create, definition).status_code, 403)
+        response = self.client.post(create, definition)
+        self.assertEqual(response.status_code, 200, response.content)
+        field = AttributeDefinition.objects.get(pk=response.json()["id"])
+        key = f"field_{field.pk}"
+        self.assertIn(key, response.json()["html"])
+        self.other.attributes.create(attribute=field, value_text="Глянец")
+        edit = reverse("management_field_edit", args=[field.pk]) + f"?editor=product&product={self.other.pk}"
+        self.assertEqual(self.client.post(edit, definition).status_code, 400)
+        response = self.client.post(edit, {**definition, "definition-name": "Отделка", "confirm_global": "1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Глянец", response.json()["html"])
+        self.assertIn("Отделка", response.json()["html"])
+
+        another = AttributeDefinition.objects.create(name="Плотность")
+        save = reverse("management_product_new")
+        self.assertEqual(self.client.post(save, self.product_data(
+            name="Новая коробка", remove_attribute=[field.pk], **{f"field_{another.pk}": "250"},
+        )).status_code, 302)
+        product = Product.objects.get(name="Новая коробка")
+        self.assertTrue(product.excluded_attribute_definitions.filter(pk=field.pk).exists())
+        self.assertEqual(product.attributes.get(attribute=another).value_text, "250")
+        self.assertNotContains(self.client.get(reverse("management_product_edit", args=[product.pk])), f'name="{key}"')
+
+        self.other.attributes.create(attribute=another, value_text="100")
+        existing = reverse("management_product_edit", args=[self.other.pk])
+        self.assertEqual(self.client.post(existing, self.product_data(
+            name=self.other.name, remove_attribute=[another.pk], **{key: "Глянец"},
+        )).status_code, 302)
+        self.assertEqual(self.other.attributes.get(attribute=field).value_text, "Глянец")
+        self.assertTrue(self.other.excluded_attribute_definitions.filter(pk=another.pk).exists())
+        self.assertFalse(self.other.attributes.filter(attribute=another).exists())
+        self.assertEqual(product.attributes.get(attribute=another).value_text, "250")
 
     def test_automatic_slug_collision_and_manual_titles(self):
         response = self.client.post(reverse("management_product_new"), self.product_data(

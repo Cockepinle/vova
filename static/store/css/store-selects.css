@@ -104,3 +104,66 @@ select[aria-invalid="true"], .search-select [aria-invalid="true"] { border-color
   min-height: 30px;
   cursor: pointer;
 }
+
+[data-management-user] select:focus { border-color: var(--line, #c4cfdb); }
+[data-management-user] select:focus-visible,
+[data-management-user] .search-select :is(summary, button):focus-visible {
+  outline: 2px solid color-mix(in srgb, currentColor 65%, transparent);
+  outline-offset: -3px;
+  box-shadow: none;
+}
+.search-select-menu { box-shadow: 0 10px 24px #182b4826; }
+.single-store-select { position: relative; }
+.single-store-select > summary { font-size: inherit; overflow-wrap: anywhere; }
+.single-store-select > summary::after { flex: none; }
+.single-store-select[open] > summary::after { transform: rotate(225deg); }
+.single-store-select > .search-select-menu {
+  position: absolute;
+  inset: 100% 0 auto;
+  z-index: 15;
+  max-height: min(18rem, 44dvh);
+  overscroll-behavior: contain;
+}
+.search-select-options button { border-radius: var(--radius-control, 8px); }
+@supports selector(::picker(select)) {
+  select:not([multiple], [size])::picker(select) {
+    margin-block: 4px;
+    padding: 4px;
+    box-shadow: 0 10px 24px #182b4826;
+    overscroll-behavior: contain;
+  }
+  select:not([multiple], [size]) option { border-radius: var(--radius-control, 8px); }
+  select:not([multiple], [size]) option:focus-visible { outline: 1px solid currentColor; outline-offset: -2px; }
+  @media (prefers-reduced-motion: no-preference) {
+    select:not([multiple], [size])::picker(select) {
+      opacity: 0;
+      translate: 0 -4px;
+      transition: opacity .18s ease, translate .18s ease, display .18s allow-discrete, overlay .18s allow-discrete;
+    }
+    select:not([multiple], [size]):open::picker(select) { opacity: 1; translate: 0; }
+    @starting-style {
+      select:not([multiple], [size]):open::picker(select) { opacity: 0; translate: 0 -4px; }
+    }
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .search-select [open] > .search-select-menu, .single-store-select[open] > .search-select-menu {
+    animation: store-select-enter .18s ease-out;
+  }
+  @keyframes store-select-enter { from { opacity: 0; transform: translateY(-4px); } }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports selector(details::details-content) {
+    .search-select details::details-content, .single-store-select::details-content {
+      opacity: 0;
+      transition: opacity .18s ease, content-visibility .18s allow-discrete;
+    }
+    .search-select details[open]::details-content, .single-store-select[open]::details-content {
+      opacity: 1;
+      transition-property: opacity;
+    }
+    .search-select details:not([open]) > .search-select-menu,
+    .single-store-select:not([open]) > .search-select-menu { pointer-events: none; }
+  }
+}
