@@ -142,7 +142,7 @@ class ContentWorkflowsTests(TestCase):
 
     def test_legal_preview_and_publish_use_sanitized_content(self):
         page, _ = PageContent.objects.update_or_create(
-            page="privacy", defaults={"is_visible": True, "content_text": "Старое дополнение"},
+            page="privacy", defaults={"is_visible": True, "content_text": "Старое дополнение", "document_html": ""},
         )
         public = reverse("document_page", args=["privacy"])
         self.assertContains(self.client.get(public), "Какие данные мы собираем")
@@ -152,14 +152,20 @@ class ContentWorkflowsTests(TestCase):
         self.assertIn("Старое дополнение", initial)
         data = {
             "page": "privacy", "is_visible": "on", "title": "Текст владельца",
+            "footer_label": "Политика магазина", "seo_title": "Заголовок поиска", "meta_description": "Описание документа",
             "content_text": "Старое дополнение",
             "document_html": (
                 '<h2>Обновление</h2><ul><li><a href="/contacts/">Контакты</a></li></ul>'
                 '<a href="https://[invalid">Ссылка</a><script>alert(1)</script>'
+                '<p style="text-align:center;position:fixed">Текст</p>'
+                '<ol start="3"><li>Первый<ol><li>Вложенный</li></ol></li></ol>'
+                '<table><tr><td colspan="2" onclick="alert(1)">Данные</td></tr></table>'
             ),
         }
         response = self.client.post(edit, {**data, "preview_document": "1"})
         self.assertContains(response, "<h2>Обновление</h2>", html=True)
+        self.assertContains(response, 'class="document-preview-banner"')
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
         page.refresh_from_db()
         self.assertEqual(page.document_html, "")
         self.assertEqual(self.client.post(edit, data).status_code, 302)
@@ -167,6 +173,31 @@ class ContentWorkflowsTests(TestCase):
         self.assertContains(response, "<h1>Текст владельца</h1>", html=True)
         self.assertContains(response, "<h2>Обновление</h2>", html=True)
         self.assertNotContains(response, "alert(1)")
+        self.assertNotContains(response, "position:fixed")
+        self.assertContains(response, 'style="text-align: center"')
+        self.assertContains(response, '<ol start="3">')
+        self.assertContains(response, '<td colspan="2">Данные</td>', html=True)
+        self.assertContains(response, "<title>Заголовок поиска</title>", html=True)
+        self.assertContains(response, "Политика магазина")
         self.assertNotContains(response, "Какие данные мы собираем")
         page.refresh_from_db()
         self.assertEqual(page.content_text, "Старое дополнение")
+
+    def test_legal_permissions_and_draft_visibility(self):
+        page = PageContent.objects.get(page="offer")
+        url = reverse("document_page", args=["offer"])
+        edit = reverse("management_page_edit", args=[page.pk])
+        listing = reverse("management_pages") + "?section=legal"
+        self.assertContains(self.client.get(listing), "Политика конфиденциальности")
+        data = {"title": "Оферта", "footer_label": "Оферта магазина", "document_html": "<p>Черновик</p>"}
+        self.assertRedirects(self.client.post(edit, {**data, "action": "continue"}), edit)
+        self.client.logout()
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertNotContains(self.client.get(reverse("home")), 'href="' + url + '"')
+        self.assertEqual(self.client.post(edit, data).status_code, 302)
+        staff = get_user_model().objects.create_user("viewer", is_staff=True)
+        self.client.force_login(staff)
+        self.assertEqual(self.client.get(listing).status_code, 403)
+        self.assertEqual(self.client.post(edit, {**data, "preview_document": "1"}).status_code, 403)
+        page.refresh_from_db()
+        self.assertEqual(page.document_html, "<p>Черновик</p>")

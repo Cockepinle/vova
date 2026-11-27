@@ -399,16 +399,10 @@ def media_library(request, form=None, replacement_form=None):
 @management_required
 def page_content_form(request, page_id=None):
     page = get_object_or_404(PageContent, pk=page_id) if page_id else None
+    from .legal import LEGAL_KEYS, edit_document
 
-    document_preview = None
-    is_document = page and not page.is_custom and page.page in {"privacy", "offer"}
-    if is_document:
-        from ..views.catalog import default_document
-
-        original_document = render_to_string("store/partials/document_text.html", {
-            "document": default_document(page.page),
-            "current_page": page,
-        }).strip()
+    if page and not page.is_custom and page.page in LEGAL_KEYS:
+        return edit_document(request, page)
     tabs = {
         "texts": ("Тексты страниц", ("title", "h1", "content_title", "content_subtitle", "content_text", "b2b_title")),
         "banners": ("Баннеры", ("hero_label", "subtitle", "hero_button_text", "hero_button_url")),
@@ -416,25 +410,15 @@ def page_content_form(request, page_id=None):
         "properties": ("Свойства и доступ", ("page_type", "page", "slug", "parent", "sort_order", "is_visible", "requires_login")),
         "seo": ("SEO", ("seo_title", "meta_description", "canonical", "og_title", "og_description", "og_media", "noindex")),
     }
-    if is_document:
-        tabs["texts"] = ("Юридический текст", ("title", "h1", "document_html"))
     tab = request.GET.get("tab") or ("texts" if page else "properties")
     if tab not in tabs:
         tab = "texts"
 
     if request.method == "POST":
         form = PageContentForm(request.POST, request.FILES, instance=page)
-        if is_document and request.POST.get("preview_document"):
-            if form.is_valid():
-                document_preview = _sanitize_html(form.cleaned_data["document_html"], limit=40000) or original_document
-        elif form.is_valid():
+        if form.is_valid():
             is_new = page is None
             try:
-                if is_document and "document_html" in request.POST:
-                    source = form.cleaned_data["document_html"].replace("\r\n", "\n")
-                    form.instance.document_html = (
-                        _sanitize_html(source, limit=40000) if source != original_document else ""
-                    )
                 page = form.save()
             except OSError:
                 form.add_error("hero_image", "Не удалось записать изображение. Повторите загрузку позже.")
@@ -445,25 +429,23 @@ def page_content_form(request, page_id=None):
         if form.errors:
             messages.error(request, "Проверьте ошибки в форме.")
     else:
-        if is_document:
-            initial = {"document_html": page.document_html or original_document}
-        else:
-            initial = {"page": request.GET["page"]} if page is None and request.GET.get("page") in {"privacy", "offer"} else None
-        form = PageContentForm(instance=page, initial=initial)
+        form = PageContentForm(instance=page)
 
     return render(request, "store/management/page_content_form.html", {
         "section": "pages", "content_section": tab if tab in {"texts", "images", "banners"} else "texts",
         "page_content": page, "form": form, "active_tab": tab,
         "tabs": [(key, label, [form[name] for name in fields]) for key, (label, fields) in tabs.items()],
         "preview_url": _page_preview_url(page) if page else "",
-        "is_document": is_document, "document_preview": document_preview,
     })
 
 
 @management_required
 def page_content_list(request):
+    if request.GET.get("section") == "legal":
+        from .legal import list_documents
+
+        return list_documents(request)
     pages = list(PageContent.objects.select_related("parent").order_by("sort_order", "page"))
-    documents = {page.page: page for page in pages if not page.is_custom and page.page in {"privacy", "offer"}}
     children = {}
     for page in pages:
         page.tree_url = (
@@ -507,7 +489,6 @@ def page_content_list(request):
             "section": "pages",
             "content_section": content_section,
             "content_title": sections[content_section],
-            "document_links": [(slug, label, documents.get(slug)) for slug, label in PageContent.PAGE_CHOICES if slug in {"privacy", "offer"}],
         "page_tree": tree,
             "page_count": len(pages),
             "query": query,
@@ -624,19 +605,22 @@ class _BuilderHTMLSanitizer(HTMLParser):
             return
         if tag not in self.allowed_tags:
             return
-        safe_attrs = []
-        if tag == "a":
-            attributes = dict(attrs)
-            href = _safe_builder_url(attributes.get("href"))
-            if href:
-                safe_attrs.append(f'href="{html.escape(href, quote=True)}"')
-            title = attributes.get("title")
-            if title:
-                safe_attrs.append(f'title="{html.escape(title[:180], quote=True)}"')
-        attrs_text = " " + " ".join(safe_attrs) if safe_attrs else ""
+        safe_attrs = self.safe_attributes(tag, dict(attrs))
+        attrs_text = "".join(f' {name}="{html.escape(value, quote=True)}"' for name, value in safe_attrs.items())
         self.output.append(f"<{tag}{attrs_text}>")
         if tag not in self.void_tags:
             self.open_tags.append(tag)
+
+    def safe_attributes(self, tag, attributes):
+        safe_attrs = {}
+        if tag == "a":
+            href = _safe_builder_url(attributes.get("href"))
+            if href:
+                safe_attrs["href"] = href
+            title = attributes.get("title")
+            if title:
+                safe_attrs["title"] = title[:180]
+        return safe_attrs
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)

@@ -1,0 +1,15 @@
+.legal-editor .form-grid > div { min-width: 0; display: grid; gap: 5px; }
+.legal-editor :is(input:not([type="checkbox"]), textarea) { width: 100%; }
+.legal-toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 8px; }
+.legal-toolbar[hidden], .legal-surface[hidden], [data-legal-source][hidden] { display: none; }
+.legal-toolbar :is(button, select) { min-height: 44px; max-width: 100%; white-space: normal; }
+.legal-surface {
+  min-height: 20rem;
+  padding: clamp(12px, 3vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+}
+.legal-surface:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.legal-editor .form-actions { flex-wrap: wrap; }

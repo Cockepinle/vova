@@ -344,40 +344,48 @@ function renderCart(cart, {saveDraft = true} = {}) {
   syncProductCards(cart);
 
   if (!cart.items.length) {
-    cartItems.innerHTML = '<p class="cart-empty">Корзина пуста</p>';
+    cartItems.innerHTML = '<div class="cart-empty-state"><p>Корзина пуста</p><a href="/catalog/">Перейти в каталог</a></div>';
     updateCartBulkState();
     return;
   }
 
+  const excludedSpecLabels = new Set(["Артикул", "Категория", "Наличие", "На складе", "Минимальный заказ", "НДС"]);
   cartItems.innerHTML = cart.items
     .map(
-      (item) => `
+      (item) => {
+        const specs = Array.isArray(item.product.specs)
+          ? item.product.specs.filter(([label]) => label && !excludedSpecLabels.has(label))
+          : [];
+        return `
         <article class="cart-item" data-product-id="${escapeHtml(item.id)}" data-product='${escapeHtml(JSON.stringify(item.product))}'>
           <label class="cart-select">
             <input class="cart-select-item" type="checkbox" aria-label="Выбрать товар" ${selected.has(item.id) ? "checked" : ""}>
           </label>
-          <img src="${escapeHtml(item.image)}" alt="">
+          <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}">
           <div class="cart-item-info">
             <div class="cart-item-title">
+              <p class="cart-item-sku">${escapeHtml(item.sku || "Артикул не указан")}</p>
               <h3>${escapeHtml(item.name)}</h3>
-              <p>${escapeHtml(item.sku)}</p>
             </div>
             <button class="favorite-button cart-favorite ${isProductFavorite(item.id) ? "is-active" : ""}" type="button" aria-pressed="${isProductFavorite(item.id)}" aria-label="${isProductFavorite(item.id) ? "Убрать из избранного" : "Добавить в избранное"}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
             </button>
+            <div class="cart-item-specs">${specs.map(([label, value]) => `<span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</span>`).join("")}</div>
+            <small class="cart-unit-price">${escapeHtml(item.price)} ₽ / ${escapeHtml(item.unit)}</small>
             <div class="cart-item-row">
               <div class="quantity-control cart-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество" ${Number(item.quantity) <= Math.max(1, Number(item.min_quantity) || 1) ? "disabled" : ""}>−</button>
                 <span>${item.quantity}</span>
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
-              <strong data-price="${item.price}">${item.line_total} ₽</strong>
+              <strong class="cart-line-total" data-price="${escapeHtml(item.price)}">${escapeHtml(item.line_total)} ₽</strong>
             </div>
             <small class="cart-min-quantity">Мин. заказ: ${item.min_quantity} ${escapeHtml(item.unit)} · шаг ${item.product.quantity_step}</small>
           </div>
           <button class="cart-remove" type="button" aria-label="Удалить">×</button>
         </article>
-      `,
+      `;
+      },
     )
     .join("");
   updateCartBulkState();
@@ -472,7 +480,7 @@ document.addEventListener("click", (event) => {
 
   const otherSection = event.target.closest(".mobile-actions .js-account-open, .mobile-actions .js-favorites-open");
   if (otherSection) otherSection.focus({preventScroll: true});
-  if (event.target.closest(".cart-close") || event.target === drawer) {
+  if (event.target.closest(".cart-close") || (event.target === drawer && !matchMedia("(min-width: 721px)").matches)) {
     closeCartDrawer();
   }
 

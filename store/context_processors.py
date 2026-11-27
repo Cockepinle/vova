@@ -14,6 +14,7 @@ def site_content(request):
     except Exception:
         settings = None
         pages = {}
+    published_legal = {key for key in ("privacy", "offer") if key in pages}
 
     try:
         nodes = {}
@@ -67,6 +68,7 @@ def site_content(request):
         "footer_links": [link for link in links if link.location == "footer"],
         "social_links": [link for link in links if link.location == "social"],
         "site_settings": settings,
+        "published_legal": published_legal,
         "page_content": pages,
         "footer_categories": footer_categories,
         "new_orders_count": new_orders_count,

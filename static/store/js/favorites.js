@@ -41,6 +41,17 @@ function renderFavoriteDrawer(items) {
     const sku = card.querySelector(".favorite-sku");
     sku.textContent = product.sku;
     sku.hidden = !product.sku;
+    const attributes = card.querySelector(".favorite-attributes");
+    const hiddenSpecs = new Set(["Артикул", "Категория", "Наличие", "На складе", "Минимальный заказ", "НДС"]);
+    attributes.replaceChildren(...(Array.isArray(product.specs) ? product.specs : [])
+      .filter(([label]) => label && !hiddenSpecs.has(label))
+      .map(([label, value]) => {
+        const detail = document.createElement("span");
+        const name = document.createElement("strong");
+        name.textContent = label + ": ";
+        detail.append(name, document.createTextNode(value));
+        return detail;
+      }));
     card.querySelector(".favorite-price").textContent = product.price + " ₽";
     card.querySelector(".favorite-unit").textContent = "/ " + product.unit;
     const input = card.querySelector(".quantity-input");
@@ -178,7 +189,7 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  if (closeButton || (drawer && event.target === drawer)) {
+  if (closeButton || (drawer && event.target === drawer && !matchMedia("(min-width: 721px)").matches)) {
     closeStoreSideDrawers();
     return;
   }

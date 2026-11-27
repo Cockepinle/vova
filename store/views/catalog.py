@@ -1,5 +1,6 @@
 from urllib.parse import urlencode, urlsplit
 
+from django.http import Http404
 from django.template.loader import render_to_string
 from django.views.decorators.cache import never_cache
 
@@ -28,129 +29,17 @@ def contacts(request):
         context,
     )
 
-def default_document(slug):
-    settings = safe_site_settings()
-    get_setting = lambda name, default: getattr(settings, name, default) if settings else default
-    site_name = get_setting("site_name", "PakLine")
-    company_name = get_setting("company_name", "ООО «ПакЛайн»")
-    company_inn = get_setting("company_inn", "7701234567")
-    company_kpp = get_setting("company_kpp", "770101001")
-    contact_phone = get_setting("contact_phone", "+7 (800) 555-38-22")
-    contact_email = get_setting("contact_email", "info@pakline.ru")
-    contact_address = get_setting("contact_address", "г. Москва, ул. Складская, д. 14")
-    contact_work_hours = get_setting("contact_work_hours", "ПН–ПТ 9:00–18:00")
-    documents = {
-        "privacy": {
-            "title": "Политика конфиденциальности",
-            "lead": f"{site_name} обрабатывает персональные данные клиентов для связи, подготовки коммерческих предложений, оформления заказов и работы личного кабинета.",
-            "sections": [
-                {
-                    "title": "Какие данные мы собираем",
-                    "items": [
-                        "Имя, телефон, email, название компании и текст обращения из форм сайта.",
-                        "Данные аккаунта: email, пароль в хэшированном виде, корзина и избранное.",
-                        "Технические данные: cookies, IP-адрес, сведения о браузере и действиях на сайте.",
-                    ],
-                },
-                {
-                    "title": "Зачем нужны данные",
-                    "items": [
-                        "Чтобы связаться с клиентом, подготовить коммерческое предложение и оформить заказ.",
-                        "Чтобы сохранять корзину, избранное и историю заявок пользователя.",
-                        "Чтобы обеспечивать безопасность сайта и улучшать удобство сервиса.",
-                    ],
-                },
-                {
-                    "title": "Передача и хранение",
-                    "items": [
-                        "Данные не продаются третьим лицам.",
-                        "Передача возможна только подрядчикам, которые помогают обработать заказ, доставку или поддержку сайта.",
-                        f"Запросить уточнение, удаление или изменение данных можно по email {contact_email} или телефону {contact_phone}.",
-                    ],
-                },
-                {
-                    "title": "Оператор данных",
-                    "items": [
-                        f"{company_name}, ИНН {company_inn}, КПП {company_kpp}.",
-                        f"Адрес: {contact_address}.",
-                        f"Время работы: {contact_work_hours}.",
-                    ],
-                },
-            ],
-        },
-        "offer": {
-            "title": "Оферта",
-            "lead": f"{company_name} предлагает картонные коробки для отправлений, переезда, хранения и архива на условиях, согласованных при оформлении заказа.",
-            "sections": [
-                {
-                    "title": "Предмет оферты",
-                    "items": [
-                        f"{site_name} предлагает картонные коробки для отправлений, переезда, хранения и архива.",
-                        "Информация на сайте носит справочный характер и может уточняться менеджером перед оплатой.",
-                    ],
-                },
-                {
-                    "title": "Оформление, оплата и доставка",
-                    "items": [
-                        f"Заказ оформляется через сайт, по телефону {contact_phone}, email {contact_email} или через менеджера.",
-                        "Стоимость, наличие, сроки доставки и условия оплаты подтверждаются в счёте или договоре.",
-                        f"Самовывоз доступен по адресу: {contact_address}. Доставка выполняется по согласованному адресу.",
-                    ],
-                },
-                {
-                    "title": "Возврат и ответственность",
-                    "items": [
-                        "Возврат и обмен выполняются по действующему законодательству РФ и согласованным условиям поставки.",
-                        "Стороны несут ответственность за достоверность предоставленных данных и выполнение согласованных обязательств.",
-                        "Реквизиты продавца указаны на странице контактов и в счёте на оплату.",
-                    ],
-                },
-                {
-                    "title": "Реквизиты продавца",
-                    "items": [
-                        f"{company_name}.",
-                        f"ИНН {company_inn}, КПП {company_kpp}.",
-                        f"Контакты: {contact_phone}, {contact_email}.",
-                    ],
-                },
-            ],
-        },
-        "cookies": {
-            "title": "Управление cookie",
-            "lead": f"{site_name} использует cookie для работы сайта, авторизации, корзины, избранного и улучшения сервиса.",
-            "sections": [
-                {
-                    "title": "Как изменить выбор",
-                    "items": [
-                        "Нажмите «Управление cookie» в подвале сайта.",
-                        "Выберите, какие категории cookie разрешить.",
-                        "Сохраните настройки — выбор будет запомнен в браузере.",
-                    ],
-                },
-                {
-                    "title": "Контакты по вопросам cookie",
-                    "items": [
-                        f"По вопросам обработки данных можно написать на {contact_email}.",
-                        f"Также можно связаться по телефону {contact_phone}.",
-                    ],
-                },
-            ],
-        },
-    }
-    return documents.get(slug, documents["privacy"])
-
-
+@never_cache
 def document_page(request, slug):
-    editable = PageContent.objects.filter(page=slug, is_custom=False, is_visible=True).first() if slug in {"privacy", "offer"} else None
-    from ..cms.content import _sanitize_html
-    context = {
-        "document": default_document(slug),
-        "formatted_document": _sanitize_html(editable.document_html, limit=40000) if editable else "",
-        "show_footer_cta": False,
-    }
-    apply_common_context(request, context)
+    from ..cms.legal import LEGAL_KEYS, render_document
 
-    return render(request, "store/document.html", context)
+    if slug == "cookies":
+        return render_document(request, slug)
+    if slug not in LEGAL_KEYS:
+        raise Http404
+    page = get_object_or_404(PageContent, page=slug, is_custom=False, is_visible=True)
+    return render_document(request, slug, page)
+
 
 def home(request):
     settings = safe_site_settings()

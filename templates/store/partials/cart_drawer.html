@@ -6,6 +6,7 @@
       <h2 id="cart-title">Корзина <span>({{ cart_count }})</span></h2>
       {% if request.resolver_match.url_name != "catalog" %}<a class="cart-catalog-link" href="{% url 'catalog' %}">В каталог</a>{% endif %}
       <button class="cart-close" type="button" aria-label="Закрыть">×</button>
+      {% include "store/partials/panel_switcher.html" %}
     </header>
     <div class="cart-bulk-actions" {% if not cart_items %}hidden{% endif %}>
       <label>
@@ -21,29 +22,40 @@
           <label class="cart-select">
             <input class="cart-select-item" type="checkbox" aria-label="Выбрать товар">
           </label>
-          <img src="{{ item.image }}" alt="">
+          <img src="{{ item.image }}" alt="{{ item.name }}">
           <div class="cart-item-info">
             <div class="cart-item-title">
+              <p class="cart-item-sku">{{ item.sku|default:"Артикул не указан" }}</p>
               <h3>{{ item.name }}</h3>
-              <p>{{ item.sku }}</p>
             </div>
             <button class="favorite-button cart-favorite {% if item.id in favorite_ids %}is-active{% endif %}" type="button" aria-pressed="{% if item.id in favorite_ids %}true{% else %}false{% endif %}" aria-label="{% if item.id in favorite_ids %}Убрать из избранного{% else %}Добавить в избранное{% endif %}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
             </button>
+            <div class="cart-item-specs">
+              {% for label, value in item.product.specs %}
+                {% if label != "Артикул" and label != "Категория" and label != "Наличие" and label != "На складе" and label != "Минимальный заказ" and label != "НДС" %}
+                  <span><strong>{{ label }}:</strong> {{ value }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <small class="cart-unit-price">{{ item.price }} ₽ / {{ item.unit }}</small>
             <div class="cart-item-row">
               <div class="quantity-control cart-quantity" aria-label="Количество">
                 <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if item.quantity <= item.product.min_quantity %}disabled{% endif %}>−</button>
                 <span>{{ item.quantity }}</span>
                 <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
               </div>
-              <strong data-price="{{ item.price }}">{{ item.line_total }} ₽</strong>
+              <strong class="cart-line-total" data-price="{{ item.price }}">{{ item.line_total }} ₽</strong>
             </div>
             <small class="cart-min-quantity">Мин. заказ: {{ item.product.min_quantity }} {{ item.unit }} · шаг {{ item.product.quantity_step }}</small>
           </div>
           <button class="cart-remove" type="button" aria-label="Удалить">×</button>
         </article>
       {% empty %}
-        <p class="cart-empty">Корзина пуста</p>
+        <div class="cart-empty-state">
+          <p>Корзина пуста</p>
+          <a href="{% url 'catalog' %}">Перейти в каталог</a>
+        </div>
       {% endfor %}
     </div>
     <footer class="cart-panel-footer">

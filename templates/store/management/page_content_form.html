@@ -18,14 +18,6 @@
     {% endfor %}
   </div>
   {{ form.non_field_errors }}
-  {% if is_document %}
-    <p class="section-help">Последнее изменение: {{ page_content.updated_at|date:"d.m.Y H:i" }}. Пустое поле оставляет прежний текст на сайте.</p>
-    {% if document_preview is not None %}
-      <section class="mgmt-card document-editor-preview"><h2>Предпросмотр</h2><h3>{{ form.h1.value|default:form.title.value }}</h3>
-        {% if document_preview %}{{ document_preview|safe }}{% else %}<p>На сайте будет показан прежний текст.</p>{% endif %}
-      </section>
-    {% endif %}
-  {% endif %}
   {% for key, label, fields in tabs %}
     <section class="settings-section page-editor-panel{% if key == active_tab %} active{% endif %}" id="panel-{{ key }}" role="tabpanel" aria-labelledby="tab-{{ key }}" data-page-panel="{{ key }}" {% if key != active_tab %}hidden{% endif %}>
       <div class="form-grid">
@@ -34,7 +26,7 @@
           {% elif field.name == "hero_media" %}
             {% include "store/management/content_image_field.html" with fallback=form.instance.hero_url remove=form.remove_hero upload=form.hero_image %}
           {% else %}
-            <label data-page-field="{{ field.name }}" class="{% if field.name == 'content_text' or field.name == 'subtitle' or field.name == 'document_html' %}full{% endif %}"><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
+            <label data-page-field="{{ field.name }}" class="{% if field.name == 'content_text' or field.name == 'subtitle' %}full{% endif %}"><span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>
           {% endif %}
         {% endfor %}
       </div>

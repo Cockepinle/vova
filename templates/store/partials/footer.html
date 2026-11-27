@@ -52,8 +52,8 @@
   <section class="footer-bottom">
     <p>{{ site_settings.copyright_text|default:"© 2025 ООО «ПакЛайн». Все права защищены." }}</p>
     <nav aria-label="Документы">
-      <a href="{{ site_settings.footer_privacy_url|default:'/documents/privacy/' }}">{{ site_settings.footer_privacy_label|default:"Политика конфиденциальности" }}</a>
-      <a href="{{ site_settings.footer_offer_url|default:'/documents/offer/' }}">{{ site_settings.footer_offer_label|default:"Оферта" }}</a>
+      {% if "privacy" in published_legal or document_preview and current_page.page == "privacy" %}<a href="{{ site_settings.footer_privacy_url|default:'/documents/privacy/' }}">{{ site_settings.footer_privacy_label|default:"Политика конфиденциальности" }}</a>{% endif %}
+      {% if "offer" in published_legal or document_preview and current_page.page == "offer" %}<a href="{{ site_settings.footer_offer_url|default:'/documents/offer/' }}">{{ site_settings.footer_offer_label|default:"Оферта" }}</a>{% endif %}
       <button class="footer-link-button js-cookie-settings" type="button">Управление cookie</button>
     </nav>
   </section>

@@ -1,0 +1,57 @@
+{% extends "store/management/base.html" %}
+{% load static %}
+{% block title %}{{ document.get_page_display }}{% endblock %}
+{% block heading %}{{ document.get_page_display }}{% endblock %}
+{% block management_styles %}
+<link rel="stylesheet" href="{% static 'store/css/legal-copy.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'store/css/legal-editor.css' %}?v=1">
+{% endblock %}
+{% block content %}
+<form method="post" class="mgmt-card mgmt-form legal-editor" data-legal-editor>
+  {% csrf_token %}
+  <p class="section-help">Последнее обновление · {{ document.updated_at|date:"d.m.Y H:i" }}</p>
+  {{ form.non_field_errors }}
+  <div class="form-grid">
+    {% for field in form %}{% if field.name != "document_html" %}
+      <div class="{% if field.name == 'meta_description' %}full{% endif %}">
+        {{ field.label_tag }} {{ field }} {{ field.errors }}
+      </div>
+    {% endif %}{% endfor %}
+  </div>
+  <div>
+    <label for="{{ form.document_html.id_for_label }}">{{ form.document_html.label }}</label>
+    <div class="legal-toolbar" role="group" aria-label="Форматирование документа" hidden>
+      <select data-legal-block aria-label="Тип абзаца">
+        <option value="p">Абзац</option><option value="h2">Заголовок</option>
+        <option value="h3">Подзаголовок</option><option value="h4">Заголовок 3-го уровня</option>
+      </select>
+      <button type="button" class="ghost-button" data-command="bold"><strong>Полужирный</strong></button>
+      <button type="button" class="ghost-button" data-command="italic"><em>Курсив</em></button>
+      <button type="button" class="ghost-button" data-command="underline"><u>Подчёркнутый</u></button>
+      <button type="button" class="ghost-button" data-command="insertOrderedList">Нумерация</button>
+      <button type="button" class="ghost-button" data-command="insertUnorderedList">Маркеры</button>
+      <button type="button" class="ghost-button" data-command="indent">Увеличить отступ</button>
+      <button type="button" class="ghost-button" data-command="outdent">Уменьшить отступ</button>
+      <select data-legal-align aria-label="Выравнивание">
+        <option value="">Выравнивание</option><option value="justifyLeft">Слева</option><option value="justifyCenter">По центру</option>
+        <option value="justifyRight">Справа</option><option value="justifyFull">По ширине</option>
+      </select>
+      <button type="button" class="ghost-button" data-command="createLink">Ссылка</button>
+      <button type="button" class="ghost-button" data-command="unlink">Убрать ссылку</button>
+      <button type="button" class="ghost-button" data-command="table">Таблица</button>
+      <button type="button" class="ghost-button" data-command="undo">Отменить</button>
+      <button type="button" class="ghost-button" data-command="redo">Повторить</button>
+      <button type="button" class="ghost-button" data-command="removeFormat">Очистить формат</button>
+    </div>
+    <div class="legal-surface legal-copy" contenteditable="true" role="textbox" aria-label="Текст документа" aria-multiline="true" hidden></div>
+    {{ form.document_html }} {{ form.document_html.errors }}
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="primary-button" name="action" value="save">Сохранить</button>
+    <button type="submit" class="ghost-button" name="action" value="continue">Сохранить и продолжить редактирование</button>
+    <button type="submit" class="ghost-button" name="preview_document" value="1" formtarget="_blank">Предварительный просмотр</button>
+    <a class="ghost-button" href="{% url 'management_pages' %}?section=legal">Отмена</a>
+  </div>
+</form>
+{% endblock %}
+{% block management_scripts %}<script src="{% static 'store/js/legal-editor.js' %}?v=1"></script>{% endblock %}

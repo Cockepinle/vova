@@ -13,6 +13,8 @@ def sitemap_xml(request):
         paths = []
         for key, path in PAGE_PATHS.items():
             page = pages.get(key)
+            if key in {"privacy", "offer"} and not page:
+                continue
             if not (page and page.noindex):
                 paths.append((page.canonical if page and page.canonical else path, page.updated_at if page else None))
         for category in get_store_categories_queryset():

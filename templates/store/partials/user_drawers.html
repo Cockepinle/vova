@@ -4,6 +4,7 @@
     <header class="drawer-header">
       <h2 id="favorites-title">Избранное</h2>
       <button class="drawer-close" type="button" aria-label="Закрыть">×</button>
+      {% include "store/partials/panel_switcher.html" %}
     </header>
     <template data-favorite-card>{% include "store/partials/favorite_item.html" with product=None only %}</template><div class="favorite-items">
       {% for product in favorite_products %}
@@ -23,6 +24,7 @@
     <header class="drawer-header">
       <h2 id="account-title">Личный кабинет</h2>
       <button class="drawer-close" type="button" aria-label="Закрыть">×</button>
+      {% include "store/partials/panel_switcher.html" %}
     </header>
 
     {% if account_user %}

@@ -1,0 +1,18 @@
+{% extends "store/management/base.html" %}
+{% block title %}Юридические документы{% endblock %}
+{% block heading %}Юридические документы{% endblock %}
+{% block content %}
+  <div class="mgmt-form-grid">
+    {% for document in documents %}
+      <article class="mgmt-card">
+        <h2>{{ document.get_page_display }}</h2>
+        {% if document.title %}<p>{{ document.title }}</p>{% endif %}
+        <p>{% if document.is_visible %}Опубликован{% else %}Черновик{% endif %} · Обновлён {{ document.updated_at|date:"d.m.Y H:i" }}</p>
+        <div class="toolbar-actions">
+          <a class="primary-button" href="{% url 'management_page_edit' document.pk %}">Редактировать</a>
+          {% if document.is_visible %}<a class="ghost-button" href="{% url 'document_page' document.page %}">На сайте</a>{% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% endblock %}

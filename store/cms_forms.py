@@ -691,11 +691,6 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
 
 
 class PageContentForm(ContentValidationMixin, forms.ModelForm):
-    document_html = forms.CharField(
-        label="Текст документа с форматированием", required=False, max_length=40000,
-        widget=forms.Textarea(attrs={"rows": 20}),
-        help_text="Используйте HTML: <p>, <h2>, <h3>, <ul>, <ol>, <li>, <a href=…>, <strong>, <em>.",
-    )
     remove_hero = forms.BooleanField(required=False, widget=forms.HiddenInput())
     page_type = forms.ChoiceField(
         label="Тип страницы",
@@ -716,9 +711,6 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         custom = bool(self.instance.pk and self.instance.is_custom)
-        legal = self.instance.page in {"privacy", "offer"} and not custom
-        if not legal:
-            self.fields.pop("document_html")
         self.fields["page_type"].initial = "custom" if custom else "fixed"
         self.fields["page_type"].disabled = bool(self.instance.pk)
         if self.instance.pk:
@@ -727,10 +719,6 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
             self.fields["page"].required = not custom
             if custom:
                 self.fields["page"].widget = forms.HiddenInput()
-            elif legal:
-                self.fields["page"].disabled = True
-                for name in ("content_title", "content_subtitle", "content_text", "b2b_title"):
-                    self.fields[name].disabled = True
         else:
             used_pages = PageContent.objects.filter(is_custom=False).values_list("page", flat=True)
             self.fields["page"].choices = [
@@ -806,8 +794,6 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
         if commit:
             if page.pk:
                 fields = [*self.Meta.fields, "is_custom", "updated_at"]
-                if "document_html" in self.fields and "document_html" in self.data:
-                    fields.append("document_html")
                 page.save(update_fields=fields)
             else:
                 page.save()

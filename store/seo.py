@@ -27,9 +27,9 @@ def category_seo_defaults(request, settings, name, slug, description):
     return {"slug": slug, "h1": name, "seo_title": name, "meta_description": description.strip()[:320], "canonical": canonical}
 
 
-def metadata(request, settings, pages):
+def metadata(request, settings, pages, *, page_key=None):
     match = request.resolver_match
-    key = match.url_name if match else 'home'
+    key = page_key or (match.url_name if match else 'home')
     if key == 'document_page':
         key = match.kwargs.get('slug', 'privacy')
     if key in {'product_detail', 'api_products'}:

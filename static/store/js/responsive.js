@@ -43,6 +43,8 @@
   // Observe existing drawers so every entry point shares focus and scroll behaviour.
   const overlays = [...document.querySelectorAll('.product-modal, .cart-drawer, .checkout-drawer, .side-drawer, .cookie-modal, .image-lightbox, .catalog-mobile-category-tree, .catalog-mobile-filter-panel, .catalog-mobile-sort-panel')];
   const cart = document.querySelector('.cart-drawer');
+  const storeDrawers = new Set([cart, ...document.querySelectorAll('.side-drawer')].filter(Boolean));
+  const desktop = matchMedia('(min-width: 721px)');
   const navigationPanels = new Map(
     [...(bar?.querySelectorAll('button[data-store-panel]') || [])]
       .map(button => [document.getElementById(button.dataset.storePanel), button])
@@ -74,14 +76,19 @@
     const cartOpen = Boolean(cart && opened.includes(cart));
     const cartOnly = cartOpen && opened.length === 1;
     const navigationOnly = opened.length === 1 && navigationPanels.has(opened[0]);
+    const storeDrawerOnly = opened.length === 1 && storeDrawers.has(opened[0]);
     document.body.classList.toggle('overlay-active', opened.length > 0);
-    syncOverlayScroll(opened.length > 0);
+    document.body.classList.toggle('store-drawer-open', storeDrawerOnly);
+    syncOverlayScroll(opened.some(el => !(desktop.matches && storeDrawers.has(el))));
     document.body.classList.toggle('cart-only-open', cartOnly);
     document.body.classList.toggle('store-panel-only-open', navigationOnly);
+    for (const el of storeDrawers) {
+      el.querySelector('[role="dialog"]')?.setAttribute('aria-modal', String(!desktop.matches));
+    }
     for (const [panel, button] of navigationPanels) {
       button.classList.toggle('is-active', navigationOnly && opened.includes(panel));
       button.setAttribute('aria-expanded', String(opened.includes(panel)));
-      panel.querySelector('[role="dialog"]')?.setAttribute('aria-modal', String(!mobile.matches || !navigationOnly));
+      panel.querySelector('[role="dialog"]')?.setAttribute('aria-modal', String(mobile.matches && !navigationOnly));
     }
     for (const el of [...stack].reverse()) if (!opened.includes(el)) {
       stack = stack.filter(item => item !== el);
@@ -112,10 +119,11 @@
       if (top === cart) close?.focus({preventScroll: true});
       close?.click();
     }
+    if (e.key === 'Tab' && desktop.matches && storeDrawers.has(top)) return;
     if (e.key === 'Tab') {
       const items = focusable(top);
-      const includeBar = navigationPanels.has(top) && mobile.matches &&
-        document.body.classList.contains('store-panel-only-open') && getComputedStyle(bar).visibility === 'visible';
+      const includeBar = (navigationPanels.has(top) || top === cart) && mobile.matches &&
+        document.body.classList.contains('store-drawer-open') && getComputedStyle(bar).visibility === 'visible';
       if (includeBar) items.push(...focusable(bar));
       const index = items.indexOf(document.activeElement);
       if (items.length && includeBar) {
