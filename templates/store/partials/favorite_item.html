@@ -1,0 +1,21 @@
+{% load store_extras %}
+<article class="favorite-item" data-product-id="{{ product.id }}" data-product='{{ product|to_json }}'>
+  <img class="favorite-photo" {% if product.image %}src="{{ product.image }}"{% endif %} alt="">
+  <div class="favorite-copy">
+    <span class="favorite-sku" {% if not product.sku %}hidden{% endif %}>{{ product.sku }}</span>
+    <h3><a class="favorite-product-link" href="{{ product.url }}">{{ product.name }}</a></h3>
+    <p><strong class="favorite-price">{{ product.price }} ₽</strong> <span class="favorite-unit">/ {{ product.unit }}</span></p>
+  </div>
+  <button class="favorite-button favorite-remove is-active" type="button" aria-label="Убрать из избранного">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
+  </button>
+  <div class="favorite-actions">
+    <div class="quantity-control favorite-quantity" role="group" aria-label="Количество">
+      <button class="quantity-minus" type="button" aria-label="Уменьшить количество" {% if not product.can_purchase %}disabled{% endif %}>−</button>
+      <input class="quantity-input" type="number" min="{{ product.min_quantity|default:1 }}" step="{{ product.quantity_step|default:1 }}" value="{{ product.min_quantity|default:1 }}" aria-label="Количество товара" {% if not product.can_purchase %}disabled{% endif %}>
+      <button class="quantity-plus" type="button" aria-label="Увеличить количество" {% if not product.can_purchase %}disabled{% endif %}>+</button>
+    </div>
+    <button class="favorite-add-cart" type="button" {% if not product.can_purchase %}data-purchase-disabled disabled{% endif %}>{% if product.can_purchase %}В корзину{% else %}Нет в наличии{% endif %}</button>
+    <button class="favorite-remove-cart" type="button" hidden>Убрать из корзины</button>
+  </div>
+</article>

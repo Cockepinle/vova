@@ -8,6 +8,7 @@ import os
 import re
 from pathlib import Path
 import sys
+import traceback
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -43,7 +44,8 @@ from store.models import (
 from store.test_media_uploads import image_file
 
 
-WIDTHS = (320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920)
+VIEWPORTS = [(width, 844) for width in (320, 360, 375, 390, 393, 414, 430, 768, 1024, 1280, 1440, 1920)]
+VIEWPORTS += [(667, 375), (852, 393)]
 LAYOUT = """() => {
   const doc = document.documentElement;
   const containers = [doc, ...document.querySelectorAll('.header-inner, .catalog-content, .contact-layout, .mgmt-main, .record-table-wrap, .checkout-panel, .cart-panel, .drawer-panel, .modal-card, .media-picker-dialog')];
@@ -93,6 +95,8 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         self.employee = Employee.objects.create(name="Audit Employee", role="Sales", status=Employee.STATUS_PUBLISHED)
         self.quote = CustomerRequest.objects.create(name="Audit Buyer", email="buyer@example.test", text="Boxes needed")
         self.media = SiteMedia.objects.create(title="Audit photo", file=image_file("photo.webp", "WEBP"))
+        self.category.image_media = self.media
+        self.category.save(update_fields=["image_media"])
         self.order = Order.objects.create(user=self.customer, full_name="Audit Buyer", email="buyer@example.test", total=250)
         OrderItem.objects.create(order=self.order, product=self.product, product_name=self.product.name, quantity=2, price=125, line_total=250)
         self.promotion = Promotion.objects.create(title="Audit promotion")
@@ -191,11 +195,105 @@ class ResponsiveAudit(StaticLiveServerTestCase):
             if not response or response.status != 200:
                 failures.append((path, response.status if response else "no response"))
                 continue
-            for width in WIDTHS:
-                page.set_viewport_size({"width": width, "height": 844})
+            for width, height in VIEWPORTS:
+                page.set_viewport_size({"width": width, "height": height})
                 page.evaluate("() => new Promise(resolve => requestAnimationFrame(resolve))")
                 if overflow := page.evaluate(LAYOUT):
-                    failures.append((path, width, overflow))
+                    failures.append((path, f"{width}x{height}", overflow))
+
+    def capture(self, page, name):
+        if output := os.environ.get("PAKLINE_AUDIT_SCREENSHOTS"):
+            directory = Path(output)
+            directory.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=directory / f"{name}.png", animations="disabled")
+
+    def favorite_navigation(self, page):
+        page.set_viewport_size({"width": 393, "height": 852})
+        page.goto(self.live_server_url + reverse("catalog") + "?category=" + self.category.slug)
+        page.wait_for_function("typeof window.toggleFavoriteProduct === 'function'")
+        first = page.locator(".catalog-card .favorite-button").first
+        with page.expect_response(lambda response: response.url.endswith("/favorites/toggle/")) as response:
+            first.click()
+        assert response.value.ok
+        nav = page.locator(".mobile-actions")
+        nav.locator(".js-favorites-open").click()
+        favorite = page.locator(".favorite-item").first
+        expect(favorite).to_be_visible()
+        expect(nav.locator(".js-favorites-open")).to_have_attribute("aria-expanded", "true")
+        expect(nav).to_be_visible()
+        for width, height in ((320, 568), (667, 375), (393, 852)):
+            page.set_viewport_size({"width": width, "height": height})
+            assert not page.evaluate(LAYOUT)
+            page.wait_for_function("""() => {
+                const drawer = document.querySelector(".favorites-drawer").getBoundingClientRect();
+                const bar = document.querySelector(".mobile-actions").getBoundingClientRect();
+                return drawer.bottom <= bar.top + 1;
+            }""")
+        add = favorite.locator(".favorite-add-cart")
+        remove = favorite.locator(".favorite-remove-cart")
+        expect(remove).to_be_hidden()
+        add.click()
+        expect(add).to_have_text("В корзине")
+        expect(remove).to_be_visible()
+        expect(nav.locator("[data-cart-count]")).to_have_text("2")
+        self.capture(page, "mobile-favorites")
+        remove.click()
+        expect(add).to_have_text("В корзину")
+        expect(remove).to_be_hidden()
+        expect(nav.locator("[data-cart-count]")).to_have_text("0")
+        expect(favorite).to_be_visible()
+        expect(nav.locator(".favorite-count")).to_have_text("1")
+        nav.locator(".js-account-open").click()
+        expect(page.locator(".account-drawer")).to_be_visible()
+        expect(nav.locator(".js-account-open")).to_have_attribute("aria-expanded", "true")
+        expect(page.locator(".favorites-drawer")).to_be_hidden()
+        self.capture(page, "mobile-profile")
+        nav.locator(".js-cart-open").click()
+        expect(page.locator(".cart-drawer")).to_be_visible()
+        expect(page.locator(".account-drawer")).to_be_hidden()
+        nav.locator(".js-favorites-open").click()
+        expect(favorite).to_be_visible()
+
+    def category_and_promotions(self, page):
+        page.set_viewport_size({"width": 393, "height": 852})
+        page.goto(self.live_server_url + reverse("management_categories"))
+        root = page.locator(f'tr[data-category-id="{self.category.pk}"]')
+        child = page.locator(f'tr[data-category-id="{self.subcategory.pk}"]')
+        root.locator("[data-category-branch]").click()
+        expect(child).to_be_visible()
+        expect(root.locator(".category-tree-name img")).to_be_visible()
+        page.locator("[data-category-select-all]").check()
+        expect(child.locator('[name="ids"]')).to_be_checked()
+        for width, height in ((320, 568), (667, 375), (393, 852)):
+            page.set_viewport_size({"width": width, "height": height})
+            page.evaluate("() => new Promise(resolve => requestAnimationFrame(resolve))")
+            title = root.locator(".category-tree-name strong").bounding_box()
+            assert title["width"] >= 75, (width, title, root.bounding_box())
+            status = root.locator(".status-select + details, .status-select:visible").first
+            assert status.bounding_box()["width"] >= 135
+            assert not page.evaluate(LAYOUT)
+        self.capture(page, "mobile-categories")
+        select = root.locator(".status-select")
+        if select.is_visible():
+            select.select_option("hidden")
+        else:
+            dropdown = root.locator(".status-select + details")
+            dropdown.locator("summary").click()
+            dropdown.get_by_role("button", name="Скрыто", exact=True).click()
+        page.get_by_role("button", name="Сохранить статусы").click()
+        expect(select).to_have_value("hidden")
+        page.goto(self.live_server_url + reverse("management_product_edit", args=[self.product.pk]))
+        picker = page.locator("[data-product-promotions]")
+        option = picker.get_by_role("checkbox", name=re.compile(self.promotion.title))
+        expect(option).to_be_checked()
+        picker.locator("input[type=search]").fill("no match")
+        expect(option).to_be_hidden()
+        picker.locator("input[type=search]").fill("Audit")
+        expect(option).to_be_visible()
+        option.uncheck()
+        page.get_by_role("button", name="Сохранить", exact=True).click()
+        expect(page.get_by_text("Товар сохранён.")).to_be_visible()
+        expect(option).not_to_be_checked()
 
     def public_actions(self, page):
         page.set_viewport_size({"width": 320, "height": 390})
@@ -405,8 +503,9 @@ class ResponsiveAudit(StaticLiveServerTestCase):
                     try:
                         self.check_navigation(page)
                         self.public_actions(page)
+                        self.favorite_navigation(page)
                     except (AssertionError, BrowserError) as error:
-                        failures.append((engine, "public interactions", str(error)))
+                        failures.append((engine, "public interactions", traceback.format_exc()))
                 context.add_cookies([{
                     "name": settings.SESSION_COOKIE_NAME, "value": self.client.cookies[settings.SESSION_COOKIE_NAME].value,
                     "url": self.live_server_url,
@@ -416,8 +515,9 @@ class ResponsiveAudit(StaticLiveServerTestCase):
                 if os.environ.get("PAKLINE_AUDIT_ACTIONS", "1") == "1":
                     try:
                         self.cms_actions(page)
+                        self.category_and_promotions(page)
                     except (AssertionError, BrowserError) as error:
-                        failures.append((engine, "CMS interactions", str(error)))
+                        failures.append((engine, "CMS interactions", traceback.format_exc()))
                 if os.environ.get("PAKLINE_AUDIT_NATIVE", "1") == "1" and os.environ.get("PAKLINE_AUDIT_ROUTES", "1") == "1":
                     self.audit(page, native, failures)
                 if os.environ.get("PAKLINE_AUDIT_NATIVE", "1") == "1" and os.environ.get("PAKLINE_AUDIT_ACTIONS", "1") == "1":

@@ -135,12 +135,7 @@ function updateCartBadges(count) {
 }
 
 function openCartDrawer() {
-  const favorites = document.querySelector(".favorites-drawer.is-open");
-  if (favorites) {
-    favorites.classList.remove("is-open");
-    favorites.setAttribute("aria-hidden", "true");
-    if (!document.querySelector(".side-drawer.is-open")) document.body.classList.remove("drawer-open");
-  }
+  window.closeStoreSideDrawers?.();
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
   refreshStaleCart();
@@ -293,6 +288,7 @@ function syncProductCards(cart) {
   const previous = cartProductQuantities;
   const quantities = Object.fromEntries(cart.items.map(item => [item.id, item.quantity]));
   cartProductQuantities = quantities;
+  window.syncFavoriteCart?.();
 
   document.querySelectorAll(".product-card[data-product-id], .catalog-card[data-product-id], .product-modal[data-product-id]").forEach(card => {
     const productId = card.dataset.productId;
@@ -439,6 +435,7 @@ async function updateProductInCart(productId, quantity, button, input) {
     notifyStore(quantity ? "Количество обновлено" : "Товар удалён из корзины");
   });
   if (!updated && input) input.value = String(cartProductQuantities[productId] || input.min);
+  window.syncFavoriteCart?.();
 }
 
 window.addProductToCart = addProductToCart;
@@ -475,7 +472,7 @@ document.addEventListener("click", (event) => {
 
   const otherSection = event.target.closest(".mobile-actions .js-account-open, .mobile-actions .js-favorites-open");
   if (otherSection) otherSection.focus({preventScroll: true});
-  if (otherSection || event.target.closest(".cart-close") || event.target === drawer) {
+  if (event.target.closest(".cart-close") || event.target === drawer) {
     closeCartDrawer();
   }
 

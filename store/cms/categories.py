@@ -280,10 +280,12 @@ def category_list(request):
                                if file and not local_media_missing(file)), row.image_url)
         row.product_count = counts.get(row.pk, 0)
         row.descendant_count = 0
+        row.subcategory_count = 0
         row.has_children = False
     for row in reversed(rows):
         if parent := by_id.get(row.parent_id):
             parent.has_children = True
+            parent.subcategory_count += 1 + row.subcategory_count
             parent.descendant_count += row.product_count + row.descendant_count
     return render(request, "store/management/category_list.html", {"section": "categories", "tree": rows})
 

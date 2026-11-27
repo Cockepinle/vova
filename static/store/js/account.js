@@ -1,3 +1,20 @@
+function closeStoreSideDrawers(except) {
+  document.querySelectorAll(".side-drawer.is-open").forEach(drawer => {
+    if (drawer === except) return;
+    drawer.classList.remove("is-open");
+    drawer.setAttribute("aria-hidden", "true");
+  });
+  if (!except) document.body.classList.remove("drawer-open");
+}
+
+function openStoreSideDrawer(drawer) {
+  closeStoreSideDrawers(drawer);
+  window.closeCartDrawer?.();
+  drawer.classList.add("is-open");
+  drawer.setAttribute("aria-hidden", "false");
+  document.body.classList.add("drawer-open");
+}
+
 function openAccountDrawer(message) {
   const drawer = document.querySelector(".account-drawer");
   const messageBox = document.querySelector(".account-message");
@@ -6,9 +23,7 @@ function openAccountDrawer(message) {
     return;
   }
 
-  drawer.classList.add("is-open");
-  drawer.setAttribute("aria-hidden", "false");
-  document.body.classList.add("drawer-open");
+  openStoreSideDrawer(drawer);
 
   if (messageBox && message) {
     messageBox.textContent = message;

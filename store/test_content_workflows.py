@@ -90,6 +90,28 @@ class ContentWorkflowsTests(TestCase):
             category.refresh_from_db()
             self.assertEqual(category.display_image_url, remote)
 
+    def test_product_editor_saves_existing_promotion_relationship(self):
+        category = Category.objects.create(name="Товары для акций")
+        first = Promotion.objects.create(title="Первая акция")
+        second = Promotion.objects.create(title="Вторая акция")
+        data = {"category": category.pk, "name": "Коробка", "price": "42", "unit": "шт",
+                "min_quantity": 1, "stock_quantity": 10, "availability": "in_stock", "status": "published",
+                "promotion_selection": "1", "promotions": [first.pk, second.pk]}
+        response = self.client.post(reverse("management_product_new"), data)
+        self.assertEqual(response.status_code, 302, getattr(response.context, "form", None))
+        product = Product.objects.get(name="Коробка")
+        self.assertEqual(set(product.promotions.all()), {first, second})
+        first.products.remove(product)
+        edit = reverse("management_product_edit", args=[product.pk])
+        form = self.client.get(edit).context["form"]
+        self.assertEqual(form.initial["promotions"], [second.pk])
+        data.pop("promotions")
+        self.assertEqual(self.client.post(edit, data).status_code, 302)
+        self.assertFalse(product.promotions.exists())
+        self.assertEqual(Promotion.objects.filter(pk__in=[first.pk, second.pk]).count(), 2)
+        product.refresh_from_db()
+        self.assertEqual(product.price, 42)
+
     def test_promotion_reuses_products_without_changing_price(self):
         category = Category.objects.create(name="Акционные коробки")
         product = Product.objects.create(category=category, name="Коробка", sku="PROMO-42", price=42, status=Product.STATUS_PUBLISHED)

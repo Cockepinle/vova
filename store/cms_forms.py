@@ -218,6 +218,10 @@ def category_choices(field, excluded=()):
 
 
 class ProductForm(ContentValidationMixin, forms.ModelForm):
+    promotions = forms.ModelMultipleChoiceField(
+        label="Акции", queryset=Promotion.objects.all(), required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
     sku = forms.CharField(label="Артикул", required=False, empty_value=None)
     volume_m3 = forms.DecimalField(label="Объём, м³ (автоматически)", required=False, disabled=True, max_digits=36, decimal_places=15)
     new_variant_group = forms.CharField(max_length=VariantGroup._meta.get_field("name").max_length, label="Новая группа модификаций", required=False, help_text="Заполните, чтобы создать группу и сразу добавить в неё товар.")
@@ -230,6 +234,8 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
 
     def __init__(self, *args, gallery_editor=False, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial.setdefault("promotions", list(self.instance.promotions.values_list("pk", flat=True)))
         category_choices(self.fields["category"])
         self.fields["variant_group"].empty_label = "Без группы модификаций"
         if gallery_editor:
@@ -272,6 +278,11 @@ class ProductForm(ContentValidationMixin, forms.ModelForm):
             field.queryset = field.queryset.prefetch_related("images__media").order_by("name", "pk")
             if self.instance.pk:
                 field.queryset = field.queryset.exclude(pk=self.instance.pk)
+
+    def _save_m2m(self):
+        super()._save_m2m()
+        if self.add_prefix("promotion_selection") in self.data or self.add_prefix("promotions") in self.data:
+            self.instance.promotions.set(self.cleaned_data["promotions"])
 
     @property
     def groups(self):

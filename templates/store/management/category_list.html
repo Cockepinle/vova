@@ -4,7 +4,7 @@
 {% block heading %}Категории{% endblock %}
 
 {% block content %}
-  <section class="mgmt-card">
+  <section class="mgmt-card category-management">
     <div class="card-header">
       <form class="toolbar" method="get">
         <input type="search" name="q" data-category-search aria-label="Поиск категорий" placeholder="Поиск категорий…">
@@ -17,6 +17,7 @@
     <form method="post" data-category-bulk action="{% url 'management_category_bulk' %}">
       {% csrf_token %}
       <div class="bulk-bar">
+        <label class="category-select-visible"><input type="checkbox" data-category-select-all> Выбрать показанные</label>
         <select name="action">
           <option value="">Массовое действие</option>
           <option value="show">Показать</option>
@@ -26,13 +27,13 @@
         <button class="primary-button" type="submit" name="action" value="save_statuses">Сохранить статусы</button>
       </div>
 
-      <div class="table-wrap">
-        <table class="mgmt-table">
-          <thead><tr><th><input type="checkbox" onclick="document.querySelectorAll('tr[data-category-id]:not([hidden]) [name=ids]').forEach(item => item.checked = this.checked)"></th><th>Название</th><th>Товары</th><th>Статус</th><th></th></tr></thead>
+      <div class="table-wrap category-table-wrap">
+        <table class="mgmt-table category-table">
+          <thead><tr><th scope="col">Выбор</th><th>Название</th><th>Товары</th><th>Статус</th><th></th></tr></thead>
           <tbody>
             {% for category in tree %}
               <tr data-category-id="{{ category.pk }}" data-parent="{{ category.parent_id|default_if_none:'' }}" data-name="{{ category.name }}" data-direct="{{ category.product_count }}">
-                <td data-label="Выбрать"><input type="checkbox" name="ids" value="{{ category.id }}"></td>
+                <td data-label="Выбрать"><input type="checkbox" name="ids" value="{{ category.id }}" aria-label="Выбрать {{ category.name }}"></td>
                 <td data-label="Название">
                   <div class="category-tree-name" style="--depth: {{ category.tree_depth }}">
                     {% if category.has_children %}<button class="ghost-button" type="button" data-category-branch aria-expanded="false" aria-label="Подкатегории {{ category.name }}">▸</button>{% else %}<span class="category-branch-spacer" aria-hidden="true"></span>{% endif %}
@@ -43,10 +44,10 @@
                 <td data-label="Товары">
                   <button class="ghost-button" type="button" data-category-products data-url="{% url 'management_category_products' category.pk %}" aria-expanded="false"
                           aria-controls="category-products-{{ category.pk }}" aria-label="Товары категории {{ category.name }}: {{ category.product_count }}" title="Просмотреть товары этой категории">{{ category.product_count }}</button>
-                  {% if category.has_children %}<small title="Товары во всех подкатегориях">Во вложенных: <span data-category-descendants>{{ category.descendant_count }}</span></small>{% endif %}
+                  {% if category.has_children %}<small>Подкатегорий: {{ category.subcategory_count }} · товаров в них: <span data-category-descendants>{{ category.descendant_count }}</span></small>{% endif %}
                 </td>
                 <td data-label="Статус">
-                  <select class="status-select" name="status_{{ category.id }}">
+                  <select class="status-select" name="status_{{ category.id }}" aria-label="Статус {{ category.name }}">
                     <option value="published" {% if category.is_active %}selected{% endif %}>Опубликовано</option>
                     <option value="hidden" {% if not category.is_active %}selected{% endif %}>Скрыто</option>
                   </select>
@@ -99,5 +100,5 @@
 {% endblock %}
 
 {% block management_scripts %}
-  <script src="{% static 'store/js/category-tree.js' %}?v=4"></script>
+  <script src="{% static 'store/js/category-tree.js' %}?v=5"></script>
 {% endblock %}

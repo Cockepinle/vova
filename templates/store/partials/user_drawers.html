@@ -1,31 +1,13 @@
 {% load store_extras %}
-<aside class="side-drawer favorites-drawer" aria-hidden="true">
+<aside id="favorites-drawer" class="side-drawer favorites-drawer" aria-hidden="true">
   <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="favorites-title">
     <header class="drawer-header">
       <h2 id="favorites-title">Избранное</h2>
       <button class="drawer-close" type="button" aria-label="Закрыть">×</button>
     </header>
-    <div class="favorite-items">
+    <template data-favorite-card>{% include "store/partials/favorite_item.html" with product=None only %}</template><div class="favorite-items">
       {% for product in favorite_products %}
-        <article class="favorite-item" data-product-id="{{ product.id }}" data-product='{{ product|to_json }}'>
-          <img src="{{ product.image }}" alt="">
-          <div>
-            <span>{{ product.sku }}</span>
-            <h3>{{ product.name }}</h3>
-            <p>{{ product.price }} ₽ / {{ product.unit }}</p>
-            <div class="favorite-actions">
-              <div class="quantity-control favorite-quantity" aria-label="Количество">
-                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
-                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="{{ product.quantity_step|default:1 }}" value="{{ product.min_quantity }}" aria-label="Количество товара">
-                <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
-              </div>
-              <button class="favorite-add-cart" type="button">В корзину</button>
-            </div>
-          </div>
-          <button class="favorite-button favorite-remove is-active" type="button" aria-label="Убрать из избранного">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
-          </button>
-        </article>
+        {% include "store/partials/favorite_item.html" %}
       {% empty %}
         <div class="drawer-empty">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg>
@@ -36,7 +18,7 @@
   </div>
 </aside>
 
-<aside class="side-drawer account-drawer" aria-hidden="true">
+<aside id="account-drawer" class="side-drawer account-drawer" aria-hidden="true">
   <div class="drawer-panel account-panel" role="dialog" aria-modal="true" aria-labelledby="account-title">
     <header class="drawer-header">
       <h2 id="account-title">Личный кабинет</h2>

@@ -134,6 +134,36 @@
       </template>
     </section>
 
+    <section class="mgmt-card promotion-product-picker" data-product-promotions>
+      <h2>Акции</h2>
+      <input type="hidden" name="promotion_selection" value="1">
+      {{ form.promotions.errors }}
+      <label>Поиск по названию<input type="search" data-product-promotion-search></label>
+      <fieldset class="promotion-product-options">
+        <legend>Участие товара в акциях</legend>
+        {% now "U" as current_time %}
+        {% for option in form.promotions %}
+          {% with promotion=option.data.value.instance %}
+            <label data-product-promotion>
+              {{ option.tag }}
+              <span><strong data-promotion-title>{{ promotion.title }}</strong><br>
+                <small>
+                  {% if not promotion.is_active %}Скрыта
+                  {% elif promotion.starts_at and promotion.starts_at|date:"U" > current_time %}Запланирована
+                  {% elif promotion.ends_at and promotion.ends_at|date:"U" < current_time %}Завершена
+                  {% else %}Действует{% endif %}
+                  {% if promotion.starts_at %} · с {{ promotion.starts_at|date:"d.m.Y H:i" }}{% endif %}
+                  {% if promotion.ends_at %} · до {{ promotion.ends_at|date:"d.m.Y H:i" }}{% endif %}
+                  {% if not promotion.starts_at and not promotion.ends_at %} · без ограничения срока{% endif %}
+                </small>
+              </span>
+            </label>
+          {% endwith %}
+        {% empty %}<p>Акций пока нет.</p>{% endfor %}
+      </fieldset>
+      <p data-product-promotion-empty role="status" hidden>Акции не найдены.</p>
+    </section>
+
     <div class="form-actions">
       <button class="primary-button" type="submit">Сохранить</button>
       {% if preview_slug %}<a class="ghost-button" href="{% url 'product_detail' preview_slug %}?preview=1" target="_blank" rel="noopener">Предпросмотр на сайте</a>{% endif %}
@@ -182,7 +212,7 @@
   <script src="{% static 'store/js/product-gallery.js' %}?v=3"></script>
   <script src="{% static 'store/js/product-pricing.js' %}?v=2"></script>
   <script src="{% static 'store/js/variant-groups.js' %}?v=5"></script>
-  <script src="{% static 'store/js/product-editor.js' %}?v=6"></script>
+  <script src="{% static 'store/js/product-editor.js' %}?v=7"></script>
   <script src="{% static 'store/js/product-attributes.js' %}?v=2"></script>
   <script src="{% static 'store/js/customer-prices.js' %}?v=3"></script>
 {% endblock %}

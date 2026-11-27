@@ -24,6 +24,7 @@
     toggle?.addEventListener('click', () => {
       if (nav.classList.contains('is-expanded')) return close(true);
       window.closeCartDrawer?.();
+      window.closeStoreSideDrawers?.();
       nav.classList.add('is-expanded');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.classList.add('is-active');
@@ -31,7 +32,10 @@
     });
     nav.querySelector('.mobile-nav-close')?.addEventListener('click', () => close(true));
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(true); });
-    document.addEventListener('click', e => { if (!e.target.closest('.site-header, .mobile-actions')) close(); });
+    document.addEventListener('click', e => {
+      if (e.target.closest('.mobile-actions .mobile-action-button:not(.mobile-menu-toggle)') ||
+          !e.target.closest('.site-header, .mobile-actions')) close();
+    });
     compact.addEventListener('change', () => close());
   }
   const bar = document.querySelector('.mobile-actions');
@@ -39,7 +43,11 @@
   // Observe existing drawers so every entry point shares focus and scroll behaviour.
   const overlays = [...document.querySelectorAll('.product-modal, .cart-drawer, .checkout-drawer, .side-drawer, .cookie-modal, .image-lightbox, .catalog-mobile-category-tree, .catalog-mobile-filter-panel, .catalog-mobile-sort-panel')];
   const cart = document.querySelector('.cart-drawer');
-  const cartButton = bar?.querySelector('.js-cart-open');
+  const navigationPanels = new Map(
+    [...(bar?.querySelectorAll('button[data-store-panel]') || [])]
+      .map(button => [document.getElementById(button.dataset.storePanel), button])
+      .filter(([panel]) => panel)
+  );
   const mobile = matchMedia('(max-width: 720px)');
   let savedScroll;
   let stack = [];
@@ -65,12 +73,16 @@
     const newlyOpened = opened.filter(el => !stack.includes(el));
     const cartOpen = Boolean(cart && opened.includes(cart));
     const cartOnly = cartOpen && opened.length === 1;
+    const navigationOnly = opened.length === 1 && navigationPanels.has(opened[0]);
     document.body.classList.toggle('overlay-active', opened.length > 0);
     syncOverlayScroll(opened.length > 0);
     document.body.classList.toggle('cart-only-open', cartOnly);
-    cartButton?.classList.toggle('is-active', cartOnly);
-    cartButton?.setAttribute('aria-expanded', String(cartOpen));
-    cart?.querySelector('.cart-panel')?.setAttribute('aria-modal', String(!mobile.matches || !cartOnly));
+    document.body.classList.toggle('store-panel-only-open', navigationOnly);
+    for (const [panel, button] of navigationPanels) {
+      button.classList.toggle('is-active', navigationOnly && opened.includes(panel));
+      button.setAttribute('aria-expanded', String(opened.includes(panel)));
+      panel.querySelector('[role="dialog"]')?.setAttribute('aria-modal', String(!mobile.matches || !navigationOnly));
+    }
     for (const el of [...stack].reverse()) if (!opened.includes(el)) {
       stack = stack.filter(item => item !== el);
       const previous = returnFocus.get(el);
@@ -102,7 +114,8 @@
     }
     if (e.key === 'Tab') {
       const items = focusable(top);
-      const includeBar = top === cart && bar && mobile.matches && document.body.classList.contains('cart-only-open');
+      const includeBar = navigationPanels.has(top) && mobile.matches &&
+        document.body.classList.contains('store-panel-only-open') && getComputedStyle(bar).visibility === 'visible';
       if (includeBar) items.push(...focusable(bar));
       const index = items.indexOf(document.activeElement);
       if (items.length && includeBar) {

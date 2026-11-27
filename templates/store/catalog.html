@@ -7,9 +7,9 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=42">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=43">
     <link rel="stylesheet" href="{% static 'store/css/catalog.css' %}?v=60">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=53">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=54">
     <link rel="stylesheet" href="{% static 'store/css/product-cards.css' %}?v=6">
     <link rel="stylesheet" href="{% static 'store/css/store-selects.css' %}?v=1">
     {% if builder_structure %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
@@ -231,11 +231,11 @@
       window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};
       window.initialProductToOpen = "{{ open_product_id|escapejs }}";
     </script>
-    <script src="{% static 'store/js/cart.js' %}?v=44"></script>
-    <script src="{% static 'store/js/account.js' %}?v=8"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=45"></script>
+    <script src="{% static 'store/js/account.js' %}?v=9"></script>
     <script src="{% static 'store/js/catalog.js' %}?v=61"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=24"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=25"></script>
     {% include "store/partials/mobile_actions.html" %}
-    <script src="{% static 'store/js/responsive.js' %}?v=45"></script>
+    <script src="{% static 'store/js/responsive.js' %}?v=46"></script>
   </body>
 </html>

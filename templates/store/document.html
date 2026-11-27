@@ -6,9 +6,9 @@
     {% include "store/partials/theme.html" %}
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     {% include "store/partials/seo.html" %}
-    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=42">
+    <link rel="stylesheet" href="{% static 'store/css/home.css' %}?v=43">
     <link rel="stylesheet" href="{% static 'store/css/pages.css' %}?v=32">
-    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=53">
+    <link rel="stylesheet" href="{% static 'store/css/responsive.css' %}?v=54">
     {% if builder_structure and builder_design.document_blocks or builder_structure and request.GET.preview_builder == '1' and request.user.is_staff %}<link rel="stylesheet" href="{% static 'store/css/page-builder.css' %}?v=2">{% endif %}
   </head>
   <body>
@@ -34,10 +34,10 @@
     {% include "store/partials/user_drawers.html" %}
     {% include "store/partials/cookie_modal.html" %}
     <script>window.isAuthenticated = {{ request.user.is_authenticated|yesno:"true,false" }};</script>
-    <script src="{% static 'store/js/cart.js' %}?v=44"></script>
-    <script src="{% static 'store/js/account.js' %}?v=8"></script>
-    <script src="{% static 'store/js/favorites.js' %}?v=24"></script>
+    <script src="{% static 'store/js/cart.js' %}?v=45"></script>
+    <script src="{% static 'store/js/account.js' %}?v=9"></script>
+    <script src="{% static 'store/js/favorites.js' %}?v=25"></script>
     {% include "store/partials/mobile_actions.html" %}
-    <script src="{% static 'store/js/responsive.js' %}?v=45"></script>
+    <script src="{% static 'store/js/responsive.js' %}?v=46"></script>
   </body>
 </html>

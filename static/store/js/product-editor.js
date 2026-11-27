@@ -191,3 +191,21 @@
     request(event.target.action, new FormData(event.target));
   });
 })();
+
+(() => {
+  const picker = document.querySelector("[data-product-promotions]");
+  if (!picker) return;
+  const search = picker.querySelector("[data-product-promotion-search]");
+  const rows = [...picker.querySelectorAll("[data-product-promotion]")];
+  const empty = picker.querySelector("[data-product-promotion-empty]");
+  search.addEventListener("input", () => {
+    const query = search.value.trim().toLocaleLowerCase("ru");
+    for (const row of rows) {
+      row.hidden = !row.querySelector("[data-promotion-title]").textContent.toLocaleLowerCase("ru").includes(query);
+    }
+    empty.hidden = !rows.length || rows.some(row => !row.hidden);
+  });
+  search.addEventListener("keydown", event => {
+    if (event.key === "Enter") event.preventDefault();
+  });
+})();

@@ -809,6 +809,16 @@ textarea:focus {
 }
 
 @media (max-width: 900px) {
+  .category-management .card-header .toolbar, .category-management .bulk-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .category-management :is(.toolbar, .bulk-bar) > :is(input, select, label, .single-store-select) {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .category-management :is(.toolbar, .bulk-bar) > button { white-space: normal; }
   .mgmt-shell {
     grid-template-columns: 1fr;
   }
@@ -2158,6 +2168,61 @@ body.management-modal-open {
 .category-tree-name .category-branch-spacer { flex: 0 0 36px; }
 .category-tree-name img { width: 38px; height: 38px; object-fit: cover; border-radius: var(--radius-control); flex: none; }
 .category-tree-name strong { min-width: 0; overflow-wrap: anywhere; }
+.category-select-visible { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+[data-product-promotions] > label { display: grid; gap: 6px; margin-bottom: 12px; }
+.promotion-product-options label[hidden] { display: none; }
+@media (max-width: 900px) {
+  .category-table-wrap { margin-inline: 0; padding-inline: 0; overflow: visible; }
+  .category-table, .category-table > tbody { display: block; width: 100%; min-width: 0; }
+  .category-table > thead { display: none; }
+  .category-table > tbody > tr[data-category-id] {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 4px 8px;
+    margin-block: 8px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .category-table > tbody > tr > td {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: auto;
+    min-width: 0;
+    padding: 4px;
+    border: 0;
+  }
+  .category-table > tbody > tr > td::before { display: none; }
+  .category-table td[data-label="Выбрать"] { justify-content: center; }
+  .category-table td[data-label="Выбрать"] input { width: 20px; height: 20px; }
+  .category-table td[data-label="Название"] .category-tree-name {
+    width: 100%;
+    min-width: 0;
+    padding-inline-start: min(calc(var(--depth) * 6px), 18px);
+    gap: 6px;
+  }
+  .category-table .category-branch-spacer { display: none; }
+  .category-table .category-tree-name button { min-width: 44px; padding-inline: 0; }
+  .category-table .category-tree-name img { width: 32px; height: 32px; }
+  .category-table [data-label="Товары"], .category-table [data-label="Статус"],
+  .category-table [data-label="Действия"] { grid-column: 1 / -1; flex-wrap: wrap; }
+  .category-table [data-label="Товары"] > button { width: auto; gap: 6px; }
+  .category-table [data-label="Товары"] > button::before { content: "Товары"; }
+  .category-table [data-label="Статус"] :is(.status-select, .single-store-select) { width: 100%; max-width: none; min-height: 44px; }
+  .category-table [data-label="Действия"].row-actions {
+    display: flex;
+    flex-flow: row wrap;
+    min-width: 0;
+    gap: 6px;
+    white-space: normal;
+  }
+  .category-table [data-label="Действия"].row-actions :is(a, button) { width: auto; flex: 1 1 105px; }
+  .category-table .category-products-row:not([hidden]) { display: block; padding: 0; }
+  .category-table .category-products-row > td { display: block; }
+  .category-member-list { overflow-x: auto; }
+  .category-member-list .mgmt-table { min-width: 590px; }
+}
 [data-category-branch] { padding-inline: .4rem; flex: 0 0 36px; }
 .category-member-list { max-height: 27rem; overflow: auto; scrollbar-width: thin; }
 .category-member-list tr:has(input:checked) { background: var(--section); }

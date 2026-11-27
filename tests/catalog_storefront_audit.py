@@ -485,7 +485,9 @@ class CatalogStorefrontAudit(ResponsiveAudit):
             page.locator(".mobile-actions .js-favorites-open").click()
             expect(page.locator(f'.favorite-item[data-product-id="{selected.pk}"]')).to_be_visible()
             page.keyboard.press("Escape")
-            page.locator(".product-detail-gallery-stage .image-favorite").click()
+            with page.expect_response(lambda response: response.url.endswith("/favorites/toggle/")) as response:
+                page.locator(".product-detail-gallery-stage .image-favorite").click()
+            assert response.value.ok
             expect(page.locator(".product-detail-gallery-stage .image-favorite")).to_have_attribute("aria-pressed", "false")
             page.goto(self.live_server_url + f"/catalog/?category={self.category.slug}")
             catalog_favorite = page.locator(f'.catalog-card[data-product-id="{selected.pk}"] .favorite-button')

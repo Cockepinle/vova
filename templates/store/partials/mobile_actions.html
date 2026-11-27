@@ -2,13 +2,13 @@
   <a class="mobile-action-button {% if request.path == '/' %}is-active{% endif %}" href="/" aria-label="Главная" title="Главная">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>Главная</span>
   </a>
-  <button class="mobile-action-button js-account-open" type="button" aria-label="Профиль" title="Профиль">
+  <button class="mobile-action-button js-account-open" type="button" aria-label="Профиль" title="Профиль" aria-controls="account-drawer" aria-expanded="false" data-store-panel="account-drawer">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg><span>Профиль</span>
   </button>
-  <button class="mobile-action-button js-favorites-open" type="button" aria-label="Избранное" title="Избранное">
+  <button class="mobile-action-button js-favorites-open" type="button" aria-label="Избранное" title="Избранное" aria-controls="favorites-drawer" aria-expanded="false" data-store-panel="favorites-drawer">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 0 1 12 6a5 5 0 0 1 7.5 6.6Z"/></svg><span class="favorite-count">{{ favorite_count }}</span><span>Избранное</span>
   </button>
-  <button class="mobile-action-button js-cart-open" type="button" aria-labelledby="mobile-cart-label mobile-cart-total" aria-controls="cart-drawer" aria-expanded="false">
+  <button class="mobile-action-button js-cart-open" type="button" aria-labelledby="mobile-cart-label mobile-cart-total" aria-controls="cart-drawer" aria-expanded="false" data-store-panel="cart-drawer">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3m6 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><span data-cart-count>{{ cart_count }}</span><span id="mobile-cart-label">Корзина</span>
     <span id="mobile-cart-total" data-mobile-cart-total>{{ cart_total|floatformat:"-2g" }} ₽</span>
   </button>

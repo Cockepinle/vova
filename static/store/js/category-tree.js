@@ -66,8 +66,25 @@
         row.querySelector("[data-category-products]").getAttribute("aria-expanded") !== "true";
     }
     document.querySelector("[data-category-no-results]").hidden = !term || matches.size > 0;
+    updateSelection();
   }
   const bulk = document.querySelector("form[data-category-bulk]");
+  const selectAll = bulk.querySelector("[data-category-select-all]");
+  const visibleChecks = () => rows.filter(row => !row.hidden).map(row => row.querySelector('[name="ids"]'));
+  function updateSelection() {
+    const checks = visibleChecks();
+    const selected = checks.filter(check => check.checked).length;
+    selectAll.disabled = !checks.length;
+    selectAll.checked = selected > 0 && selected === checks.length;
+    selectAll.indeterminate = selected > 0 && selected < checks.length;
+  }
+  selectAll.addEventListener("change", () => {
+    for (const check of visibleChecks()) check.checked = selectAll.checked;
+    updateSelection();
+  });
+  bulk.addEventListener("change", event => {
+    if (event.target.name === "ids") updateSelection();
+  });
   const originalStatuses = new Map([...bulk.querySelectorAll(".status-select")].map(select => [select, select.value]));
   bulk.addEventListener("formdata", event => {
     const payload = event.formData;
