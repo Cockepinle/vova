@@ -137,7 +137,20 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 if CLOUDINARY_URL:
-    CLOUDINARY_STORAGE = {"PREFIX": "media/"}
+    try:
+        cloudinary_url = urlparse(CLOUDINARY_URL)
+        if cloudinary_url.scheme != "cloudinary" or not all((cloudinary_url.hostname, cloudinary_url.username, cloudinary_url.password)):
+            raise ValueError
+    except ValueError:
+        raise ImproperlyConfigured("Invalid server-side CLOUDINARY_URL.") from None
+
+    # Both the storage backend and the SDK use credentials from the same URL.
+    CLOUDINARY_STORAGE = {
+        "PREFIX": "media/",
+        "CLOUD_NAME": cloudinary_url.hostname,
+        "API_KEY": unquote(cloudinary_url.username),
+        "API_SECRET": unquote(cloudinary_url.password),
+    }
     STORAGES["default"]["BACKEND"] = "store.media_storage.StoreCloudinaryStorage"
 elif IS_VERCEL or (not DEBUG and not PERSISTENT_MEDIA_VOLUME):
     STORAGES["default"]["BACKEND"] = "store.uploads.ReadOnlyMediaStorage"

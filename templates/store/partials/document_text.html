@@ -1,0 +1,14 @@
+<p class="document-lead">{{ current_page.subtitle|default:document.lead }}</p>
+{% for section in document.sections %}
+  <div class="document-section">
+    <h2>{{ section.title }}</h2>
+    <ul>
+      {% for item in section.items %}
+        <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endfor %}
+{% if current_page.content_title %}<h2>{{ current_page.content_title }}</h2>{% endif %}
+{% if current_page.content_subtitle %}<h3>{{ current_page.content_subtitle }}</h3>{% endif %}
+{% if current_page.content_text %}<div class="document-note">{{ current_page.content_text|linebreaksbr }}</div>{% endif %}

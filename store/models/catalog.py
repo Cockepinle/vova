@@ -7,6 +7,12 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 
+CYRILLIC_SLUG = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя", (
+    "a", "b", "v", "g", "d", "e", "yo", "zh", "z", "i", "y", "k", "l", "m", "n",
+    "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya",
+)))
+
+
 class Category(models.Model):
     seo_title = models.CharField("Заголовок в поиске", max_length=220, blank=True)
     meta_description = models.TextField("Описание в поиске", blank=True)
@@ -88,23 +94,38 @@ class Category(models.Model):
             stack.extend(children.get(pk, []))
         return found
 
+    def available_slug(self, name):
+        base = slugify(name.lower().translate(str.maketrans(CYRILLIC_SLUG)))[:180].rstrip("-")
+        if not base:
+            return ""
+        categories = type(self).objects.exclude(pk=self.pk)
+        candidate = base
+        suffix = 2
+        while categories.filter(slug=candidate).exists():
+            ending = f"-{suffix}"
+            candidate = base[:180 - len(ending)] + ending
+            suffix += 1
+        return candidate
+
     def save(self, *args, **kwargs):
         self.clean()
         if not self.slug:
-            self.slug = slugify(self.name, allow_unicode=True)
+            self.slug = self.available_slug(self.name) or slugify(self.name, allow_unicode=True)
         super().save(*args, **kwargs)
 
     @property
     def display_image_url(self):
+        from ..uploads import local_media_missing
+
         if self.image_media_id:
             try:
-                if self.image_media.file and self.image_media.file.storage.exists(self.image_media.file.name):
+                if self.image_media.file and not local_media_missing(self.image_media.file):
                     return self.image_media.file.url
             except (OSError, ValueError):
                 pass
         if self.image:
             try:
-                if self.image.storage.exists(self.image.name):
+                if not local_media_missing(self.image):
                     return self.image.url
             except (OSError, ValueError):
                 pass

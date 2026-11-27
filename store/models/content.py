@@ -156,6 +156,8 @@ class PageContent(models.Model):
         return self.hero_image_alt or (self.hero_media.alt if self.hero_media_id else "")
 
 
+    document_html = models.TextField("Текст документа с форматированием", blank=True, default="")
+
     PAGE_HOME = "home"
     PAGE_CATALOG = "catalog"
     PAGE_TEAM = "team"
@@ -360,6 +362,8 @@ class SiteMedia(models.Model):
 class Promotion(models.Model):
     title = models.CharField("Название", max_length=220)
     description = models.TextField("Описание", blank=True)
+    conditions = models.TextField("Условия акции", blank=True, default="")
+    products = models.ManyToManyField("Product", verbose_name="Товары акции", blank=True, related_name="promotions")
     starts_at = models.DateTimeField("Начало действия", null=True, blank=True)
     ends_at = models.DateTimeField("Окончание действия", null=True, blank=True)
     is_active = models.BooleanField("Показывать на сайте", default=True)

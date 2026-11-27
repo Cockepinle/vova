@@ -1,8 +1,14 @@
 (() => {
-  const header = document.querySelector('.site-header');
-  if (header && window.ResizeObserver) new ResizeObserver(() => {
-    document.documentElement.style.setProperty('--site-header-height', `${header.offsetHeight}px`);
-  }).observe(header);
+  function observeHeight(element, property) {
+    if (!element || !window.ResizeObserver) return;
+    new ResizeObserver(() => requestAnimationFrame(() => {
+      if (!element.offsetHeight) return;
+      const style = document.documentElement.style;
+      const height = `${element.offsetHeight}px`;
+      if (style.getPropertyValue(property) !== height) style.setProperty(property, height);
+    })).observe(element);
+  }
+  observeHeight(document.querySelector('.site-header'), '--site-header-height');
   const nav = document.querySelector('.main-nav');
   if (nav) {
     nav.id = 'site-navigation';
@@ -17,6 +23,7 @@
     };
     toggle?.addEventListener('click', () => {
       if (nav.classList.contains('is-expanded')) return close(true);
+      window.closeCartDrawer?.();
       nav.classList.add('is-expanded');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.classList.add('is-active');
@@ -28,31 +35,56 @@
     compact.addEventListener('change', () => close());
   }
   const bar = document.querySelector('.mobile-actions');
-  if (bar && window.ResizeObserver) new ResizeObserver(() => {
-    if (bar.offsetHeight) document.documentElement.style.setProperty('--mobile-actions-height', `${bar.offsetHeight}px`);
-  }).observe(bar);
+  observeHeight(bar, '--mobile-actions-height');
   // Observe existing drawers so every entry point shares focus and scroll behaviour.
   const overlays = [...document.querySelectorAll('.product-modal, .cart-drawer, .checkout-drawer, .side-drawer, .cookie-modal, .image-lightbox, .catalog-mobile-category-tree, .catalog-mobile-filter-panel, .catalog-mobile-sort-panel')];
+  const cart = document.querySelector('.cart-drawer');
+  const cartButton = bar?.querySelector('.js-cart-open');
+  const mobile = matchMedia('(max-width: 720px)');
+  let savedScroll;
   let stack = [];
+  function syncOverlayScroll(locked) {
+    const root = document.documentElement;
+    if (locked && !savedScroll) {
+      savedScroll = {x: window.scrollX, y: window.scrollY};
+      root.style.setProperty('--overlay-scroll-top', `${-savedScroll.y}px`);
+      root.style.setProperty('--overlay-scroll-right', `${window.innerWidth - root.clientWidth}px`);
+      document.body.classList.add('overlay-scroll-locked');
+    } else if (!locked && savedScroll) {
+      document.body.classList.remove('overlay-scroll-locked');
+      window.scrollTo({left: savedScroll.x, top: savedScroll.y, behavior: 'instant'});
+      savedScroll = undefined;
+    }
+  }
   const returnFocus = new Map();
   const focusable = root => [...root.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')].filter(el =>
     !el.disabled && el.tabIndex >= 0 && el.getClientRects().length && getComputedStyle(el).visibility === 'visible' &&
     !el.closest('[aria-hidden="true"], [inert], [data-close-catalog-panel].catalog-mobile-panel-backdrop'));
   function sync() {
     const opened = overlays.filter(el => el.classList.contains('is-open'));
-    for (const el of opened) if (!stack.includes(el)) {
-      returnFocus.set(el, document.activeElement);
-      stack.push(el);
-      (focusable(el)[0] || el).focus({preventScroll: true});
-    }
+    const newlyOpened = opened.filter(el => !stack.includes(el));
+    const cartOpen = Boolean(cart && opened.includes(cart));
+    const cartOnly = cartOpen && opened.length === 1;
+    document.body.classList.toggle('overlay-active', opened.length > 0);
+    syncOverlayScroll(opened.length > 0);
+    document.body.classList.toggle('cart-only-open', cartOnly);
+    cartButton?.classList.toggle('is-active', cartOnly);
+    cartButton?.setAttribute('aria-expanded', String(cartOpen));
+    cart?.querySelector('.cart-panel')?.setAttribute('aria-modal', String(!mobile.matches || !cartOnly));
     for (const el of [...stack].reverse()) if (!opened.includes(el)) {
       stack = stack.filter(item => item !== el);
       const previous = returnFocus.get(el);
-      if (previous?.isConnected) previous.focus({preventScroll: true});
+      const focusWasInOverlay = el.contains(document.activeElement) || document.activeElement === document.body;
+      if (!newlyOpened.length && focusWasInOverlay && previous?.isConnected) previous.focus({preventScroll: true});
       returnFocus.delete(el);
     }
-    document.body.classList.toggle('overlay-active', opened.length > 0);
+    for (const el of newlyOpened) {
+      returnFocus.set(el, document.activeElement);
+      stack.push(el);
+      (el.querySelector('.cart-close, .catalog-category-close') || focusable(el)[0] || el).focus({preventScroll: true});
+    }
   }
+  mobile.addEventListener('change', sync);
   overlays.forEach(el => new MutationObserver(sync).observe(el, {attributes: true, attributeFilter: ['class']}));
   matchMedia('(min-width: 921px)').addEventListener('change', event => {
     if (!event.matches) return;
@@ -64,19 +96,37 @@
     if (!top) return;
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopImmediatePropagation();
-      top.querySelector('.modal-close, .cart-close, .checkout-close, .drawer-close, .cookie-close, .image-lightbox-close, .catalog-category-close, .catalog-panel-close, [data-close-catalog-panel]')?.click();
+      const close = top.querySelector('.modal-close, .cart-close, .checkout-close, .drawer-close, .cookie-close, .image-lightbox-close, .catalog-category-close, .catalog-panel-close, [data-close-catalog-panel]');
+      if (top === cart) close?.focus({preventScroll: true});
+      close?.click();
     }
     if (e.key === 'Tab') {
       const items = focusable(top);
+      const includeBar = top === cart && bar && mobile.matches && document.body.classList.contains('cart-only-open');
+      if (includeBar) items.push(...focusable(bar));
       const index = items.indexOf(document.activeElement);
+      if (items.length && includeBar) {
+        const next = index < 0 ? (e.shiftKey ? items.length - 1 : 0) : (index + (e.shiftKey ? -1 : 1) + items.length) % items.length;
+        e.preventDefault();
+        items[next].focus();
+        return;
+      }
       if (items.length && (index < 0 || (e.shiftKey && index === 0) || (!e.shiftKey && index === items.length - 1))) {
         e.preventDefault(); items[e.shiftKey ? items.length - 1 : 0].focus();
       }
     }
   }, true);
   if (window.visualViewport) {
-    const keyboard = () => document.body.classList.toggle('keyboard-open', /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) && window.innerHeight - visualViewport.height > 120);
+    const keyboard = () => {
+      const active = document.activeElement;
+      const editing = active?.matches('textarea, input:not([type="checkbox"], [type="radio"], [type="file"], [type="button"], [readonly]), [contenteditable="true"]');
+      const open = editing && visualViewport.scale === 1 && window.innerHeight - visualViewport.height > 120;
+      document.body.classList.toggle('keyboard-open', Boolean(open));
+      if (open) document.body.style.setProperty('--keyboard-viewport-height', `${visualViewport.height}px`);
+      else document.body.style.removeProperty('--keyboard-viewport-height');
+    };
     visualViewport.addEventListener('resize', keyboard);
+    document.addEventListener('focusin', keyboard);
     document.addEventListener('focusout', () => setTimeout(keyboard, 0));
   }
   sync();

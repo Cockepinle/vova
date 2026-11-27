@@ -5,6 +5,7 @@ PAKLINE_AUDIT_ENGINES selects engines (default: chromium).
 PAKLINE_AUDIT_PATH can limit the layout pass to paths containing a substring.
 """
 import os
+import re
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -42,7 +43,7 @@ from store.models import (
 from store.test_media_uploads import image_file
 
 
-WIDTHS = (320, 360, 375, 390, 430, 768, 1024, 1280, 1440, 1920)
+WIDTHS = (320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920)
 LAYOUT = """() => {
   const doc = document.documentElement;
   const containers = [doc, ...document.querySelectorAll('.header-inner, .catalog-content, .contact-layout, .mgmt-main, .record-table-wrap, .checkout-panel, .cart-panel, .drawer-panel, .modal-card, .media-picker-dialog')];
@@ -75,6 +76,7 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         self.staff = users.objects.create_superuser("audit-admin", "admin@example.test", "audit-password")
         self.customer = users.objects.create_user("buyer@example.test", "buyer@example.test", "audit-password")
         self.category = Category.objects.create(name="Audit packaging")
+        self.subcategory = Category.objects.create(name="Audit subcategory", parent=self.category)
         self.field = AttributeDefinition.objects.create(name="Material", value_type="choice", choices=["Cardboard"])
         self.category.filter_attributes.add(self.field)
         self.group = VariantGroup.objects.create(name="Audit variants")
@@ -94,6 +96,7 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         self.order = Order.objects.create(user=self.customer, full_name="Audit Buyer", email="buyer@example.test", total=250)
         OrderItem.objects.create(order=self.order, product=self.product, product_name=self.product.name, quantity=2, price=125, line_total=250)
         self.promotion = Promotion.objects.create(title="Audit promotion")
+        self.promotion.products.add(self.product)
         self.page = PageContent.objects.create(
             page="custom-audit", is_custom=True, slug="audit-page", title="Audit page", is_visible=True, content_text="Audit content",
             draft_structure=[{"id": "image-audit", "type": "image", "content": {"url": self.media.file.url}}],
@@ -101,13 +104,16 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         site = SiteSettings.get_solo()
         site.show_header_cta = True
         site.site_name = "PakLine " + "X" * 36
-        site.save(update_fields=["show_header_cta", "site_name"])
+        site.header_phone = "+7 (999) 123-45-67"
+        site.header_email = "long-commercial-contact@pakline.example"
+        site.save(update_fields=["show_header_cta", "site_name", "header_phone", "header_email"])
 
     def public_routes(self):
         return [
             "/", reverse("catalog"), reverse("catalog") + "?category=" + self.category.slug,
+            reverse("catalog") + "?category=" + self.subcategory.slug,
             reverse("catalog") + "?q=Audit", reverse("product_detail", args=[self.product.slug]),
-            reverse("promotions"), reverse("team"), reverse("contacts"),
+            reverse("promotions"), reverse("promotion_detail", args=[self.promotion.pk]), reverse("team"), reverse("contacts"),
             reverse("document_page", args=["privacy"]), reverse("document_page", args=["offer"]),
             reverse("custom_page", args=[self.page.slug]), reverse("management_login"), reverse("admin_login"),
         ]
@@ -131,12 +137,39 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         urls += [
             reverse("management_request_detail", args=[self.quote.pk]) + "?edit=1",
             reverse("management_settings") + "?tab=brand",
+            *(reverse("management_page_edit", args=[PageContent.objects.get(page=key).pk]) for key in ("privacy", "offer")),
             *(reverse("management_pages") + f"?section={section}" for section in ("texts", "images", "banners", "blocks")),
             *(reverse("management_page_edit", args=[self.page.pk]) + f"?tab={tab}" for tab in ("banners", "images", "properties", "seo")),
             reverse("management_page_blocks", args=[self.page.pk]) + "?block=0",
             reverse("management_page_builder", args=[self.page.pk]),
         ]
         return urls
+
+    def check_navigation(self, page):
+        page.goto(self.live_server_url + "/")
+        for width in (768, 1024, 1440):
+            page.set_viewport_size({"width": width, "height": 844})
+            contact = page.locator(".header-contact")
+            expect(contact.locator("a").first).to_have_css("font-size", "16px")
+            expect(contact.locator("a").last).to_have_css("font-size", "14px")
+            expect(contact.locator("a").first).to_have_attribute("href", "tel:+79991234567")
+            expect(contact.locator("a").last).to_have_attribute("href", "mailto:long-commercial-contact@pakline.example")
+            assert not page.evaluate(LAYOUT), (width, page.evaluate(LAYOUT))
+
+        for route in ("home", "catalog", "team", "contacts", "promotions"):
+            page.goto(self.live_server_url + reverse(route))
+            for width in (320, 360, 375, 390, 414, 430):
+                page.set_viewport_size({"width": width, "height": 844})
+                page.locator(".mobile-menu-toggle").click()
+                active = page.locator(".main-nav > a[aria-current=page]")
+                expect(active).to_have_count(1)
+                expect(active).to_have_attribute("href", reverse(route))
+                expect(active.locator("span")).to_have_css("text-decoration-line", "underline")
+                expect(page.locator(".mobile-nav-contact a").last).to_have_attribute(
+                    "href", "mailto:long-commercial-contact@pakline.example",
+                )
+                assert active.evaluate("(el) => { const a=el.getBoundingClientRect(), b=el.firstElementChild.getBoundingClientRect(); return Math.abs(a.left+a.width/2-b.left-b.width/2)<1 && getComputedStyle(el, '::after').content==='none'; }")
+                page.keyboard.press("Escape")
 
     def django_admin_routes(self):
         routes = [reverse("admin:index")]
@@ -154,7 +187,7 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         for path in paths:
             if os.environ.get("PAKLINE_AUDIT_PATH", "") not in path:
                 continue
-            response = page.goto(self.live_server_url + path, wait_until="domcontentloaded")
+            response = page.goto(self.live_server_url + path, wait_until="domcontentloaded", timeout=30000)
             if not response or response.status != 200:
                 failures.append((path, response.status if response else "no response"))
                 continue
@@ -263,11 +296,14 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         expect(page.locator(".favorites-drawer")).to_have_attribute("aria-hidden", "false")
         page.keyboard.press("Escape")
         page.locator(".catalog-card .add-to-cart").first.click()
+        expect(page.locator(".catalog-card .add-to-cart").first).to_have_text("В корзине")
+        page.locator(".mobile-actions .js-cart-open").click()
         expect(page.locator(".cart-drawer")).to_have_attribute("aria-hidden", "false")
         assert not page.evaluate(LAYOUT)
         page.locator(".cart-checkout").click()
         checkout = page.locator(".checkout-panel")
         expect(checkout).to_be_visible()
+        expect(page.locator("body")).to_have_class(re.compile("overlay-scroll-locked"))
         for width in (320, 390, 768, 1024):
             page.set_viewport_size({"width": width, "height": 780})
             assert not page.evaluate(LAYOUT), (width, "checkout", page.evaluate(LAYOUT))
@@ -275,6 +311,18 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         checkout.locator('[name="full_name"]').fill("Browser Buyer")
         checkout.locator('[name="phone"]').fill("+79990001234")
         checkout.locator('[name="email"]').fill(self.customer.email)
+        checkout.locator('[name="phone"]').focus()
+        page.evaluate("""() => {
+            Object.defineProperty(visualViewport, 'height', {configurable: true, value: 430});
+            visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        expect(page.locator("body")).to_have_class(re.compile("keyboard-open"))
+        assert checkout.bounding_box()["height"] <= 431
+        page.evaluate("""() => {
+            delete visualViewport.height;
+            visualViewport.dispatchEvent(new Event('resize'));
+        }""")
+        expect(page.locator("body")).not_to_have_class(re.compile("keyboard-open"))
         assert not page.evaluate(LAYOUT)
         with page.expect_response(lambda response: response.url.endswith("/cart/checkout/")) as checkout_response:
             checkout.locator(".checkout-submit").click()
@@ -345,7 +393,8 @@ class ResponsiveAudit(StaticLiveServerTestCase):
         for engine in os.environ.get("PAKLINE_AUDIT_ENGINES", "chromium").split(","):
             with sync_playwright() as playwright:
                 browser = getattr(playwright, engine).launch()
-                context = browser.new_context(color_scheme="dark", reduced_motion="reduce")
+                theme = os.environ.get("PAKLINE_AUDIT_THEME", "dark")
+                context = browser.new_context(color_scheme=theme, reduced_motion="reduce")
                 page = context.new_page()
                 page.set_default_timeout(6500)
                 errors = []
@@ -354,6 +403,7 @@ class ResponsiveAudit(StaticLiveServerTestCase):
                     self.audit(page, public, failures)
                 if os.environ.get("PAKLINE_AUDIT_ACTIONS", "1") == "1":
                     try:
+                        self.check_navigation(page)
                         self.public_actions(page)
                     except (AssertionError, BrowserError) as error:
                         failures.append((engine, "public interactions", str(error)))
@@ -375,7 +425,7 @@ class ResponsiveAudit(StaticLiveServerTestCase):
                         self.django_admin_actions(page)
                     except (AssertionError, BrowserError) as error:
                         failures.append((engine, "Django admin interactions", str(error)))
-                print(f"{engine}: {len(public)} public/login, {len(cms)} CMS, {len(native)} Django admin routes enumerated", flush=True)
+                print(f"{engine}/{theme}: {len(public)} public/login, {len(cms)} CMS, {len(native)} Django admin routes enumerated", flush=True)
                 for error in errors:
                     failures.append((engine, "JavaScript", error))
                 browser.close()

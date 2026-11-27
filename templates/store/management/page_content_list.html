@@ -4,6 +4,14 @@
 {% block heading %}{{ content_title }}{% endblock %}
 
 {% block content %}
+  <section class="mgmt-card">
+    <h2>Юридические страницы</h2>
+    <div class="form-actions">
+      {% for slug, label, page in document_links %}
+        <a class="ghost-button" href="{% if page %}{% url 'management_page_edit' page.pk %}{% else %}{% url 'management_page_new' %}?page={{ slug }}{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </section>
   <section class="mgmt-card page-manager">
     <div class="page-manager-toolbar">
       <form class="toolbar" method="get" role="search">

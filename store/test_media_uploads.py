@@ -101,12 +101,13 @@ class MediaUploadTests(TestCase):
             ):
                 with patch("store.media_storage.uploader.upload") as provider:
                     provider.side_effect = AuthorizationRequired("technical detail")
-                    with self.assertLogs("store.cms.content", level="ERROR") as logs:
+                    with self.assertLogs("store.cms.content", level="WARNING") as logs:
                         rejected = self.upload(image_file("pngtree-empty-box-open-box-png-image_20409962.png"))
                     self.assertEqual(rejected.status_code, 503)
                     self.assertIn("CLOUDINARY_URL", rejected.json()["error"])
                     self.assertNotIn("technical detail", rejected.json()["error"])
-                    self.assertIn("technical detail", "\n".join(logs.output))
+                    self.assertIn("AuthorizationRequired", "\n".join(logs.output))
+                    self.assertNotIn("technical detail", "\n".join(logs.output))
 
                     def save_on_provider(content, **options):
                         self.assertEqual(content.read(8), b"\x89PNG\r\n\x1a\n")

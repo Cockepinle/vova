@@ -177,7 +177,7 @@ function updateCatalogCategoryVisibility(url) {
 let catalogRequest;
 
 async function loadCatalogFromApi(url, pushState = true) {
-  if (!catalogGrid) {
+  if (!catalogGrid || !catalogTopline) {
     return;
   }
 
@@ -205,7 +205,13 @@ async function loadCatalogFromApi(url, pushState = true) {
     updateCatalogHeader(url, payload.count);
     if (payload.seo) {
       document.title = payload.seo.title;
-      catalogTopline.querySelector('h1').textContent = payload.seo.h1;
+      const heading = catalogTopline.querySelector("h1");
+      heading.textContent = payload.seo.h1;
+      heading.classList.toggle("catalog-title-sr-only", !payload.show_category_heading);
+      const categoryImage = catalogTopline.querySelector("[data-catalog-category-image]");
+      categoryImage.hidden = !payload.category_image;
+      if (payload.category_image) categoryImage.src = payload.category_image;
+      else categoryImage.removeAttribute("src");
       document.querySelector('link[rel="canonical"]').href = payload.seo.canonical;
       document.querySelector('meta[name="description"]').content = payload.seo.description;
       document.querySelector('meta[name="robots"]').content = payload.seo.noindex ? 'noindex,follow' : 'index,follow';
@@ -244,24 +250,13 @@ function changeQuantity(control, delta, button) {
 }
 
 function syncCardQuantity(control, quantityButton = control.querySelector(".quantity-plus")) {
-  const modalInfo = control.closest(".modal-info");
-
-  if (modalInfo && typeof window.getProductCartQuantity === "function" && window.getProductCartQuantity(modal.dataset.productId) > 0) {
-    const input = control.querySelector(".quantity-input");
-    window.setProductCartQuantity(modal.dataset.productId, Number(input.value), quantityButton, input);
-    return;
-  }
-
-  const purchase = control.closest(".catalog-card, .product-detail-purchase");
+  const purchase = control.closest(".catalog-card, .product-detail-purchase, .modal-info");
   if (!purchase) return;
-  const button = purchase.querySelector(".add-to-cart, [data-add-detail-product]");
-  if (!button || button.disabled) return;
-  const productId = purchase.dataset.productId || button.dataset.addDetailProduct;
-  const cartQuantity = window.getProductCartQuantity(productId);
-  if (cartQuantity) {
-    button.textContent = Number(control.querySelector(".quantity-input").value) === cartQuantity
-      ? "В корзине" : "Обновить корзину";
-  }
+  const productId = purchase.closest("[data-product-id]")?.dataset.productId
+    || purchase.querySelector("[data-add-detail-product]")?.dataset.addDetailProduct;
+  if (!productId || !window.getProductCartQuantity(productId)) return;
+  const input = control.querySelector(".quantity-input");
+  window.setProductCartQuantity(productId, Number(input.value), quantityButton, input);
 }
 
 function setDetailGalleryImage(gallery, index) {
@@ -374,6 +369,7 @@ document.addEventListener("click", (event) => {
   const categoryClose = event.target.closest(".catalog-category-close");
   if (categoryOpen || categoryClose) {
     const tree = document.querySelector("#catalog-mobile-category-tree");
+    categoryOpen?.focus({preventScroll: true});
     const expanded = Boolean(categoryOpen);
     tree?.classList.toggle("is-open", expanded);
     tree?.setAttribute("aria-hidden", String(!expanded));

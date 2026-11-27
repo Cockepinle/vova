@@ -164,7 +164,7 @@ def site_media_upload(request):
         form.add_error("file", "На сервере не настроено постоянное хранилище файлов.")
         return media_library(request, form=form)
     except MediaProviderError as error:
-        logger.exception("Cloudinary could not store media uploaded from library")
+        logger.warning("Cloudinary media upload failed: %s", type(error.__cause__).__name__)
         form.add_error("file", error.public_message)
         return media_library(request, form=form)
     except IntegrityError:
@@ -232,7 +232,7 @@ def media_library_upload_api(request):
         logger.exception("Persistent media storage is not configured")
         return JsonResponse({"error": "На сервере не настроено постоянное хранилище файлов."}, status=503)
     except MediaProviderError as error:
-        logger.exception("Cloudinary could not store media uploaded from picker")
+        logger.warning("Cloudinary picker upload failed: %s", type(error.__cause__).__name__)
         return JsonResponse({"error": error.public_message}, status=503)
     except IntegrityError:
         logger.exception("Database rejected the media library record")
@@ -400,6 +400,15 @@ def media_library(request, form=None, replacement_form=None):
 def page_content_form(request, page_id=None):
     page = get_object_or_404(PageContent, pk=page_id) if page_id else None
 
+    document_preview = None
+    is_document = page and not page.is_custom and page.page in {"privacy", "offer"}
+    if is_document:
+        from ..views.catalog import default_document
+
+        original_document = render_to_string("store/partials/document_text.html", {
+            "document": default_document(page.page),
+            "current_page": page,
+        }).strip()
     tabs = {
         "texts": ("Тексты страниц", ("title", "h1", "content_title", "content_subtitle", "content_text", "b2b_title")),
         "banners": ("Баннеры", ("hero_label", "subtitle", "hero_button_text", "hero_button_url")),
@@ -407,15 +416,25 @@ def page_content_form(request, page_id=None):
         "properties": ("Свойства и доступ", ("page_type", "page", "slug", "parent", "sort_order", "is_visible", "requires_login")),
         "seo": ("SEO", ("seo_title", "meta_description", "canonical", "og_title", "og_description", "og_media", "noindex")),
     }
+    if is_document:
+        tabs["texts"] = ("Юридический текст", ("title", "h1", "document_html"))
     tab = request.GET.get("tab") or ("texts" if page else "properties")
     if tab not in tabs:
         tab = "texts"
 
     if request.method == "POST":
         form = PageContentForm(request.POST, request.FILES, instance=page)
-        if form.is_valid():
+        if is_document and request.POST.get("preview_document"):
+            if form.is_valid():
+                document_preview = _sanitize_html(form.cleaned_data["document_html"], limit=40000) or original_document
+        elif form.is_valid():
             is_new = page is None
             try:
+                if is_document and "document_html" in request.POST:
+                    source = form.cleaned_data["document_html"].replace("\r\n", "\n")
+                    form.instance.document_html = (
+                        _sanitize_html(source, limit=40000) if source != original_document else ""
+                    )
                 page = form.save()
             except OSError:
                 form.add_error("hero_image", "Не удалось записать изображение. Повторите загрузку позже.")
@@ -423,21 +442,28 @@ def page_content_form(request, page_id=None):
                 log_change(request, page, ADDITION if is_new else CHANGE, "Страница сохранена через CMS")
                 messages.success(request, "Страница сохранена.")
                 return redirect(f"{request.path}?tab={tab}" if not is_new else reverse("management_page_edit", args=[page.pk]))
-        messages.error(request, "Проверьте ошибки в форме.")
+        if form.errors:
+            messages.error(request, "Проверьте ошибки в форме.")
     else:
-        form = PageContentForm(instance=page)
+        if is_document:
+            initial = {"document_html": page.document_html or original_document}
+        else:
+            initial = {"page": request.GET["page"]} if page is None and request.GET.get("page") in {"privacy", "offer"} else None
+        form = PageContentForm(instance=page, initial=initial)
 
     return render(request, "store/management/page_content_form.html", {
         "section": "pages", "content_section": tab if tab in {"texts", "images", "banners"} else "texts",
         "page_content": page, "form": form, "active_tab": tab,
         "tabs": [(key, label, [form[name] for name in fields]) for key, (label, fields) in tabs.items()],
         "preview_url": _page_preview_url(page) if page else "",
+        "is_document": is_document, "document_preview": document_preview,
     })
 
 
 @management_required
 def page_content_list(request):
     pages = list(PageContent.objects.select_related("parent").order_by("sort_order", "page"))
+    documents = {page.page: page for page in pages if not page.is_custom and page.page in {"privacy", "offer"}}
     children = {}
     for page in pages:
         page.tree_url = (
@@ -481,7 +507,8 @@ def page_content_list(request):
             "section": "pages",
             "content_section": content_section,
             "content_title": sections[content_section],
-            "page_tree": tree,
+            "document_links": [(slug, label, documents.get(slug)) for slug, label in PageContent.PAGE_CHOICES if slug in {"privacy", "offer"}],
+        "page_tree": tree,
             "page_count": len(pages),
             "query": query,
         },
@@ -560,7 +587,10 @@ def _safe_builder_url(value, *, image=False):
     value = str(value or "").strip()
     if not value or "\\" in value or any(ord(char) < 32 for char in value):
         return ""
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
     if value.startswith("/") and not value.startswith("//"):
         return value
     if parsed.scheme in {"http", "https"} and parsed.netloc:
@@ -651,9 +681,9 @@ def _sanitize_css(value):
     return result
 
 
-def _sanitize_html(value):
+def _sanitize_html(value, *, limit=10000):
     parser = _BuilderHTMLSanitizer()
-    parser.feed(str(value or "")[:10000])
+    parser.feed(str(value or "")[:limit])
     parser.close()
     return parser.get_html()
 

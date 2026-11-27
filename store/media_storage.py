@@ -69,12 +69,12 @@ class StoreCloudinaryStorage(MediaCloudinaryStorage):
                 content, filename=PurePosixPath(name).name, public_id=public_id,
                 resource_type=resource_type, tags=self.TAG, overwrite=False, timeout=30,
             )
-        except (AuthorizationRequired, NotAllowed, ValueError) as error:
+        except (AuthorizationRequired, NotAllowed) as error:
             raise MediaProviderError("Cloudinary отклонил авторизацию. Проверьте CLOUDINARY_URL и права ключа.") from error
         except RateLimited as error:
             raise MediaProviderError("Cloudinary ограничил частоту загрузок. Повторите попытку позже.") from error
-        except BadRequest as error:
-            raise MediaProviderError("Cloudinary отклонил файл или параметры загрузки. Подробности в журнале сервера.") from error
+        except (BadRequest, ValueError) as error:
+            raise MediaProviderError("Cloudinary отклонил файл или параметры загрузки.") from error
         except (Error, HTTPError, TimeoutError) as error:
             raise MediaProviderError("Cloudinary не подтвердил запись. Проверьте доступность хранилища и повторите попытку.") from error
         public_id = result.get("public_id")

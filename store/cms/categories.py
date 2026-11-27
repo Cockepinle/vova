@@ -9,14 +9,20 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from ..cms_forms import CategoryFilterForm
-from ..models import AttributeDefinition, Product
-from ..uploads import local_media_missing
+from ..models import AttributeDefinition, Product, SiteSettings
+from ..seo import category_seo_defaults
+from ..uploads import MediaProviderError, MediaStorageUnavailable, local_media_missing
 from .common import ADDITION, CHANGE, Category, CategoryForm, Count, DELETION, Paginator, Q, get_object_or_404, log_change
 from .common import management_required, messages, redirect, render, require_POST
 
 
 def render_category_form(request, category, form=None, *, create_filter=None, edit_filter=None, image_preview_url=None):
     form = form if form is not None else CategoryForm(instance=category)
+    values = {name: (form[name].value() or "") for name in ("name", "slug", "description")}
+    candidate = values["slug"] or form.instance.slug or form.instance.available_slug(values["name"])
+    defaults = category_seo_defaults(request, SiteSettings.get_solo(), values["name"], candidate, values["description"])
+    for name, value in defaults.items():
+        form.fields[name].widget.attrs["placeholder"] = value
     attached_filters = []
     available_filters = AttributeDefinition.objects.none()
     if category:
@@ -63,6 +69,12 @@ def render_category_form(request, category, form=None, *, create_filter=None, ed
 def category_form(request, category_id=None):
     category = get_object_or_404(Category, pk=category_id) if category_id else None
     image_preview_url = category.display_image_url if category else ""
+    if request.method == "GET" and request.GET.get("seo_preview") == "1":
+        instance = category or Category()
+        name = request.GET.get("name", "")[:160].strip()
+        slug = request.GET.get("slug", "")[:180].strip() or instance.slug or instance.available_slug(name)
+        description = request.GET.get("description", "")[:320]
+        return JsonResponse(category_seo_defaults(request, SiteSettings.get_solo(), name, slug, description))
     if request.method != "POST":
         initial = {"parent": request.GET.get("parent")} if request.GET.get("parent", "").isdigit() else None
         return render_category_form(request, category, CategoryForm(instance=category, initial=initial), image_preview_url=image_preview_url)
@@ -76,6 +88,10 @@ def category_form(request, category_id=None):
                     list(Category.objects.order_by("pk").select_for_update().values_list("pk", flat=True))
                 saved = form.save()
                 log_change(request, saved, ADDITION if is_new else CHANGE, "Категория сохранена через CMS")
+        except MediaProviderError as error:
+            form.add_error("image", error.public_message)
+        except MediaStorageUnavailable:
+            form.add_error("image", "Хранилище изображений недоступно. Обратитесь к администратору сайта.")
         except (IntegrityError, ValidationError, OSError):
             form.add_error(None, "Не удалось сохранить категорию. Проверьте имя, адрес и изображение.")
         else:

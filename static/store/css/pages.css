@@ -376,7 +376,10 @@
 .promotions-page { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 56px 0 80px; }
 .promotions-hero { max-width: 780px; }
 .promotions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.promotion-card { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.promotion-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); }
+.promotion-card h2 a::after { content: ""; position: absolute; inset: 0; }
+.promotion-card .promotion-media :is(a, video) { position: relative; }
+.promotion-card:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
 .promotion-gallery { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 2px; background: var(--section); }
 .promotion-gallery:empty { display: none; }
 .promotion-gallery img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }

@@ -17,8 +17,8 @@
 
         <nav class="main-nav" aria-label="Главная навигация">
       <button class="mobile-nav-close" type="button" aria-label="Закрыть меню">×</button>
-{% for link in header_links %}<a href="{{ link.url }}" {% if request.path == link.url %}class="active" aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
-        <a href="{% url 'promotions' %}" {% if request.resolver_match.url_name == 'promotions' %}class="active" aria-current="page"{% endif %}>Акции</a>
+{% for link in header_links %}<a href="{{ link.url }}" {% if request.path == link.url or link.url == '/catalog/' and request.resolver_match.url_name == 'product_detail' %}class="active" aria-current="page"{% endif %}><span>{{ link.label }}</span></a>{% endfor %}
+        <a href="{% url 'promotions' %}" {% if request.resolver_match.url_name == 'promotions' or request.resolver_match.url_name == 'promotion_detail' %}class="active" aria-current="page"{% endif %}><span>Акции</span></a>
         {% if site_settings.show_header_cta %}<a class="mobile-nav-cta" href="{{ site_settings.cta_url }}">{{ site_settings.cta_label }}</a>{% endif %}
         {% if site_settings.show_header_contacts %}<span class="mobile-nav-contact"><a href="tel:{{ site_settings.header_phone|default:site_settings.contact_phone|phone_href }}">{{ site_settings.header_phone|default:site_settings.contact_phone }}</a><a href="mailto:{{ site_settings.header_email|default:site_settings.contact_email }}">{{ site_settings.header_email|default:site_settings.contact_email }}</a></span>{% endif %}
         <span class="mobile-theme-control">{% include "store/partials/theme_toggle.html" %}<span>Тема оформления</span></span>

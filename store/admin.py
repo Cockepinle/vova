@@ -330,7 +330,7 @@ class PromotionAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "starts_at", "ends_at"]
     list_editable = ["is_active", "sort_order"]
     search_fields = ["title", "description"]
-    filter_horizontal = ["media"]
+    filter_horizontal = ["media", "products"]
 
 
 @admin.register(PageContent)

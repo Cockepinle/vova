@@ -334,6 +334,35 @@ if (pageTree) {
 }
 
 (() => {
+  const form = document.querySelector("[data-category-settings]");
+  if (!form) return;
+  let timer;
+  let pending;
+  for (const name of ["name", "description", "slug"]) {
+    form.elements[name].addEventListener("input", () => {
+      clearTimeout(timer);
+      pending?.abort();
+      timer = setTimeout(async () => {
+        pending = new AbortController();
+        const url = new URL(form.action);
+        url.searchParams.set("seo_preview", "1");
+        for (const field of ["name", "slug", "description"]) {
+          url.searchParams.set(field, form.elements[field].value.slice(0, field === "description" ? 320 : 180));
+        }
+        try {
+          const response = await fetch(url, {signal: pending.signal});
+          if (!response.ok || response.redirected) return;
+          const defaults = await response.json();
+          for (const [field, value] of Object.entries(defaults)) form.elements[field].placeholder = value;
+        } catch {
+          // The server resolves empty fields even if the preview is unavailable.
+        }
+      }, 200);
+    });
+  }
+})();
+
+(() => {
   document.querySelectorAll("[data-category-image]").forEach(component => {
     const mediaField = component.querySelector('[name="image_media"]');
     const fileInput = component.querySelector('input[type="file"]');

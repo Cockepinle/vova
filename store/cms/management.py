@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -240,13 +241,16 @@ def promotion_form(request, promotion_id=None):
     form = PromotionForm(request.POST or None, instance=promotion)
     if request.method == "POST" and form.is_valid():
         is_new = promotion is None
-        promotion = form.save()
-        log_change(request, promotion, ADDITION if is_new else CHANGE, "Акция сохранена через CMS")
+        with transaction.atomic():
+            promotion = form.save()
+            log_change(request, promotion, ADDITION if is_new else CHANGE, "Акция сохранена через CMS")
         messages.success(request, "Акция сохранена.")
         return redirect("management_promotions")
     if request.method == "POST":
         messages.error(request, "Проверьте ошибки в форме.")
-    return render(request, "store/management/promotion_form.html", {"section": "promotions", "promotion": promotion, "form": form})
+    return render(request, "store/management/promotion_form.html", {
+        "section": "promotions", "promotion": promotion, "form": form, "categories": Category.tree_rows(),
+    })
 
 @management_required
 def promotion_list(request):

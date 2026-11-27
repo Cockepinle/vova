@@ -1,0 +1,1 @@
+{% if promotion.starts_at or promotion.ends_at %}<p class="promotion-period">{% if promotion.starts_at %}с {{ promotion.starts_at|date:"d.m.Y" }}{% endif %}{% if promotion.ends_at %} до {{ promotion.ends_at|date:"d.m.Y" }}{% endif %}</p>{% endif %}

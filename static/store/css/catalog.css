@@ -1025,6 +1025,13 @@ body.modal-open {
   .catalog-search-suggestions { top: 52px; }
 }
 .product-detail-specs dd { margin: 0; color: var(--text); }
+.catalog-category-image:not([hidden]) {
+  float: inline-start;
+  object-fit: cover;
+  margin-inline-end: 12px;
+  border-radius: var(--radius-control);
+}
+
 .catalog-title-sr-only {
   position: absolute;
   width: 1px;

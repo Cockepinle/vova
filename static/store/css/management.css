@@ -2006,7 +2006,13 @@ textarea { padding: 9px 11px; }
   .catalog-config-actions { flex-wrap: nowrap; }
 }
 .mgmt-sidebar .mgmt-nav[hidden], .management-menu-toggle[hidden] { display: none; }
-body.management-modal-open { overflow: hidden; }
+body.management-modal-open {
+  position: fixed;
+  top: var(--management-scroll-top);
+  right: var(--management-scroll-right);
+  left: 0;
+  overflow: hidden;
+}
 .media-picker-dialog { overscroll-behavior: contain; }
 .sidebar-collapsed .mgmt-nav .nav-group summary > .nav-icon { display: block; }
 @media (max-width: 900px) {
@@ -2043,6 +2049,26 @@ body.management-modal-open { overflow: hidden; }
   }
   .page-tree-title, .page-tree-url { white-space: normal; overflow-wrap: anywhere; }
   .page-tree-actions :is(a, button), .page-editor-tab { min-height: 44px; }
+  .page-editor-tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .page-editor-tabs .page-editor-tab {
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+  }
+  .media-picker-dialog {
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+    padding: 12px;
+  }
+  .media-picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .media-picker-footer { bottom: -12px; flex-wrap: wrap; }
+  .promotion-product-picker .form-actions > button { flex: 1 1 12rem; }
+  .promotion-product-options { max-height: min(48dvh, 28rem); }
 }
 
 .variant-dialog {
@@ -2153,3 +2179,11 @@ body.management-modal-open { overflow: hidden; }
 .attribute-dialog [role="alert"]:empty { display: none; }
 
 [data-library-status] { display: block; white-space: pre-line; }
+
+.promotion-product-picker, .promotion-product-options, .document-editor-preview { min-width: 0; overflow-wrap: anywhere; }
+.promotion-product-options { max-height: 28rem; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 8px; }
+.promotion-product-options label { display: flex; align-items: center; gap: 10px; padding: 8px; min-height: 44px; }
+.promotion-product-options label input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 18px; }
+[data-promotion-selection] { padding-inline-start: 20px; }
+[data-promotion-selection] li { margin-block: 6px; }
+[data-promotion-selection] button { margin-inline-start: 8px; }

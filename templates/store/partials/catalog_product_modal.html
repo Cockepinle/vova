@@ -1,0 +1,47 @@
+    <div class="product-modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <section class="modal-gallery">
+          <span class="hit-badge modal-badge">ХИТ</span>
+          <div class="modal-image-frame">
+            <img class="modal-main-image" src="" alt="">
+            {% include "store/partials/image_favorite.html" with modal=True %}
+            <button class="gallery-arrow modal-image-arrow modal-image-previous" type="button" data-modal-image-step="-1" aria-label="Предыдущее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="gallery-arrow modal-image-arrow modal-image-next" type="button" data-modal-image-step="1" aria-label="Следующее фото" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="modal-thumbs"></div>
+        </section>
+        <section class="modal-info">
+          <button class="modal-close" type="button" aria-label="Закрыть">×</button>
+          <p class="modal-meta"></p>
+          <h2 id="modal-title"></h2>
+          <div class="modal-variants"></div>
+          <p class="modal-description"></p>
+          <h3>Характеристики</h3>
+          <dl class="modal-specs"></dl>
+          <div class="modal-price-row">
+            <p class="price modal-price"></p>
+            <div class="modal-controls">
+              <div class="quantity-control" aria-label="Количество">
+                <button class="quantity-minus" type="button" aria-label="Уменьшить количество">−</button>
+                <input class="quantity-input" type="number" min="{{ product.min_quantity }}" step="1" value="{{ product.min_quantity }}" aria-label="Количество товара">
+                <button class="quantity-plus" type="button" aria-label="Увеличить количество">+</button>
+              </div>
+              <button class="add-to-cart modal-add" type="button">В корзину</button>
+            </div>
+          </div>
+          <p class="modal-note">Доставка в день заказа при оформлении до 14:00 · Самовывоз со склада в Москве</p>
+        </section>
+      </article>
+    </div>
+    <div class="image-lightbox" role="dialog" aria-modal="true" aria-label="Просмотр фотографий" aria-hidden="true">
+      <button class="image-lightbox-close" type="button" aria-label="Закрыть фото">×</button>
+      <img class="image-lightbox-img" alt="">
+      <button class="detail-gallery-arrow detail-gallery-prev" type="button" data-lightbox-step="-1" aria-label="Предыдущее фото" hidden>‹</button>
+      <button class="detail-gallery-arrow detail-gallery-next" type="button" data-lightbox-step="1" aria-label="Следующее фото" hidden>›</button>
+    </div>
+

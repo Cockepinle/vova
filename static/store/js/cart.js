@@ -72,6 +72,8 @@ async function runCartAction(button, action) {
   if (cartActionPending) return;
   cartActionPending = true;
   cartRevision += 1;
+  const row = button?.closest(".cart-item");
+  const restoreRowFocus = row && document.activeElement === button;
   const restore = setStoreButtonPending(button);
   const controls = [...drawer.querySelectorAll(".cart-remove, .cart-clear, .cart-remove-selected, .cart-favorite, .cart-checkout, .cart-invoice, .cart-quantity button")]
     .filter(control => control !== button && !control.disabled);
@@ -87,6 +89,11 @@ async function runCartAction(button, action) {
     controls.forEach(control => { control.disabled = false; });
     updateCartBulkState();
     cartActionPending = false;
+    if (restoreRowFocus && !button.isConnected && drawer.classList.contains("is-open") && document.activeElement === document.body) {
+      const updatedRow = cartItems.querySelector(`[data-product-id="${CSS.escape(row.dataset.productId)}"]`);
+      const replacement = updatedRow?.querySelector(`.${CSS.escape(button.classList[0])}:not(:disabled)`);
+      (replacement || updatedRow?.querySelector(".quantity-plus") || drawer.querySelector(".cart-close")).focus({preventScroll: true});
+    }
   }
 }
 
@@ -136,9 +143,15 @@ function openCartDrawer() {
   }
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
-  document.body.classList.add("cart-open");
   refreshStaleCart();
 }
+
+function closeCartDrawer() {
+  drawer.classList.remove("is-open");
+  drawer.setAttribute("aria-hidden", "true");
+}
+
+window.closeCartDrawer = closeCartDrawer;
 
 async function saveCheckoutDraft() {
   if (!checkoutDrawer) return;
@@ -243,7 +256,6 @@ function openCheckoutDrawer(paymentMethod = "") {
 
   checkoutDrawer.classList.add("is-open");
   checkoutDrawer.setAttribute("aria-hidden", "false");
-  document.body.classList.add("cart-open");
   saveCheckoutDraft();
 }
 
@@ -254,7 +266,6 @@ function closeCheckoutDrawer() {
 
   checkoutDrawer.classList.remove("is-open");
   checkoutDrawer.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("cart-open");
 }
 
 window.openCheckoutDrawer = openCheckoutDrawer;
@@ -328,6 +339,12 @@ function renderCart(cart, {saveDraft = true} = {}) {
   if (cartWeight) cartWeight.textContent = cart.total_weight_kg == null ? "Недостаточно данных" : `${cart.total_weight_kg} кг`;
   if (cartVolume) cartVolume.textContent = cart.total_volume_m3 == null ? "Недостаточно данных" : `${cart.total_volume_m3} м³`;
   updateCartBadges(cart.count);
+  const mobileTotal = document.querySelector("[data-mobile-cart-total]");
+  if (mobileTotal) {
+    const [rubles, kopecks] = cart.total.split(".");
+    const groupedRubles = rubles.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    mobileTotal.textContent = groupedRubles + (kopecks && kopecks !== "00" ? "," + kopecks : "") + " ₽";
+  }
   syncProductCards(cart);
 
   if (!cart.items.length) {
@@ -398,7 +415,6 @@ async function addProductToCart(productId, quantity, button, {replaceQuantity = 
   if (cartActionPending) return;
   const currentQuantity = cartProductQuantities[productId] || 0;
   if (currentQuantity && (!replaceQuantity || currentQuantity === quantity)) {
-    openCartDrawer();
     return;
   }
 
@@ -412,7 +428,6 @@ async function addProductToCart(productId, quantity, button, {replaceQuantity = 
     } else {
       notifyStore(alreadyInCart ? "Товар уже в корзине" : "Товар добавлен в корзину");
     }
-    openCartDrawer();
   });
 }
 
@@ -449,14 +464,19 @@ function removeSelectedCartItems(button) {
 }
 
 document.addEventListener("click", (event) => {
-  if (event.target.closest(".js-cart-open")) {
-    openCartDrawer();
+  const cartTrigger = event.target.closest(".js-cart-open");
+  if (cartTrigger) {
+    if (drawer.classList.contains("is-open") && cartTrigger.closest(".mobile-actions")) closeCartDrawer();
+    else {
+      cartTrigger.focus({preventScroll: true});
+      openCartDrawer();
+    }
   }
 
-  if (event.target.closest(".cart-close") || event.target === drawer) {
-    drawer.classList.remove("is-open");
-    drawer.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("cart-open");
+  const otherSection = event.target.closest(".mobile-actions .js-account-open, .mobile-actions .js-favorites-open");
+  if (otherSection) otherSection.focus({preventScroll: true});
+  if (otherSection || event.target.closest(".cart-close") || event.target === drawer) {
+    closeCartDrawer();
   }
 
   const cartItem = event.target.closest(".cart-item");
@@ -629,21 +649,13 @@ document.addEventListener("input", (event) => {
   if (form) storeCheckoutFormDraft(form);
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    drawer.classList.remove("is-open");
-    drawer.setAttribute("aria-hidden", "true");
-    document.body.classList.remove("cart-open");
-  }
-});
-
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && drawer.classList.contains("is-open")) refreshStaleCart();
+  if (!document.hidden) refreshStaleCart();
 });
 window.addEventListener("storage", (event) => {
   if (event.key !== "paklineCartChange") return;
   cartLastSync = 0;
-  if (!document.hidden && drawer.classList.contains("is-open")) refreshCartFromApi();
+  if (!document.hidden) refreshCartFromApi();
 });
 
 updateCartBulkState();

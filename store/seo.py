@@ -22,6 +22,11 @@ def absolute_url(request, settings, path):
     return origin + '/' + path.lstrip('/')
 
 
+def category_seo_defaults(request, settings, name, slug, description):
+    canonical = absolute_url(request, settings, reverse("catalog") + "?" + urlencode({"category": slug})) if slug else ""
+    return {"slug": slug, "h1": name, "seo_title": name, "meta_description": description.strip()[:320], "canonical": canonical}
+
+
 def metadata(request, settings, pages):
     match = request.resolver_match
     key = match.url_name if match else 'home'
@@ -30,8 +35,14 @@ def metadata(request, settings, pages):
     if key in {'product_detail', 'api_products'}:
         key = 'catalog'
     record = pages.get(key)
+    promotion = getattr(request, "_promotion", None)
     title, description = PAGE_DEFAULTS.get(key, (settings.site_name, settings.seo_description))
     canonical_path = PAGE_PATHS.get(key, request.path)
+    if promotion:
+        title = promotion.title
+        description = promotion.description or PAGE_DEFAULTS["promotions"][1]
+    if key in {"privacy", "offer"} and record and record.title:
+        title = record.title
     if key == "custom_page" and record:
         title = record.title or title
         description = record.meta_description or record.subtitle or description
@@ -73,7 +84,7 @@ def metadata(request, settings, pages):
             noindex = True
         if request.GET.get('q'):
             title = f'Поиск: {request.GET["q"][:100]}'
-    seo_title = (getattr(record, 'seo_title', '') or f'{title} · {settings.site_name}')
+    seo_title = getattr(record, 'seo_title', '') or (title if category else f'{title} · {settings.site_name}')
     description = (getattr(record, 'meta_description', '') or description).strip()[:320]
     canonical = getattr(record, 'canonical', '') or absolute_url(request, settings, canonical_path)
     og_media = getattr(record, 'og_media', None) or settings.og_media

@@ -13,11 +13,22 @@
   const workspace = document.querySelector(".mgmt-shell");
   let session = null;
   let queued = [];
+  let scrollPosition;
 
   function setVisible(visible) {
     picker.hidden = !visible;
     if (workspace) workspace.inert = visible;
-    document.body.classList.toggle("management-modal-open", visible);
+    const body = document.body;
+    if (visible && !scrollPosition) {
+      scrollPosition = {x: window.scrollX, y: window.scrollY};
+      body.style.setProperty("--management-scroll-top", `${-scrollPosition.y}px`);
+      body.style.setProperty("--management-scroll-right", `${window.innerWidth - document.documentElement.clientWidth}px`);
+      body.classList.add("management-modal-open");
+    } else if (!visible && scrollPosition) {
+      body.classList.remove("management-modal-open");
+      window.scrollTo({left: scrollPosition.x, top: scrollPosition.y, behavior: "instant"});
+      scrollPosition = null;
+    }
   }
 
   function close() {
@@ -30,7 +41,7 @@
     pending.hidden = true;
     upload.value = "";
     upload.dispatchEvent(new Event("upload-reset"));
-    trigger?.focus();
+    trigger?.focus({preventScroll: true});
   }
 
   function announce(message = "", error = false) {

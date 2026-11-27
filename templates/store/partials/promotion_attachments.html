@@ -1,0 +1,6 @@
+<div class="promotion-media">
+  {% for media in promotion.media.all %}{% if media.file %}
+    {% if media.is_video %}<figure><video controls preload="metadata" src="{{ media.file.url }}"></video>{% if media.description %}<figcaption>{{ media.description }}</figcaption>{% endif %}</figure>
+    {% elif not media.is_image %}<a href="{{ media.file.url }}" target="_blank" rel="noopener">{{ media.title }}</a>{% endif %}
+  {% endif %}{% endfor %}
+</div>

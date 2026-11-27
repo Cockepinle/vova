@@ -1,0 +1,1 @@
+{% for media in promotion.media.all %}{% if media.file and media.is_image %}<img src="{{ media.file.url }}" alt="{{ media.alt|default:promotion.title }}">{% endif %}{% endfor %}

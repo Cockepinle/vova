@@ -41,31 +41,46 @@ with sync_playwright() as p:
             page.set_viewport_size({'width':390,'height':844})
             page.screenshot(path=str(OUT/f'{name}-{path.strip("/").replace("/","-") or "home"}.png'), full_page=True)
         page.goto(BASE+'/catalog/', wait_until='domcontentloaded')
-        select = page.locator('.catalog-topline select')
-        select.select_option(label='Сначала дешевле')
+        def sort_catalog(value):
+            page.locator('.catalog-sort-open').click()
+            panel = page.locator('.catalog-mobile-sort-panel')
+            panel.locator('select').select_option(value)
+            with page.expect_navigation():
+                panel.locator('button[type=submit]').click()
+
+        sort_catalog('price_asc')
         prices = page.locator('.catalog-card').evaluate_all("cards => cards.map(c => Number(String(JSON.parse(c.dataset.product).price).replace(/\\s/g, '').replace(',', '.')))")
         assert prices == sorted(prices), prices
-        select.select_option(label='По умолчанию')
+        page.goto(BASE+'/catalog/', wait_until='domcontentloaded')
         page.locator('.catalog-card .add-to-cart').first.click()
         page.wait_for_function("document.querySelector('.mobile-actions [data-cart-count]').textContent !== '0'")
-        page.keyboard.press('Escape')  # Adding a product opens the cart drawer.
+        assert page.locator('.cart-drawer').get_attribute('aria-hidden') == 'true'
+        assert page.locator('.mobile-actions [data-mobile-cart-total]').inner_text() != '0 ₽'
         page.locator('.mobile-menu-toggle').click()
         assert page.locator('.main-nav').is_visible()
         page.locator('.mobile-menu-toggle').click()
         assert not page.locator('.main-nav').is_visible()
-        page.locator('.open-product').first.click()
-        assert page.locator('.product-modal').get_attribute('aria-hidden') == 'false'
-        assert page.locator('.modal-controls input').get_attribute('min') == '10'
-        assert not page.locator('.mobile-actions').is_visible()
+        first_card = page.locator('.catalog-card').first
+        minimum_quantity = first_card.locator('.quantity-input').get_attribute('min')
+        first_card.locator('.open-product').click()
+        assert page.locator('.product-detail-purchase .quantity-input').get_attribute('min') == minimum_quantity
         for width,height in [(320,568),(390,844),(430,932),(844,390)]:
             page.set_viewport_size({'width':width,'height':height})
-            check_layout(page, f'{name} product-modal {width}x{height}')
+            check_layout(page, f'{name} product detail {width}x{height}')
         page.set_viewport_size({'width':390,'height':844})
-        page.screenshot(path=str(OUT/f'{name}-product-modal.png'))
-        page.keyboard.press('Escape')
+        page.screenshot(path=str(OUT/f'{name}-product-detail.png'))
+        page.goto(BASE+'/catalog/', wait_until='domcontentloaded')
         page.locator('.mobile-actions .js-cart-open').click()
         assert page.locator('.cart-drawer').get_attribute('aria-hidden') == 'false'
+        assert page.locator('.mobile-actions .js-cart-open').get_attribute('aria-expanded') == 'true'
+        assert page.locator('.mobile-actions').is_visible()
         check_layout(page, f'{name} cart')
+        page.locator('.cart-item h3').first.click()
+        assert page.locator('.product-modal').get_attribute('aria-hidden') == 'false'
+        assert not page.locator('.mobile-actions').is_visible()
+        check_layout(page, f'{name} product modal over cart')
+        page.keyboard.press('Escape')
+        assert page.locator('.mobile-actions').is_visible()
         page.locator('.cart-checkout').click()
         page.wait_for_timeout(100)
         check_layout(page, f'{name} checkout-or-login')

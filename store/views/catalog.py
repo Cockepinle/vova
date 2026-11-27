@@ -28,7 +28,7 @@ def contacts(request):
         context,
     )
 
-def document_page(request, slug):
+def default_document(slug):
     settings = safe_site_settings()
     get_setting = lambda name, default: getattr(settings, name, default) if settings else default
     site_name = get_setting("site_name", "PakLine")
@@ -137,9 +137,15 @@ def document_page(request, slug):
             ],
         },
     }
-    document = documents.get(slug, documents["privacy"])
+    return documents.get(slug, documents["privacy"])
+
+
+def document_page(request, slug):
+    editable = PageContent.objects.filter(page=slug, is_custom=False, is_visible=True).first() if slug in {"privacy", "offer"} else None
+    from ..cms.content import _sanitize_html
     context = {
-        "document": document,
+        "document": default_document(slug),
+        "formatted_document": _sanitize_html(editable.document_html, limit=40000) if editable else "",
         "show_footer_cta": False,
     }
     apply_common_context(request, context)
@@ -539,7 +545,11 @@ def api_products(request):
     config = SiteSettings.get_solo()
     pages = {page.page: page for page in PageContent.objects.filter(is_visible=True)}
     items = [serialize_product(product, request) for product in products]
-    payload = {"seo": metadata(request, config, pages)}
+    payload = {
+        "seo": metadata(request, config, pages),
+        "category_image": selected.display_image_url if selected else "",
+        "show_category_heading": bool(selected),
+    }
     if request.GET.get("cards") == "1":
         payload["count"] = len(items)
         payload["cards_html"] = render_to_string("store/partials/catalog_cards.html", {
@@ -587,7 +597,22 @@ def api_product_detail(request, product_id):
     })
     return JsonResponse({"product": data})
 
+@never_cache
 @require_GET
+def promotion_detail(request, promotion_id):
+    promotion = get_object_or_404(Promotion.visible().prefetch_related("media"), pk=promotion_id)
+    request._promotion = promotion
+    featured = get_store_products().filter(promotions=promotion)
+    context = {
+        "promotion": promotion,
+        "products": [serialize_product(product, request) for product in featured],
+        "categories": get_store_categories(),
+        "show_footer_cta": True,
+    }
+    apply_common_context(request, context)
+    return render(request, "store/promotions.html", context)
+
+
 def promotions(request):
     context = {
         "categories": get_store_categories(),

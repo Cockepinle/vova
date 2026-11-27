@@ -11,7 +11,7 @@
       <section class="mgmt-card form-section">
         <h2>{{ group_title }}</h2>
         {% if group_title == "Категория и вложенность" %}<p class="section-help">Для подкатегории выберите родительскую категорию. Уровней вложенности может быть несколько.</p>{% endif %}
-        {% if group_title == "SEO категории" %}<p class="section-help">Эти поля управляют адресом, заголовком и описанием страницы в поиске. Пустые поля заполняются данными категории автоматически.</p>{% endif %}
+        {% if group_title == "SEO категории" %}<p class="section-help">Подсказки показывают значения, которые будут использованы для пустых полей. Введите собственное значение, чтобы изменить его.</p>{% endif %}
         <div class="form-grid">
           {% for field in fields %}
             <label class="{% if field.name == 'description' or field.name == 'meta_description' or field.name == 'og_description' or field.name == 'canonical' %}full{% endif %}">

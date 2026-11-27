@@ -439,7 +439,7 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
 
     def clean_image_media(self):
         media = self.cleaned_data["image_media"]
-        if media and not media.file:
+        if media and (not media.file or not media.is_image):
             raise forms.ValidationError("Выберите изображение с файлом в медиатеке.")
         return media
 
@@ -448,7 +448,7 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
         if data.get("sort_order") is None:
             data["sort_order"] = self.instance.sort_order
         if data.get("name") and "slug" in data and not data["slug"]:
-            slug = slugify(data["name"], allow_unicode=True)
+            slug = self.instance.slug or self.instance.available_slug(data["name"])
             if not slug:
                 self.add_error("slug", "Укажите адрес категории буквами или цифрами.")
             else:
@@ -462,6 +462,8 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
             category.image, category.image_media_id, category.image_url = "", None, ""
         elif self.files.get(self.add_prefix("image")):
             category.image_media_id, category.image_url = None, ""
+        elif self.cleaned_data["image_url"] and "image_url" in self.changed_data:
+            category.image, category.image_media_id = "", None
         elif self.cleaned_data["image_media"]:
             category.image, category.image_url = "", ""
         elif self.cleaned_data["image_url"]:
@@ -489,12 +491,21 @@ class CategoryForm(ContentValidationMixin, forms.ModelForm):
         }
 
 
+class PromotionProductChoices(forms.CheckboxSelectMultiple):
+    def create_option(self, *args, **kwargs):
+        option = super().create_option(*args, **kwargs)
+        option["attrs"]["data-category"] = option["value"].instance.category_id
+        return option
+
+
 class PromotionForm(forms.ModelForm):
     class Meta:
         model = Promotion
-        fields = ["title", "description", "starts_at", "ends_at", "is_active", "sort_order", "media"]
+        fields = ["title", "description", "conditions", "starts_at", "ends_at", "is_active", "sort_order", "media", "products"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 6}),
+            "conditions": forms.Textarea(attrs={"rows": 4}),
+            "products": PromotionProductChoices(),
             "starts_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "ends_at": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
             "media": forms.SelectMultiple(attrs={"size": 10}),
@@ -507,6 +518,8 @@ class PromotionForm(forms.ModelForm):
         self.fields["ends_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["media"].queryset = SiteMedia.objects.order_by("-created_at")
         self.fields["media"].help_text = "Выберите один или несколько файлов из общей медиатеки."
+        self.fields["products"].queryset = Product.objects.order_by("name", "sku", "pk")
+        self.fields["products"].label_from_instance = lambda product: f"{product.name} · {product.sku}"
 
 
 class PaymentMethodForm(forms.ModelForm):
@@ -667,6 +680,11 @@ class SiteSettingsForm(ContentValidationMixin, forms.ModelForm):
 
 
 class PageContentForm(ContentValidationMixin, forms.ModelForm):
+    document_html = forms.CharField(
+        label="Текст документа с форматированием", required=False, max_length=40000,
+        widget=forms.Textarea(attrs={"rows": 20}),
+        help_text="Используйте HTML: <p>, <h2>, <h3>, <ul>, <ol>, <li>, <a href=…>, <strong>, <em>.",
+    )
     remove_hero = forms.BooleanField(required=False, widget=forms.HiddenInput())
     page_type = forms.ChoiceField(
         label="Тип страницы",
@@ -687,6 +705,9 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         custom = bool(self.instance.pk and self.instance.is_custom)
+        legal = self.instance.page in {"privacy", "offer"} and not custom
+        if not legal:
+            self.fields.pop("document_html")
         self.fields["page_type"].initial = "custom" if custom else "fixed"
         self.fields["page_type"].disabled = bool(self.instance.pk)
         if self.instance.pk:
@@ -695,6 +716,10 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
             self.fields["page"].required = not custom
             if custom:
                 self.fields["page"].widget = forms.HiddenInput()
+            elif legal:
+                self.fields["page"].disabled = True
+                for name in ("content_title", "content_subtitle", "content_text", "b2b_title"):
+                    self.fields[name].disabled = True
         else:
             used_pages = PageContent.objects.filter(is_custom=False).values_list("page", flat=True)
             self.fields["page"].choices = [
@@ -769,7 +794,10 @@ class PageContentForm(ContentValidationMixin, forms.ModelForm):
             page.page = self.cleaned_data["page"]
         if commit:
             if page.pk:
-                page.save(update_fields=[*self.Meta.fields, "is_custom", "updated_at"])
+                fields = [*self.Meta.fields, "is_custom", "updated_at"]
+                if "document_html" in self.fields and "document_html" in self.data:
+                    fields.append("document_html")
+                page.save(update_fields=fields)
             else:
                 page.save()
             self.save_m2m()
